@@ -11,6 +11,7 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 import { db, schema } from '../../db/index.js'
 import { eq } from 'drizzle-orm'
+import { getStylePrompt } from '../../services/adapters/style-prompt.js'
 
 export function createGridPromptTools(episodeId: number, dramaId: number) {
 
@@ -48,6 +49,10 @@ export function createGridPromptTools(episodeId: number, dramaId: number) {
         .where(eq(schema.characters.id, character_id)).all()
       if (!c) return { error: 'Character not found' }
 
+      const [drama] = db.select().from(schema.dramas)
+        .where(eq(schema.dramas.id, dramaId)).all()
+      const stylePrompt = getStylePrompt(drama?.style)
+
       const parts: string[] = []
       if (c.appearance) parts.push(c.appearance)
       if (c.description) parts.push(c.description)
@@ -55,7 +60,8 @@ export function createGridPromptTools(episodeId: number, dramaId: number) {
       if (c.personality) parts.push(`personality: ${c.personality}`)
 
       const base = parts.join(', ')
-      const prompt = `${base}, cinematic portrait, high quality, consistent art style, no text, no watermark`
+      const stylePart = stylePrompt ? `${stylePrompt}, ` : ''
+      const prompt = `${base}, ${stylePart}cinematic portrait, high quality, consistent art style, no text, no watermark`
 
       return {
         character_id: c.id,
@@ -97,13 +103,18 @@ export function createGridPromptTools(episodeId: number, dramaId: number) {
         .where(eq(schema.scenes.id, scene_id)).all()
       if (!s) return { error: 'Scene not found' }
 
+      const [drama] = db.select().from(schema.dramas)
+        .where(eq(schema.dramas.id, dramaId)).all()
+      const stylePrompt = getStylePrompt(drama?.style)
+
       const parts: string[] = []
       if (s.location) parts.push(s.location)
       if (s.time) parts.push(s.time)
       if (s.prompt) parts.push(s.prompt)
 
       const base = parts.join(', ')
-      const prompt = `${base}, cinematic scene, atmospheric lighting, high quality, consistent art style, no text, no watermark`
+      const stylePart = stylePrompt ? `${stylePrompt}, ` : ''
+      const prompt = `${base}, ${stylePart}cinematic scene, atmospheric lighting, high quality, consistent art style, no text, no watermark`
 
       return {
         scene_id: s.id,
@@ -158,7 +169,11 @@ export function createGridPromptTools(episodeId: number, dramaId: number) {
     execute: async ({ shots, rows, cols, mode, reference_legend }) => {
       if (!shots.length) return { error: 'No shots provided', grid_prompt: '', cell_prompts: [] }
       const totalCells = rows * cols
-      const legendPrefix = reference_legend ? `参考图映射：${reference_legend}, ` : ''
+      const legendPrefix = reference_legend ? `reference map: ${reference_legend}, ` : ''
+
+      // Get drama style
+      const [drama] = db.select().from(schema.dramas).where(eq(schema.dramas.id, dramaId)).all()
+      const style = getStylePrompt(drama?.style) || 'cinematic lighting, film grain, dramatic composition'
 
       if (mode === 'multi_ref') {
         const sb = shots[0]
@@ -166,7 +181,7 @@ export function createGridPromptTools(episodeId: number, dramaId: number) {
         const cellPrompts = Array.from({ length: totalCells }, (_, i) => ({
           shot_number: sb.shot_number,
           frame_type: 'reference',
-          prompt: `格${i + 1}：${reference_legend ? `参考${reference_legend}，` : ''}${sb.description}, cinematic lighting, consistent with other cells in the ${rows}x${cols} grid`,
+          prompt: `Cell ${i + 1}: ${sb.description}, ${style}`,
         }))
         return { grid_prompt: gridPrompt, cell_prompts: cellPrompts }
       }
@@ -174,14 +189,16 @@ export function createGridPromptTools(episodeId: number, dramaId: number) {
       if (mode === 'first_last') {
         const cellPrompts = []
         for (let i = 0; i < totalCells; i++) {
-          const s = shots[i % shots.length]
-          const isFirst = i % 2 === 0
+          const row = Math.floor(i / cols)
+          const col = i % cols
+          const s = shots[row % shots.length]
+          const isFirst = col % 2 === 0
           cellPrompts.push({
             shot_number: s.shot_number,
             frame_type: isFirst ? 'first_frame' : 'last_frame',
             prompt: isFirst
-              ? `格${i + 1}：${reference_legend ? `参考${reference_legend}，` : ''}${s.description}${s.location ? `, ${s.location}` : ''}${s.shot_type ? `, ${s.shot_type}` : ''}, opening scene`
-              : `格${i + 1}：${reference_legend ? `参考${reference_legend}，` : ''}${s.description}${s.location ? `, ${s.location}` : ''}${s.shot_type ? `, ${s.shot_type}` : ''}, ending scene, continuous motion`,
+              ? `Cell ${i + 1} first frame: ${s.description}${s.location ? `, ${s.location}` : ''}, ${style}`
+              : `Cell ${i + 1} last frame: ${s.description}${s.location ? `, ${s.location}` : ''}, continuous motion, ${style}`,
           })
         }
         const gridPrompt = `${rows}x${cols} grid layout, exactly ${totalCells} visible panels, consistent art style, cinematic quality, ${legendPrefix}${shots.map(s => s.description).join(' | ')}, no merged panels, no missing panels, no text, no watermark`
@@ -194,7 +211,7 @@ export function createGridPromptTools(episodeId: number, dramaId: number) {
         return {
           shot_number: s.shot_number,
           frame_type: 'first_frame',
-          prompt: `格${i + 1}：${reference_legend ? `参考${reference_legend}，` : ''}${s.description}${s.location ? `, ${s.location}` : ''}${s.shot_type ? `, ${s.shot_type}` : ''}, opening scene`,
+          prompt: `Cell ${i + 1}: ${s.description}${s.location ? `, ${s.location}` : ''}, opening scene, ${style}`,
         }
       })
       const gridPrompt = `${rows}x${cols} grid layout, exactly ${totalCells} visible panels, consistent art style, cinematic quality, ${legendPrefix}${shots.map(s => s.description).join(' | ')}, no merged panels, no missing panels, no text, no watermark`

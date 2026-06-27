@@ -139,7 +139,7 @@ const dramas = ref([])
 const loading = ref(false)
 const showCreate = ref(false)
 const form = ref({ title: '', total_episodes: 1, style: '' })
-const styles = ['realistic', 'anime', 'ghibli', 'cinematic', 'comic', 'watercolor']
+const styles = ['realistic', 'anime', 'ghibli', 'cinematic', 'comic', 'watercolor', 'traditional-chinese-xianxia']
 const styleSelectOptions = computed(() => styles.map(s => ({ label: s, value: s })))
 
 async function load() {

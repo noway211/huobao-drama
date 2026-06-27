@@ -82,6 +82,7 @@ export const imageAPI = {
 export const gridAPI = {
   prompt: (d: any) => api.post('/grid/prompt', d),
   generate: (d: any) => api.post('/grid/generate', d),
+  retry: (id: number) => api.post('/grid/retry', { image_generation_id: id }),
   status: (id: number) => api.get(`/grid/status/${id}`),
   split: (d: any) => api.post('/grid/split', d),
 }

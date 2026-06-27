@@ -9,6 +9,7 @@ import { eq, isNull, and } from 'drizzle-orm'
 import { db, schema } from '../db/index.js'
 import { getTextConfig, getTextProviderBaseUrl } from '../services/ai.js'
 import { logTaskProgress } from '../utils/task-logger.js'
+import { Agent as UndiciAgent } from 'undici'
 import { createScriptTools } from './tools/script-tools.js'
 import { createExtractTools } from './tools/extract-tools.js'
 import { createStoryboardTools } from './tools/storyboard-tools.js'
@@ -176,6 +177,10 @@ function getAgentConfig(agentType: string) {
   return rows.find(r => r.isActive) || rows[0] || null
 }
 
+const undiciAgent = new UndiciAgent({
+  connectTimeout: 60_000, // 60 seconds connect timeout
+})
+
 function getModel(dbConfig: any) {
   const textConfig = getTextConfig()
   const resolvedBaseURL = getTextProviderBaseUrl(textConfig)
@@ -187,6 +192,7 @@ function getModel(dbConfig: any) {
   const provider = createOpenAI({
     baseURL: resolvedBaseURL,
     apiKey: textConfig.apiKey,
+    fetch: (url: string, options: any) => fetch(url, { ...options, dispatcher: undiciAgent, signal: AbortSignal.timeout(300_000) }),
   } as any)
   const modelName = dbConfig?.model || textConfig.model
   return provider.chat(modelName)

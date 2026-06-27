@@ -6,6 +6,10 @@ import { downloadFile, readImageAsCompressedDataUrl, saveBase64Image } from '../
 import { getImageAdapter } from './adapters/registry'
 import type { AIConfig } from './adapters/types'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess, logTaskWarn, redactUrl } from '../utils/task-logger.js'
+import { Agent, fetch as undiciFetch } from 'undici'
+
+// 自定义 undici Agent：连接超时 90s，避免默认 10s 连接超时
+const fetchAgent = new Agent({ connect: { timeout: 90_000 } })
 
 interface GenerateImageParams {
   storyboardId?: number
@@ -95,12 +99,15 @@ async function processImageGeneration(id: number, config: AIConfig) {
       frameType: record.frameType,
       referenceImages: resolvedReferenceImages ? JSON.stringify(resolvedReferenceImages) : null,
     })
+    const bodyStr = JSON.stringify(body)
+    const bodySizeKB = Math.round(Buffer.byteLength(bodyStr, 'utf8') / 1024)
     logTaskProgress('ImageTask', 'request', {
       id,
       provider: config.provider,
       method,
       url: redactUrl(url),
       model: record.model,
+      bodySizeKB,
     })
     logTaskPayload('ImageTask', 'request payload', {
       id,
@@ -108,14 +115,26 @@ async function processImageGeneration(id: number, config: AIConfig) {
       url,
       headers,
       body,
+      bodySizeKB,
     })
 
-    const resp = await fetch(url, {
-      method,
-      headers,
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(600_000),
-    })
+    let resp: any
+    try {
+      resp = await undiciFetch(url, {
+        method,
+        headers,
+        body: bodyStr,
+        signal: AbortSignal.timeout(600_000),
+        dispatcher: fetchAgent,
+      })
+    } catch (fetchErr: any) {
+      const cause = (fetchErr as any).cause
+      const detail = cause
+        ? `${cause.name}: ${cause.message} (code=${cause.code || 'N/A'})`
+        : `${fetchErr.message} (type=${fetchErr.type || 'N/A'})`
+      const full = fetchErr.stack ? `${detail}\n${fetchErr.stack}` : detail
+      throw new Error(`Fetch failed: ${full}`)
+    }
 
     if (!resp.ok) throw new Error(`API error ${resp.status}: ${await resp.text()}`)
     const result = await resp.json() as any

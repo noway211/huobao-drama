@@ -1,3 +1,7 @@
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
 type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'SUCCESS'
 
 const C = {
@@ -10,6 +14,10 @@ const C = {
   magenta: '\x1b[35m',
   blue: '\x1b[34m',
 }
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const LOG_DIR = process.env.LOG_DIR || path.resolve(__dirname, '../../../data/logs')
+fs.mkdirSync(LOG_DIR, { recursive: true })
 
 function colorFor(level: LogLevel) {
   if (level === 'SUCCESS') return C.green
@@ -109,9 +117,22 @@ function truncateString(value: string, edge = 120) {
   return `${value.slice(0, edge)}...<trimmed ${value.length} chars>...${value.slice(-edge)}`
 }
 
+function writeToFile(rawLine: string) {
+  try {
+    const today = new Date().toISOString().slice(0, 10)
+    const filePath = path.join(LOG_DIR, `${today}.log`)
+    fs.appendFileSync(filePath, rawLine + '\n', 'utf-8')
+  } catch {
+    // 文件写入失败时静默忽略，不影响主流程
+  }
+}
+
 export function logTask(scope: string, action: string, meta?: Record<string, unknown>, level: LogLevel = 'INFO') {
   const color = colorFor(level)
-  console.log(`${C.dim}${timeText()}${C.reset} ${color}[${scope}]${C.reset} ${action}${formatMeta(meta)}`)
+  const consoleLine = `${C.dim}${timeText()}${C.reset} ${color}[${scope}]${C.reset} ${action}${formatMeta(meta)}`
+  console.log(consoleLine)
+  const fileLine = `${timeText()} [${scope}] ${action}${formatMeta(meta)}`
+  writeToFile(fileLine)
 }
 
 export function logTaskStart(scope: string, action: string, meta?: Record<string, unknown>) {
@@ -139,5 +160,8 @@ export function logTaskPayload(scope: string, action: string, payload: unknown) 
   const serialized = typeof sanitized === 'string'
     ? sanitized
     : JSON.stringify(sanitized, null, 2)
-  console.log(`${C.dim}${timeText()}${C.reset} ${C.blue}[${scope}]${C.reset} ${action}\n${serialized}`)
+  const consoleLine = `${C.dim}${timeText()}${C.reset} ${C.blue}[${scope}]${C.reset} ${action}\n${serialized}`
+  console.log(consoleLine)
+  const fileLine = `${timeText()} [${scope}] ${action}\n${serialized}`
+  writeToFile(fileLine)
 }

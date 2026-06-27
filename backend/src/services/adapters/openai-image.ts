@@ -20,12 +20,41 @@ export class OpenAIImageAdapter implements ImageProviderAdapter {
     // OpenAI 使用 size 字段，格式为 "1024x1024"
     const size = record.size || '1024x1024'
 
+    // Agnes AI 支持 reference images via content array format
+    if (record.referenceImages) {
+      const refs: string[] = JSON.parse(record.referenceImages)
+      if (refs.length > 0) {
+        const content = []
+        // Add text prompt first
+        content.push({ type: 'text', text: record.prompt })
+        // Add reference images as image_url
+        for (const ref of refs) {
+          content.push({ type: 'image_url', image_url: { url: ref } })
+        }
+        const body: any = {
+          model: record.model || 'dall-e-3',
+          prompt: record.prompt,
+          size,
+          n: 1,
+          content,
+        }
+        return {
+          url: joinProviderUrl(config.baseUrl, '/v1', '/images/generations'),
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`,
+          },
+          body,
+        }
+      }
+    }
+
     const body: any = {
       model: record.model || 'dall-e-3',
       prompt: record.prompt,
       size,
       n: 1,
-      response_format: 'url', // 默认返回 URL，可选 'b64_json'
     }
 
     return {

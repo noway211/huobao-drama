@@ -6,6 +6,7 @@ import { generateImage } from '../services/image-generation.js'
 import { splitGridImage } from '../services/grid-split.js'
 import { createAgent } from '../agents/index.js'
 import { logTaskError, logTaskPayload, logTaskProgress } from '../utils/task-logger.js'
+import { getStylePrompt } from '../services/adapters/style-prompt.js'
 
 const app = new Hono()
 
@@ -141,45 +142,49 @@ function buildGridPrompt(
   dramaStyle: string,
   referenceAssets: Array<{ path: string; label: string; kind: string; imageLabel: string }>,
 ): string {
-  const style = dramaStyle || 'cinematic'
+  const style = getStylePrompt(dramaStyle) || 'cinematic lighting, film grain, dramatic composition'
   const storyboardCharacterIds = getStoryboardCharacterIds(storyboards.map((sb) => sb.id))
   const legend = buildReferenceLegend(referenceAssets)
 
   if (mode === 'first_frame') {
-    // Each cell = one shot's first frame
-    const cells = storyboards.map((sb, i) => {
-      const desc = sb.imagePrompt || sb.description || sb.title || `shot ${i + 1}`
+    // Each cell = one shot's first frame, cycle through shots if needed
+    const totalCells = rows * cols
+    const cells = Array.from({ length: totalCells }, (_, i) => {
+      const sb = storyboards[i % storyboards.length]
+      const desc = sb.imagePrompt || sb.description || sb.title || `shot ${sb.storyboardNumber || i + 1}`
       const refs = buildStoryboardReferenceHints(sb, referenceAssets, storyboardCharacterIds)
-      return `${cellLabel(i, rows, cols)}: ${refs.length ? `参考${refs.join('、')}，` : ''}${desc}`
+      return `${cellLabel(i, rows, cols)}: ${refs.length ? `ref ${refs.join(', ')}` : ''}${desc}`
     })
     return [
       `${rows}x${cols} grid layout, consistent art style, ${style},`,
-      legend ? `参考图映射：${legend}` : '',
-      '当画面涉及角色或场景时，优先使用对应的图片编号来约束一致性。',
+      legend ? `Ref map: ${legend}` : '',
+      'Use image numbers to keep characters/scenes consistent.',
       ...cells,
       'high quality, cinematic lighting, no text, no watermark',
     ].filter(Boolean).join('\n')
   }
 
   if (mode === 'first_last') {
-    // Fill the selected grid using first/last-frame style cues, but do not force Nx2 layout.
+    // Each row = one shot; left col = first frame, right col = last frame
     const totalCells = rows * cols
     const cells = Array.from({ length: totalCells }, (_, i) => {
-      const sb = storyboards[i % storyboards.length]
-      const desc = sb.imagePrompt || sb.description || sb.title || `shot ${i + 1}`
+      const row = Math.floor(i / cols)
+      const col = i % cols
+      const sb = storyboards[row % storyboards.length]
+      const desc = sb.imagePrompt || sb.description || sb.title || `shot ${sb.storyboardNumber || ''}`
       const action = sb.action || sb.movement || ''
       const refs = buildStoryboardReferenceHints(sb, referenceAssets, storyboardCharacterIds)
-      const frameHint = i % 2 === 0
+      const frameHint = col % 2 === 0
         ? 'opening moment'
         : `${action ? `${action}, ` : ''}closing moment, subtle motion change`
-      return `${cellLabel(i, rows, cols)}: ${refs.length ? `参考${refs.join('、')}，` : ''}${desc}, ${frameHint}`
+      return `${cellLabel(i, rows, cols)}: ${refs.length ? `ref ${refs.join(', ')}` : ''}${desc}, ${frameHint}`
     })
     return [
       `${rows}x${cols} grid layout, consistent art style, ${style},`,
-      legend ? `参考图映射：${legend}` : '',
-      'first/last frame visual rhythm, alternating opening and closing beats across the grid,',
+      legend ? `Ref map: ${legend}` : '',
+      'first/last frame visual rhythm, alternating opening and closing beats,',
       ...cells,
-      'continuous motion implied between left and right, high quality, no text',
+      'continuous motion implied, high quality, no text',
     ].filter(Boolean).join('\n')
   }
 
@@ -200,11 +205,11 @@ function buildGridPrompt(
     ]
     const totalCells = rows * cols
     const cells = Array.from({ length: totalCells }, (_, i) => {
-      return `${cellLabel(i, rows, cols)}: ${legend ? `参考${legend}，` : ''}${desc}, ${angles[i % angles.length]}`
+      return `${cellLabel(i, rows, cols)}: ${legend ? `ref ${legend}` : ''}${desc}, ${angles[i % angles.length]}`
     })
     return [
-      `${rows}x${cols} grid layout, same scene different angles and compositions, ${style},`,
-      legend ? `参考图映射：${legend}` : '',
+      `${rows}x${cols} grid layout, same scene different angles, ${style},`,
+      legend ? `Ref map: ${legend}` : '',
       `main scene: ${desc},`,
       ...cells,
       'consistent lighting and color palette, high quality, no text',
@@ -219,10 +224,12 @@ function buildGridCellPrompts(
   storyboards: any[],
   rows: number,
   cols: number,
+  dramaStyle: string,
   referenceAssets: Array<{ path: string; label: string; kind: string; imageLabel: string }>,
 ) {
   if (!storyboards.length) return []
   const storyboardCharacterIds = getStoryboardCharacterIds(storyboards.map((sb) => sb.id))
+  const style = getStylePrompt(dramaStyle) || 'cinematic lighting, film grain, dramatic composition'
 
   if (mode === 'multi_ref') {
     const sb = storyboards[0]
@@ -241,34 +248,35 @@ function buildGridCellPrompts(
     return Array.from({ length: rows * cols }, (_, i) => ({
       shot_number: sb.storyboardNumber,
       frame_type: 'reference',
-      prompt: `${cellLabel(i, rows, cols)}: ${buildStoryboardReferenceHints(sb, referenceAssets, storyboardCharacterIds).join('、')}${buildStoryboardReferenceHints(sb, referenceAssets, storyboardCharacterIds).length ? '，' : ''}${desc}, ${angles[i % angles.length]}`,
+      prompt: `${cellLabel(i, rows, cols)}: ${desc}, ${angles[i % angles.length]}, ${style}`,
     }))
   }
 
   if (mode === 'first_last') {
     return Array.from({ length: rows * cols }, (_, i) => {
-      const sb = storyboards[i % storyboards.length]
+      const row = Math.floor(i / cols)
+      const col = i % cols
+      const sb = storyboards[row % storyboards.length]
       const desc = sb.imagePrompt || sb.description || sb.title || `shot ${sb.storyboardNumber || ''}`
       const motion = sb.action || sb.movement || ''
-      const refs = buildStoryboardReferenceHints(sb, referenceAssets, storyboardCharacterIds)
-      const isFirst = i % 2 === 0
+      const isFirst = col % 2 === 0
       return {
         shot_number: sb.storyboardNumber,
         frame_type: isFirst ? 'first_frame' : 'last_frame',
         prompt: isFirst
-          ? `${cellLabel(i, rows, cols)}，首帧：${refs.length ? `参考${refs.join('、')}，` : ''}${desc}${sb.location ? `, ${sb.location}` : ''}${sb.shotType ? `, ${sb.shotType}` : ''}`
-          : `${cellLabel(i, rows, cols)}，尾帧：${refs.length ? `参考${refs.join('、')}，` : ''}${desc}${motion ? `, ${motion}` : ''}${sb.location ? `, ${sb.location}` : ''}${sb.shotType ? `, ${sb.shotType}` : ''}`,
+          ? `${cellLabel(i, rows, cols)} first frame: ${desc}${sb.location ? `, ${sb.location}` : ''}, ${style}`
+          : `${cellLabel(i, rows, cols)} last frame: ${desc}${motion ? `, ${motion}` : ''}${sb.location ? `, ${sb.location}` : ''}, ${style}`,
       }
     })
   }
 
-  return storyboards.slice(0, rows * cols).map((sb, index) => {
+  return Array.from({ length: rows * cols }, (_, i) => {
+    const sb = storyboards[i % storyboards.length]
     const desc = sb.imagePrompt || sb.description || sb.title || `shot ${sb.storyboardNumber || ''}`
-    const refs = buildStoryboardReferenceHints(sb, referenceAssets, storyboardCharacterIds)
     return {
       shot_number: sb.storyboardNumber,
       frame_type: 'first_frame',
-      prompt: `${cellLabel(index, rows, cols)}：${refs.length ? `参考${refs.join('、')}，` : ''}${desc}${sb.location ? `, ${sb.location}` : ''}${sb.shotType ? `, ${sb.shotType}` : ''}, opening scene`,
+      prompt: `${cellLabel(i, rows, cols)}: ${desc}${sb.location ? `, ${sb.location}` : ''}, opening scene, ${style}`,
     }
   })
 }
@@ -459,7 +467,7 @@ app.post('/prompt', async (c) => {
   }
 
   const gridPrompt = buildGridPrompt(mode, storyboards, actualRows, actualCols, dramaStyle, referenceAssets)
-  const cellPrompts = buildGridCellPrompts(mode, storyboards, actualRows, actualCols, referenceAssets)
+  const cellPrompts = buildGridCellPrompts(mode, storyboards, actualRows, actualCols, dramaStyle, referenceAssets)
   logTaskProgress('GridPrompt', 'fallback-used', {
     episodeId: resolvedEpisodeId,
     dramaId: drama_id,
@@ -513,9 +521,12 @@ app.post('/generate', async (c) => {
   const referenceImages = referenceAssets.map((asset) => asset.path)
 
   // Size: first_last mode uses Nx2 layout
-  const cellW = 960, cellH = 540
+  // 限制总尺寸不超过 1920x1080，避免 Agnes AI 对大图直接断连
+  const maxW = 1920, maxH = 1080
   const actualCols = cols
   const actualRows = rows
+  const cellW = Math.floor(maxW / actualCols)
+  const cellH = Math.floor(maxH / actualRows)
   const size = `${cellW * actualCols}x${cellH * actualRows}`
 
   try {
@@ -593,6 +604,57 @@ app.post('/split', async (c) => {
     }
 
     return success(c, { cells: results })
+  } catch (err: any) {
+    return badRequest(c, err.message)
+  }
+})
+
+// POST /grid/retry
+app.post('/retry', async (c) => {
+  const body = await c.req.json()
+  const { image_generation_id } = body
+
+  if (!image_generation_id) return badRequest(c, 'image_generation_id required')
+
+  const [record] = db.select().from(schema.imageGenerations)
+    .where(eq(schema.imageGenerations.id, Number(image_generation_id))).all()
+
+  if (!record) return badRequest(c, 'Image generation record not found')
+
+  let referenceImages: string[] | undefined
+  if (record.referenceImages) {
+    try {
+      referenceImages = JSON.parse(record.referenceImages)
+    } catch {
+      referenceImages = undefined
+    }
+  }
+
+  try {
+    const genId = await generateImage({
+      dramaId: record.dramaId || undefined,
+      storyboardId: record.storyboardId || undefined,
+      sceneId: record.sceneId || undefined,
+      characterId: record.characterId || undefined,
+      prompt: record.prompt || '',
+      model: record.model || undefined,
+      size: record.size || undefined,
+      frameType: record.frameType || undefined,
+      referenceImages,
+    })
+
+    logTaskProgress('GridGenerate', 'retry-started', {
+      dramaId: record.dramaId,
+      retryFrom: image_generation_id,
+      newId: genId,
+    })
+
+    return success(c, {
+      image_generation_id: genId,
+      grid: record.frameType?.match(/grid_.*_(\d+)x(\d+)/)
+        ? { rows: parseInt(RegExp.$1, 10), cols: parseInt(RegExp.$2, 10) }
+        : undefined,
+    })
   } catch (err: any) {
     return badRequest(c, err.message)
   }

@@ -50,3 +50,38 @@ Auto-WAL mode. No migrations needed — reads existing DB directly.
 - `configs/config.yaml` — AI provider defaults
 - AI service configs stored in DB (`ai_service_configs` table)
 - Agent configs stored in DB (`agent_configs` table)
+
+## Supported AI Providers
+
+| Provider | Text | Image | Video | Audio | Notes |
+|---|---|---|---|---|---|
+| `agnesai` | ✅ OpenAI-compatible | ✅ OpenAI-compatible | ✅ Custom adapter | — | Base URL: `https://apihub.agnes-ai.com` |
+| `minimax` | — | ✅ | ✅ | ✅ | Default fallback for all types |
+| `openai` | ✅ | ✅ | ✅ (Agnes protocol) | — | |
+| `gemini` | ✅ | ✅ | — | — | |
+| `volcengine` | — | ✅ | ✅ | — | |
+| `vidu` | — | — | ✅ (webhook only) | — | No polling |
+| `ali` | — | ✅ | ✅ | — | |
+| `chatfire` | ✅ | ✅ | — | — | OpenAI-compatible |
+| `openrouter` | ✅ | — | — | — | |
+
+### Provider Adapter Pattern
+
+Each provider implements type-specific adapters in `backend/src/services/adapters/`:
+- **Image**: `ImageProviderAdapter` — `buildGenerateRequest`, `parseGenerateResponse`, `buildPollRequest`, `parsePollResponse`
+- **Video**: `VideoProviderAdapter` — same methods, plus `extractVideoUrl`
+- **TTS**: `TTSProviderAdapter` — `buildGenerateRequest`, `parseResponse`
+
+Register new adapters in `backend/src/services/adapters/registry.ts`.
+
+## Logging
+
+Runtime task logs are written to both console and `data/logs/YYYY-MM-DD.log`.
+
+## E2E Testing
+
+Playwright tests live in `e2e/`. Run with:
+```bash
+npx playwright test
+```
+

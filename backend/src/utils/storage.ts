@@ -21,7 +21,7 @@ export async function downloadFile(url: string, subDir: string): Promise<string>
   const filename = `${uuid()}${ext}`
   const filePath = path.join(dir, filename)
 
-  const resp = await fetch(url)
+  const resp = await fetch(url, { signal: AbortSignal.timeout(120_000) })
   if (!resp.ok) throw new Error(`Download failed: ${resp.status}`)
 
   const buffer = Buffer.from(await resp.arrayBuffer())
@@ -101,9 +101,9 @@ export async function readImageAsCompressedDataUrl(
   } = {},
 ): Promise<string> {
   const filePath = getAbsolutePath(relativePath)
-  const maxWidth = options.maxWidth ?? 768
-  const maxHeight = options.maxHeight ?? 768
-  const quality = options.quality ?? 68
+  const maxWidth = options.maxWidth ?? 500
+  const maxHeight = options.maxHeight ?? 500
+  const quality = options.quality ?? 50
 
   const resized = sharp(filePath).rotate().resize({
     width: maxWidth,

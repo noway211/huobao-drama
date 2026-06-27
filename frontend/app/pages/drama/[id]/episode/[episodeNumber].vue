@@ -1095,9 +1095,22 @@
 
                 <!-- Step 2: Generating -->
                 <div v-else-if="gridStep === 2" class="grid-tool-body" style="align-items:center;justify-content:center;min-height:300px">
-                  <Loader2 :size="28" class="animate-spin" style="color:var(--accent)" />
-                  <div class="loading-text" style="margin-top:12px">宫格图生成中...</div>
-                  <div class="dim" style="font-size:11px;margin-top:6px">{{ gridStatusText }}</div>
+                  <div v-if="!gridFailed">
+                    <Loader2 :size="28" class="animate-spin" style="color:var(--accent)" />
+                    <div class="loading-text" style="margin-top:12px">宫格图生成中...</div>
+                    <div class="dim" style="font-size:11px;margin-top:6px">{{ gridStatusText }}</div>
+                  </div>
+                  <div v-else class="grid-generation-failed">
+                    <div class="failed-icon">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    </div>
+                    <div class="failed-text" style="margin-top:12px;font-size:15px">生成失败</div>
+                    <div class="failed-desc" style="margin-top:6px;color:var(--text-3)">{{ gridStatusText }}</div>
+                    <div class="failed-actions" style="margin-top:20px;gap:8px;display:flex">
+                      <button class="btn" @click="gridStep = 0">上一步（修改提示词）</button>
+                      <button class="btn btn-primary" @click="retryGridGen">重新生成</button>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Step 3: Preview -->
@@ -1435,7 +1448,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { toast } from 'vue-sonner'
 import {
   Users, MapPin, Video, ImageIcon, Layers, Mic2, FileText, FolderKanban, Clapperboard, Download,
@@ -1589,9 +1602,10 @@ const gridLayout = ref('3x3')
 const gridMode = ref('first_frame')
 const gridSelected = ref([])
 const gridSingleTarget = ref(null)
-const gridGenId = ref(null)
+const gridGenId = ref(null as number | null)
 const gridImagePath = ref('')
 const gridStatusText = ref('')
+const gridFailed = ref(false)
 const gridActualLayout = ref({ rows: 3, cols: 3 })
 const gridRecoveredAt = ref('')
 const gridRecoveredMode = ref('')
@@ -1974,7 +1988,25 @@ async function startGridGen() {
     pollGridStatus()
   } catch (e) {
     toast.error(e.message)
-    gridStep.value = 0
+    gridFailed.value = true
+    gridStatusText.value = '发起请求失败: ' + String(e.message)
+  }
+}
+
+async function retryGridGen() {
+  if (!gridGenId.value) return
+  gridFailed.value = false
+  gridStatusText.value = '重试中...'
+  try {
+    const res = await gridAPI.retry(gridGenId.value)
+    gridGenId.value = res.image_generation_id
+    gridStatusText.value = '等待图片生成...'
+    pollGridStatus()
+  } catch (e) {
+    const msg = (e && (e).message) ? (e).message : String(e)
+    toast.error(msg)
+    gridFailed.value = true
+    gridStatusText.value = '重试发起请求失败: ' + msg
   }
 }
 
@@ -1993,12 +2025,15 @@ async function pollGridStatus() {
       }
       if (res.status === 'failed') {
         toast.error(res.error_msg || '生成失败')
-        gridStep.value = 0
+        gridFailed.value = true
+        gridStatusText.value = '生成失败: ' + (res.error_msg || '未知错误')
         return
       }
     } catch {}
   }
-  toast.error('生成超时'); gridStep.value = 0
+  toast.error('生成超时');
+  gridFailed.value = true;
+  gridStatusText.value = '生成超时'
 }
 
 async function loadLatestGridImage() {
