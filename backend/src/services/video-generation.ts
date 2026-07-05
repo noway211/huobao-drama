@@ -198,7 +198,7 @@ async function normalizeVideoReferenceUrls(raw: string | null | undefined): Prom
 async function pollVideoTask(id: number, config: AIConfig, taskId: string, storyboardId?: number | null) {
   const adapter = getVideoAdapter(config.provider)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 100; i++) {
     await new Promise(r => setTimeout(r, 10000))
     try {
       const { url, method, headers } = adapter.buildPollRequest(config, taskId)
@@ -226,7 +226,7 @@ async function pollVideoTask(id: number, config: AIConfig, taskId: string, story
         throw new Error(pollResp.error || 'Video generation failed')
       }
     } catch (err: any) {
-      if (i === 299) {
+      if (i === 99) {
         logTaskError('VideoTask', 'poll-timeout', { id, taskId, error: err.message })
         db.update(schema.videoGenerations)
           .set({ status: 'failed', errorMsg: `Timeout: ${err.message}`, updatedAt: now() })
