@@ -1,3 +1,50 @@
+# Agnes 视频生成接口修复记录
+
+**日期**: 2026-07-05  
+**分支**: dev  
+**涉及文件**: `backend/src/services/adapters/agnesai-video.ts`
+
+---
+
+## 1. 问题诊断
+
+### 1.1 视频生成任务长期 processing / 参考图不生效
+
+**现象**: `reference_mode=first_last` 的视频任务（id=47, 48）长时间停留在 `processing`，日志中大量 `poll-retry error=fetch failed`；即便生成，首帧/尾帧参考图也未生效。
+
+**根因分析**（对照 [Agnes 官方文档](https://agnes-ai.com/zh-Hans/docs/agnes-video-v20)）:
+
+| 参数 | 旧实现（错误） | 文档规范 |
+|---|---|---|
+| 尺寸 | `size: "1280x768"` | `width` / `height`（默认 1152/768） |
+| 时长 | `seconds: "10"` | `num_frames`（≤441 且 8n+1）+ `frame_rate` |
+| 首尾帧 | **完全未传** | `mode: "keyframes"` + `extra_body.image: [首帧, 尾帧]` |
+| 单图 | `first_frame`（臆造字段） | `image` + `mode: "ti2vid"` |
+
+- `buildGenerateRequest` 从未把 `firstFrameUrl` / `lastFrameUrl` 写进请求体，参考图静默失效
+- 时长与尺寸字段名均与接口不符，接口按默认值生成
+- `parsePollResponse` 完成分支仅取 `remixed_from_video_id`，缺少兜底字段
+
+> 注：轮询期间的 `fetch failed` 主要来自 Agnes 接口间歇性超时，代码重试逻辑本身正常。
+
+---
+
+## 2. 修复内容
+
+### 2.1 请求体对齐接口规范（agnesai-video.ts）
+
+- 尺寸改用 `width`/`height`，新增 `parseSize()` 解析 `"宽x高"`，默认 `1152x768`
+- 时长改用 `num_frames` + `frame_rate`（24fps），新增 `durationToNumFrames()` 按 8n+1、≤441 规则换算（5s→121 帧、10s→241 帧）
+- `first_last` 模式改用 `mode: "keyframes"` + `extra_body.image: [首帧, 尾帧]`
+- `single` 模式改用 `image` + `mode: "ti2vid"`
+- 新增 `multiple` 模式支持 `extra_body.image` 数组
+
+### 2.2 完成响应取值兜底（agnesai-video.ts）
+
+`parsePollResponse` / `extractVideoUrl` 的下载地址取值改为 `remixed_from_video_id || video_url || url`，保持以 `remixed_from_video_id` 为主。
+
+---
+
 # 宫格图生成修复记录
 
 **日期**: 2026-06-27  
