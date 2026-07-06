@@ -12,6 +12,7 @@ import { ViduVideoAdapter } from './vidu-video'
 import { AliImageAdapter } from './ali-image'
 import { AliVideoAdapter } from './ali-video'
 import { AgnesAIVideoAdapter } from './agnesai-video'
+import { AgnesAIImageAdapter } from './agnesai-image'
 import type { ImageProviderAdapter, VideoProviderAdapter, TTSProviderAdapter } from './types'
 import { joinProviderUrl } from './url'
 
@@ -80,7 +81,7 @@ class OpenAIVideoAdapter implements VideoProviderAdapter {
 export const imageAdapters: Record<string, ImageProviderAdapter> = {
   minimax: new MiniMaxImageAdapter(),
   openai: new OpenAIImageAdapter(),
-  agnesai: new OpenAIImageAdapter(),
+  agnesai: new AgnesAIImageAdapter(),
   gemini: new GeminiImageAdapter(),
   volcengine: new VolcEngineImageAdapter(),
   ali: new AliImageAdapter(),
