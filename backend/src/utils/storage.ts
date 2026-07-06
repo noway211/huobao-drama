@@ -11,7 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const STORAGE_ROOT = process.env.STORAGE_PATH || path.resolve(__dirname, '../../../data/static')
 
 /**
- * 下载远程文件到本地存储
+ * 下载远程文件到本地存储，失败后自动重试一次
  */
 export async function downloadFile(url: string, subDir: string): Promise<string> {
   const dir = path.join(STORAGE_ROOT, subDir)
@@ -21,14 +21,22 @@ export async function downloadFile(url: string, subDir: string): Promise<string>
   const filename = `${uuid()}${ext}`
   const filePath = path.join(dir, filename)
 
-  const resp = await fetch(url, { signal: AbortSignal.timeout(120_000) })
-  if (!resp.ok) throw new Error(`Download failed: ${resp.status}`)
-
-  const buffer = Buffer.from(await resp.arrayBuffer())
-  fs.writeFileSync(filePath, buffer)
-
-  // 返回相对路径（供 API 返回给前端）
-  return `static/${subDir}/${filename}`
+  let lastError: Error | undefined
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(60_000) })
+      if (!resp.ok) throw new Error(`Download failed: ${resp.status}`)
+      const buffer = Buffer.from(await resp.arrayBuffer())
+      fs.writeFileSync(filePath, buffer)
+      return `static/${subDir}/${filename}`
+    } catch (err: any) {
+      lastError = err
+      if (attempt < 2) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+      }
+    }
+  }
+  throw lastError
 }
 
 /**
