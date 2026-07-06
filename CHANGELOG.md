@@ -1,3 +1,154 @@
+# 2026-07-06 视频合成、字幕与 Agnes 图片生成改动记录
+
+**日期**: 2026-07-06  
+**分支**: dev  
+**涉及文件**:
+- `backend/src/services/ffmpeg-compose.ts`
+- `backend/src/routes/compose.ts`
+- `backend/src/services/adapters/agnesai-video.ts`
+- `backend/src/services/adapters/agnesai-image.ts`
+- `backend/src/services/adapters/registry.ts`
+- `frontend/app/composables/useApi.ts`
+- `frontend/app/pages/drama/[id]/episode/[episodeNumber].vue`
+
+---
+
+## 1. 视频合成阶段支持关闭 TTS
+
+### 1.1 背景
+
+MiniMax TTS 余额不足时，原合成流程会在内联生成 TTS 阶段失败，导致视频无法继续合成。实际业务需要在合成阶段允许跳过 TTS，但仍保留字幕烧录能力。
+
+### 1.2 修复内容
+
+- `composeStoryboard()` 新增 `ComposeOptions` 参数：
+  - `enableTTS?: boolean`
+  - 默认 `true`，兼容旧调用
+- `enableTTS=false` 时：
+  - 不复用已有 `ttsAudioUrl`
+  - 不调用 `generateTTS()`
+  - FFmpeg 输出无音频视频
+  - 字幕仍按 `dialogue` 生成并烧录
+- `POST /compose/storyboards/:id/compose` 和 `POST /compose/episodes/:id/compose-all` 支持请求体：
+  - `{ "enable_tts": false }`
+- 前端合成 tab 新增开关：
+  - `合成时包含配音`
+  - 默认勾选，取消后只影响合成阶段
+
+### 1.3 验证
+
+- `backend npm run typecheck` 通过
+- `frontend npm run build` 通过
+- 日志确认关闭 TTS 后批量合成不再出现 `AudioTask START tts-generate`
+
+---
+
+## 2. FFmpeg 中文字幕乱码修复
+
+### 2.1 背景
+
+关闭 TTS 后合成视频仍会烧录字幕，但字幕显示为方块/空白。排查发现 SRT 内容正确，FFmpeg `subtitles` filter 可用，问题出在默认字体不支持中文。
+
+### 2.2 修复内容
+
+- FFmpeg 字幕 `force_style` 增加中文字体：
+  - `FontName=Heiti SC`
+- 字幕样式保持：
+  - 白色文字
+  - 黑色描边
+  - 20px 字号
+
+### 2.3 验证
+
+- 使用生成的 SRT 手动烧录测试视频，截图确认中文可正常显示
+- `backend npm run typecheck` 通过
+
+---
+
+## 3. 导出页支持重新拼接
+
+### 3.1 背景
+
+导出面板已有拼接记录时，只展示视频预览和下载按钮，没有重新拼接入口。后端 `POST /merge/episodes/:id/merge` 本身支持重复创建新的拼接任务，因此问题是前端缺少入口。
+
+### 3.2 修复内容
+
+- 已有 `mergeUrl` 时，在导出栏新增 `重新拼接` 按钮
+- 点击后复用现有 `doMerge()`，重新调用 `mergeAPI.merge(epId.value)`
+- 保留原有 `下载视频` 按钮
+
+### 3.3 验证
+
+- `frontend npm run build` 通过
+
+---
+
+## 4. Agnes 视频生成补充中文语言提示
+
+### 4.1 背景
+
+Agnes 视频生成接口没有 `language` / `audio_language` / `voice` 等结构化音频语言参数，视频内语音语言只能通过 prompt 软约束。
+
+### 4.2 修复内容
+
+- Agnes 视频生成 adapter 在请求体 `prompt` 后追加：
+  - `请使用中文对白与中文旁白。`
+- 空 prompt 时使用该中文语言提示兜底
+
+### 4.3 注意
+
+该方式是 prompt 软约束，不是 Agnes API 的结构化语言控制参数，不能保证 100% 生效。
+
+---
+
+## 5. Agnes 图片生成支持官方图生图参数
+
+### 5.1 背景
+
+Agnes Image 2.0 Flash 官方文档要求图生图/参考图参数使用：
+
+```json
+{
+  "extra_body": {
+    "image": ["..."]
+  }
+}
+```
+
+原实现将 `agnesai` 图片生成挂在 `OpenAIImageAdapter` 上，使用的是 `content[].image_url` 格式，不符合 Agnes 官方文档。
+
+### 5.2 修复内容
+
+- 新增 `AgnesAIImageAdapter`
+- 默认模型：
+  - `agnes-image-2.0-flash`
+- 请求接口：
+  - `POST /v1/images/generations`
+- 有参考图时构造：
+
+```json
+{
+  "model": "agnes-image-2.0-flash",
+  "prompt": "...",
+  "size": "1024x768",
+  "n": 1,
+  "extra_body": {
+    "image": ["https://... 或 data:image/...base64"],
+    "response_format": "url"
+  }
+}
+```
+
+- `registry.ts` 中将：
+  - `agnesai: new OpenAIImageAdapter()`
+  - 改为 `agnesai: new AgnesAIImageAdapter()`
+
+### 5.3 验证
+
+- `backend npm run typecheck` 通过
+
+---
+
 # Agnes 视频生成接口修复记录
 
 **日期**: 2026-07-05  
