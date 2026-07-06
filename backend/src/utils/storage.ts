@@ -24,7 +24,7 @@ export async function downloadFile(url: string, subDir: string): Promise<string>
   let lastError: Error | undefined
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const resp = await fetch(url, { signal: AbortSignal.timeout(60_000) })
+      const resp = await fetch(url, { signal: AbortSignal.timeout(120_000) })
       if (!resp.ok) throw new Error(`Download failed: ${resp.status}`)
       const buffer = Buffer.from(await resp.arrayBuffer())
       fs.writeFileSync(filePath, buffer)
