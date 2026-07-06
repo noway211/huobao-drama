@@ -1274,7 +1274,11 @@
             <div class="prod-section-bar">
               <span class="dim" style="font-size:12px">{{ sbs.length }} 个镜头</span>
               <span class="tag mono">{{ composedCount }}/{{ sbs.length }} 已合成</span>
-              <div class="ml-auto flex gap-1">
+              <div class="ml-auto flex gap-1" style="align-items:center">
+                <label class="compose-tts-toggle" style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;color:var(--text-2)">
+                  <input type="checkbox" v-model="composeTTSEnabled" style="cursor:pointer" />
+                  合成时包含配音
+                </label>
                 <button class="btn btn-sm" @click="batchCompose">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
                   批量合成
@@ -1530,6 +1534,7 @@ const pendingSceneImageIds = ref([])
 const pendingShotFrameKeys = ref([])
 const pendingVideoIds = ref([])
 const pendingComposeIds = ref([])
+const composeTTSEnabled = ref(true)
 const failedVideoMessages = ref({})
 const failedComposeMessages = ref({})
 const imageViewer = ref({ open: false, src: '', title: '' })
@@ -2814,7 +2819,7 @@ async function doCompose(sb) {
   try {
     delete failedComposeMessages.value[sb.id]
     if (!isPendingCompose(sb.id)) pendingComposeIds.value.push(sb.id)
-    await composeAPI.shot(sb.id)
+    await composeAPI.shot(sb.id, { enable_tts: composeTTSEnabled.value })
     toast.success('合成完成')
     pendingComposeIds.value = pendingComposeIds.value.filter(item => item !== sb.id)
     refresh()
@@ -2844,7 +2849,7 @@ function batchVideos() {
   }
 }
 async function batchCompose() {
-  await composeAPI.all(epId.value)
+  await composeAPI.all(epId.value, { enable_tts: composeTTSEnabled.value })
   pendingComposeIds.value = [...new Set(sbs.value.filter(sb => !!sb.video_url || !!sb.videoUrl).map(sb => sb.id))]
   toast.success('批量合成已开始')
   pollComposeStatus()
