@@ -971,9 +971,16 @@
                           <Loader2 v-if="isPendingShotFrame(sb.id, 'first_frame')" :size="14" class="animate-spin" />
                           <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                         </div>
-                        <span v-if="getFirstFrame(sb)" class="frame-re">
+                        <button
+                          v-if="getFirstFrame(sb)"
+                          type="button"
+                          class="frame-regenerate-btn"
+                          :disabled="isPendingShotFrame(sb.id, 'first_frame')"
+                          @click.stop="genShotFrame(sb, 'first_frame')"
+                        >
                           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                        </span>
+                          重新生成
+                        </button>
                       </div>
                       <span class="frame-thumb-label">{{ isPendingShotFrame(sb.id, 'first_frame') ? '首帧生成中' : '首帧' }}</span>
                     </div>
@@ -989,9 +996,16 @@
                           <Loader2 v-if="isPendingShotFrame(sb.id, 'last_frame')" :size="14" class="animate-spin" />
                           <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                         </div>
-                        <span v-if="getLastFrame(sb)" class="frame-re">
+                        <button
+                          v-if="getLastFrame(sb)"
+                          type="button"
+                          class="frame-regenerate-btn"
+                          :disabled="isPendingShotFrame(sb.id, 'last_frame')"
+                          @click.stop="genShotFrame(sb, 'last_frame')"
+                        >
                           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                        </span>
+                          重新生成
+                        </button>
                       </div>
                       <span class="frame-thumb-label">{{ isPendingShotFrame(sb.id, 'last_frame') ? '尾帧生成中' : '尾帧' }}</span>
                     </div>
@@ -1248,7 +1262,7 @@
                 <div class="prod-actions">
                   <button class="btn btn-sm" :disabled="isPendingVideo(sb.id)" @click="genVid(sb)">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-                    {{ isPendingVideo(sb.id) ? '生成中' : '生成视频' }}
+                    {{ isPendingVideo(sb.id) ? '生成中' : (hasVid(sb) ? '重新生成视频' : '生成视频') }}
                   </button>
                 </div>
               </div>
@@ -3739,12 +3753,34 @@ onMounted(() => { refresh(); loadConfigs(); loadVoices() })
 .frame-thumb:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
 .frame-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .frame-thumb-empty { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-3); }
-.frame-re {
-  position: absolute; top: 3px; right: 3px; width: 18px; height: 18px;
-  border-radius: 50%; background: rgba(0,0,0,0.5); color: #fff;
-  display: none; align-items: center; justify-content: center;
+.frame-regenerate-btn {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid rgba(255,255,255,0.22);
+  border-radius: 999px;
+  background: rgba(0,0,0,0.58);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.92;
+  transform: translateY(0);
+  transition: opacity 0.15s, transform 0.15s, background 0.15s;
 }
-.frame-thumb:hover .frame-re { display: flex; }
+.frame-thumb:hover .frame-regenerate-btn,
+.frame-regenerate-btn:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.frame-regenerate-btn:hover:not(:disabled) { background: rgba(0,0,0,0.72); }
+.frame-regenerate-btn:disabled { cursor: not-allowed; opacity: 0.56; }
 .frame-scroll { flex: 1; overflow-y: auto; padding: 10px 12px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--bg-3); flex-shrink: 0; }
 .dot.ok { background: var(--success); }
