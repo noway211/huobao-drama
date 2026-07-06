@@ -47,10 +47,14 @@ function parseDialogueForTTS(dialogue?: string | null) {
   return { speaker, pureText, ignorable }
 }
 
+export interface ComposeOptions {
+  enableTTS?: boolean
+}
+
 /**
  * 合成单个镜头：视频 + TTS对白音频 + 烧录字幕
  */
-export async function composeStoryboard(storyboardId: number): Promise<string> {
+export async function composeStoryboard(storyboardId: number, options: ComposeOptions = {}): Promise<string> {
   const [sb] = db.select().from(schema.storyboards).where(eq(schema.storyboards.id, storyboardId)).all()
   if (!sb) throw new Error(`Storyboard ${storyboardId} not found`)
   if (!sb.videoUrl) throw new Error(`Storyboard ${storyboardId} has no video`)
@@ -69,10 +73,11 @@ export async function composeStoryboard(storyboardId: number): Promise<string> {
   let audioPath: string | null = null
   let subtitlePath: string | null = null
   const parsedDialogue = parseDialogueForTTS(sb.dialogue)
+  const shouldGenerateAudio = (options.enableTTS ?? true) && !parsedDialogue.ignorable
 
   // 1. 生成 TTS 音频（如果有对白）
   try {
-    if (!parsedDialogue.ignorable) {
+    if (shouldGenerateAudio) {
       if (sb.ttsAudioUrl) {
         const existingAudioPath = toAbsPath(sb.ttsAudioUrl)
         if (fs.existsSync(existingAudioPath)) {
