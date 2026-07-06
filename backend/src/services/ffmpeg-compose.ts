@@ -146,7 +146,7 @@ export async function composeStoryboard(storyboardId: number, options: ComposeOp
           .replace(/\\/g, '/')
           .replace(/:/g, '\\:')
           .replace(/'/g, "\\'")
-        const forceStyle = 'FontSize=20\\,PrimaryColour=&HFFFFFF&\\,OutlineColour=&H000000&\\,Outline=2'
+        const forceStyle = 'FontName=Heiti SC\\,FontSize=20\\,PrimaryColour=&HFFFFFF&\\,OutlineColour=&H000000&\\,Outline=2'
         filters.push(`subtitles=filename='${escapedPath}':force_style='${forceStyle}'`)
       } else if (subtitlePath) {
         logTaskProgress('ComposeTask', 'subtitle-filter-unavailable', {
