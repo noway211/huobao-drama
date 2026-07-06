@@ -24,7 +24,7 @@ export class AgnesAIVideoAdapter implements VideoProviderAdapter {
     const frameRate = 24
     const body: any = {
       model: record.model || 'agnes-video-v2.0',
-      prompt: record.prompt,
+      prompt: record.prompt ? `${record.prompt}，请使用中文对白与中文旁白。` : '请使用中文对白与中文旁白。',
       num_frames: this.durationToNumFrames(record.duration, frameRate),
       frame_rate: frameRate,
     }
