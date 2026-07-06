@@ -11,9 +11,11 @@ const app = new Hono()
 // POST /storyboards/:id/compose — 合成单个镜头
 app.post('/storyboards/:id/compose', async (c) => {
   const id = Number(c.req.param('id'))
+  const body = await c.req.json().catch(() => ({}))
+  const enableTTS: boolean = body.enable_tts !== false
   try {
-    logTaskStart('ComposeAPI', 'single-compose', { storyboardId: id })
-    const composedUrl = await composeStoryboard(id)
+    logTaskStart('ComposeAPI', 'single-compose', { storyboardId: id, enableTTS })
+    const composedUrl = await composeStoryboard(id, { enableTTS })
     logTaskSuccess('ComposeAPI', 'single-compose', { storyboardId: id, output: composedUrl })
     return success(c, { id, composed_video_url: composedUrl })
   } catch (err: any) {
@@ -25,6 +27,8 @@ app.post('/storyboards/:id/compose', async (c) => {
 // POST /episodes/:id/compose-all — 批量合成全部镜头
 app.post('/episodes/:id/compose-all', async (c) => {
   const episodeId = Number(c.req.param('id'))
+  const body = await c.req.json().catch(() => ({}))
+  const enableTTS: boolean = body.enable_tts !== false
   const storyboards = db.select().from(schema.storyboards)
     .where(eq(schema.storyboards.episodeId, episodeId))
     .orderBy(schema.storyboards.storyboardNumber)
@@ -44,7 +48,7 @@ app.post('/episodes/:id/compose-all', async (c) => {
   ;(async () => {
     for (const sb of withVideo) {
       try {
-        await composeStoryboard(sb.id)
+        await composeStoryboard(sb.id, { enableTTS })
       } catch (err: any) {
         logTaskError('ComposeAPI', 'batch-item', { storyboardId: sb.id, episodeId, error: err.message })
       }
