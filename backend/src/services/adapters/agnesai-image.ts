@@ -28,6 +28,9 @@ export class AgnesAIImageAdapter implements ImageProviderAdapter {
       prompt: record.prompt,
       size,
       n: 1,
+      extra_body: {
+        response_format: 'url',
+      },
     }
 
     // 图生图：把参考图放入 extra_body.image
@@ -35,10 +38,7 @@ export class AgnesAIImageAdapter implements ImageProviderAdapter {
       try {
         const refs: string[] = JSON.parse(record.referenceImages)
         if (refs.length > 0) {
-          body.extra_body = {
-            image: refs,
-            response_format: 'url',
-          }
+          body.extra_body.image = refs
         }
       } catch {}
     }
