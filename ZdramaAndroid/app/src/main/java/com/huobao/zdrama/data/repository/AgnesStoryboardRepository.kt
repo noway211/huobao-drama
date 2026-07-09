@@ -1,0 +1,132 @@
+package com.huobao.zdrama.data.repository
+
+import android.util.Log
+import com.google.gson.Gson
+import com.google.gson.JsonParser
+import com.google.gson.annotations.SerializedName
+import com.google.gson.reflect.TypeToken
+import com.huobao.zdrama.data.remote.AgnesClientFactory
+import com.huobao.zdrama.data.remote.ChatCompletionRequest
+import com.huobao.zdrama.data.remote.ChatMessage
+import com.huobao.zdrama.data.remote.ChatResponseTextExtractor
+import com.huobao.zdrama.data.settings.AgnesSettings
+import com.huobao.zdrama.domain.model.AssetStatus
+import com.huobao.zdrama.domain.model.DramaProject
+import com.huobao.zdrama.domain.model.StoryboardShot
+
+class AgnesStoryboardRepository(
+    private val clientFactory: AgnesClientFactory = AgnesClientFactory(),
+    private val gson: Gson = Gson()
+) {
+    suspend fun generateStoryboards(settings: AgnesSettings, project: DramaProject): Result<List<StoryboardShot>> {
+        if (settings.apiKey.isBlank()) {
+            return Result.failure(IllegalArgumentException("Agnes API Key is required"))
+        }
+        if (settings.textModel.isBlank()) {
+            return Result.failure(IllegalArgumentException("Text model is required"))
+        }
+        val script = project.generatedScript.orEmpty()
+        if (script.isBlank()) {
+            return Result.failure(IllegalArgumentException("Generate script before storyboard"))
+        }
+
+        return runCatching {
+            val service = clientFactory.create(settings)
+            val response = service.createChatCompletion(
+                ChatCompletionRequest(
+                    model = settings.textModel,
+                    messages = listOf(
+                        ChatMessage(role = "system", content = SYSTEM_PROMPT),
+                        ChatMessage(role = "user", content = buildUserPrompt(project, script))
+                    ),
+                    temperature = 0.3,
+                    max_tokens = 6000
+                )
+            )
+            Log.d(TAG, "storyboard response structure: ${ChatResponseTextExtractor.describe(response)}")
+            val content = ChatResponseTextExtractor.extractFinalContent(response)
+            if (content.isBlank() && ChatResponseTextExtractor.finishReason(response) == "length") {
+                throw IllegalStateException("分镜生成被模型截断，请减少分镜数量或换用支持更长输出的文本模型")
+            }
+            val items = parseStoryboardJson(content)
+            if (items.isEmpty()) {
+                throw IllegalStateException("Agnes 未返回分镜内容")
+            }
+            val now = System.currentTimeMillis()
+            items.mapIndexed { index, item ->
+                StoryboardShot(
+                    id = 0L,
+                    projectId = project.id,
+                    shotNumber = item.shotNumber ?: index + 1,
+                    scene = item.scene.orEmpty(),
+                    action = item.action.orEmpty(),
+                    dialogue = item.dialogue.orEmpty(),
+                    camera = item.camera.orEmpty(),
+                    imagePrompt = item.imagePrompt.orEmpty(),
+                    videoPrompt = item.videoPrompt.orEmpty(),
+                    durationSeconds = item.durationSeconds ?: project.shotDurationSeconds,
+                    imageStatus = AssetStatus.PENDING,
+                    imageUrl = null,
+                    imageLocalPath = null,
+                    imageErrorMessage = null,
+                    videoStatus = AssetStatus.PENDING,
+                    videoTaskId = null,
+                    videoUrl = null,
+                    videoLocalPath = null,
+                    videoErrorMessage = null,
+                    createdAt = now,
+                    updatedAt = now
+                )
+            }
+        }
+    }
+
+    private fun parseStoryboardJson(content: String): List<StoryboardItem> {
+        val json = extractJsonArray(content)
+        val type = object : TypeToken<List<StoryboardItem>>() {}.type
+        return gson.fromJson(json, type)
+    }
+
+    private fun extractJsonArray(content: String): String {
+        val parsed = runCatching { JsonParser.parseString(content) }.getOrNull()
+        if (parsed != null && parsed.isJsonArray) {
+            return content
+        }
+        val start = content.indexOf('[')
+        val end = content.lastIndexOf(']')
+        if (start >= 0 && end > start) {
+            return content.substring(start, end + 1)
+        }
+        throw IllegalStateException("Agnes storyboard response is not JSON")
+    }
+
+    private fun buildUserPrompt(project: DramaProject, script: String): String {
+        return """
+            Project title: ${project.title}
+            Aspect ratio: ${project.aspectRatio}
+            Expected shot count: ${project.shotCount}
+            Default shot duration seconds: ${project.shotDurationSeconds}
+
+            Script:
+            $script
+
+            Return only a JSON array. Each item must use these keys: shot_number, scene, action, dialogue, camera, image_prompt, video_prompt, duration_seconds.
+        """.trimIndent()
+    }
+
+    private data class StoryboardItem(
+        @SerializedName("shot_number") val shotNumber: Int?,
+        val scene: String?,
+        val action: String?,
+        val dialogue: String?,
+        val camera: String?,
+        @SerializedName("image_prompt") val imagePrompt: String?,
+        @SerializedName("video_prompt") val videoPrompt: String?,
+        @SerializedName("duration_seconds") val durationSeconds: Int?
+    )
+
+    companion object {
+        private const val TAG = "AgnesStoryboardRepository"
+        private const val SYSTEM_PROMPT = "You convert short-drama scripts into production storyboard JSON for mobile vertical video. Return JSON only."
+    }
+}

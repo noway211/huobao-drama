@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.ZdramaAndroid" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/zdrama_primary</item>
+        <item name="colorPrimaryVariant">@color/zdrama_primary</item>
+        <item name="colorOnPrimary">@color/zdrama_on_primary</item>
+        <item name="android:windowBackground">@color/zdrama_black</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+</resources>

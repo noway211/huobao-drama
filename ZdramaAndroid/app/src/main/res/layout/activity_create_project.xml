@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/zdrama_black">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/create_project_title"
+            android:textColor="@color/zdrama_text_primary"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:hint="@string/project_title_label"
+            app:boxBackgroundColor="@color/zdrama_surface"
+            app:hintTextColor="@color/zdrama_text_secondary">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/titleInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:textColor="@color/zdrama_text_primary"
+                android:textColorHint="@color/zdrama_text_secondary" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="@string/project_prompt_label"
+            app:boxBackgroundColor="@color/zdrama_surface"
+            app:hintTextColor="@color/zdrama_text_secondary">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/promptInput"
+                android:layout_width="match_parent"
+                android:layout_height="120dp"
+                android:gravity="top"
+                android:inputType="textMultiLine"
+                android:textColor="@color/zdrama_text_primary"
+                android:textColorHint="@color/zdrama_text_secondary" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="@string/project_style_label"
+            app:boxBackgroundColor="@color/zdrama_surface"
+            app:hintTextColor="@color/zdrama_text_secondary">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/styleInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:text="@string/project_default_style"
+                android:textColor="@color/zdrama_text_primary" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="@string/project_audience_label"
+            app:boxBackgroundColor="@color/zdrama_surface"
+            app:hintTextColor="@color/zdrama_text_secondary">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/audienceInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:text="@string/project_default_audience"
+                android:textColor="@color/zdrama_text_primary" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="@string/project_aspect_ratio_label"
+            app:boxBackgroundColor="@color/zdrama_surface"
+            app:hintTextColor="@color/zdrama_text_secondary">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/aspectRatioInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:text="9:16"
+                android:textColor="@color/zdrama_text_primary" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:hint="@string/project_shot_count_label"
+                app:boxBackgroundColor="@color/zdrama_surface"
+                app:hintTextColor="@color/zdrama_text_secondary">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/shotCountInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:text="8"
+                    android:textColor="@color/zdrama_text_primary" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:hint="@string/project_duration_label"
+                app:boxBackgroundColor="@color/zdrama_surface"
+                app:hintTextColor="@color/zdrama_text_secondary">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/durationInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:text="5"
+                    android:textColor="@color/zdrama_text_primary" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/saveButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/project_save" />
+    </LinearLayout>
+</ScrollView>

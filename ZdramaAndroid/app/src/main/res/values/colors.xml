@@ -1,0 +1,8 @@
+<resources>
+    <color name="zdrama_black">#101114</color>
+    <color name="zdrama_surface">#1A1C20</color>
+    <color name="zdrama_primary">#2F80ED</color>
+    <color name="zdrama_on_primary">#FFFFFF</color>
+    <color name="zdrama_text_primary">#F5F7FA</color>
+    <color name="zdrama_text_secondary">#B8C0CC</color>
+</resources>

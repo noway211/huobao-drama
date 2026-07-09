@@ -43,3 +43,16 @@ temp/
 .superpowers/
 /CLAUDE.md
 /AGENTS.md
+
+# Android / Gradle
+.gradle/
+build/
+*/build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.ap_
+*.aab
+*.iml
