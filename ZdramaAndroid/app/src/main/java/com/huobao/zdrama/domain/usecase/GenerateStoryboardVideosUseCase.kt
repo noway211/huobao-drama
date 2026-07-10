@@ -1,5 +1,6 @@
 package com.huobao.zdrama.domain.usecase
 
+import android.util.Base64
 import com.huobao.zdrama.data.repository.AgnesVideoRepository
 import com.huobao.zdrama.data.repository.DramaRepository
 import com.huobao.zdrama.data.repository.MediaDownloadRepository
@@ -50,7 +51,7 @@ class GenerateStoryboardVideosUseCase(
 
             val imageReference = shot.imageLocalPath
                 ?.takeIf { isExistingLocalFile(it) }
-                ?.let { File(it).toURI().toString() }
+                ?.let { localImagePathToDataUri(it) }
             val videoResult = agnesVideoRepository.generateVideo(settings, shot, imageReference)
             if (videoResult.isSuccess) {
                 val generatedVideo = videoResult.getOrThrow()
@@ -113,5 +114,16 @@ class GenerateStoryboardVideosUseCase(
 
     private fun isExistingLocalFile(path: String?): Boolean {
         return !path.isNullOrBlank() && File(path).exists()
+    }
+
+    private fun localImagePathToDataUri(path: String): String {
+        val file = File(path)
+        val mimeType = when (file.extension.lowercase()) {
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            else -> "image/jpeg"
+        }
+        val base64 = Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
+        return "data:$mimeType;base64,$base64"
     }
 }

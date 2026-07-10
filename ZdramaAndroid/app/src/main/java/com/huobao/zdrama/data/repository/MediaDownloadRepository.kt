@@ -5,10 +5,15 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 class MediaDownloadRepository(
     context: Context,
-    private val client: OkHttpClient = OkHttpClient()
+    private val client: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(DOWNLOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .readTimeout(DOWNLOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .writeTimeout(DOWNLOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .build()
 ) {
     private val appContext = context.applicationContext
 
@@ -51,6 +56,10 @@ class MediaDownloadRepository(
             .lowercase()
             .takeIf { it.length in 2..5 && it.all { char -> char.isLetterOrDigit() } }
         return extension ?: mediaType.defaultExtension
+    }
+
+    companion object {
+        private const val DOWNLOAD_TIMEOUT_SECONDS = 120L
     }
 
     enum class MediaType(

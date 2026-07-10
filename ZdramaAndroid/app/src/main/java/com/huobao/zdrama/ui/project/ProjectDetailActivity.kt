@@ -57,23 +57,23 @@ class ProjectDetailActivity : AppCompatActivity() {
             return
         }
         binding.generateFullButton.setOnClickListener {
-            enqueueGeneration(GenerationWorker.STAGE_FULL, R.string.project_full_queued)
+            confirmGeneration(GenerationWorker.STAGE_FULL, R.string.project_full_queued)
         }
         binding.cancelGenerationButton.setOnClickListener { cancelGeneration() }
         binding.generateScriptButton.setOnClickListener {
-            enqueueGeneration(GenerationWorker.STAGE_TEXT, R.string.project_script_queued)
+            confirmGeneration(GenerationWorker.STAGE_TEXT, R.string.project_script_queued)
         }
         binding.generateStoryboardButton.setOnClickListener {
-            enqueueGeneration(GenerationWorker.STAGE_STORYBOARD, R.string.project_storyboard_queued)
+            confirmGeneration(GenerationWorker.STAGE_STORYBOARD, R.string.project_storyboard_queued)
         }
         binding.generateImagesButton.setOnClickListener {
-            enqueueGeneration(GenerationWorker.STAGE_IMAGE, R.string.project_images_queued)
+            confirmGeneration(GenerationWorker.STAGE_IMAGE, R.string.project_images_queued)
         }
         binding.generateVideosButton.setOnClickListener {
-            enqueueGeneration(GenerationWorker.STAGE_VIDEO, R.string.project_videos_queued)
+            confirmGeneration(GenerationWorker.STAGE_VIDEO, R.string.project_videos_queued)
         }
         binding.composeFinalVideoButton.setOnClickListener {
-            enqueueGeneration(GenerationWorker.STAGE_FINAL_VIDEO, R.string.project_final_video_queued)
+            confirmGeneration(GenerationWorker.STAGE_FINAL_VIDEO, R.string.project_final_video_queued)
         }
         binding.playFinalVideoButton.setOnClickListener { openFinalVideoPlayer() }
         binding.playVideosButton.setOnClickListener { openVideoPlayer() }
@@ -162,6 +162,71 @@ class ProjectDetailActivity : AppCompatActivity() {
         binding.generateImagesButton.isEnabled = enabled
         binding.generateVideosButton.isEnabled = enabled
         binding.composeFinalVideoButton.isEnabled = enabled
+    }
+
+    private fun confirmGeneration(stage: String, queuedMessageRes: Int) {
+        if (hasActiveGenerationWork) {
+            Toast.makeText(this, R.string.project_generation_running, Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            val project = getProjectDetailUseCase.execute(projectId)
+            val storyboards = getStoryboardsUseCase.execute(projectId)
+            val warningMessageRes = regenerationWarningMessageRes(stage, project, storyboards)
+            if (warningMessageRes == null) {
+                enqueueGeneration(stage, queuedMessageRes)
+            } else {
+                AlertDialog.Builder(this@ProjectDetailActivity)
+                    .setTitle(R.string.project_regenerate_title)
+                    .setMessage(warningMessageRes)
+                    .setNegativeButton(R.string.project_regenerate_cancel, null)
+                    .setPositiveButton(R.string.project_regenerate_confirm) { _, _ ->
+                        enqueueGeneration(stage, queuedMessageRes)
+                    }
+                    .show()
+            }
+        }
+    }
+
+    private fun regenerationWarningMessageRes(
+        stage: String,
+        project: DramaProject?,
+        storyboards: List<StoryboardShot>
+    ): Int? {
+        return when (stage) {
+            GenerationWorker.STAGE_TEXT -> {
+                if (!project?.generatedScript.isNullOrBlank()) R.string.project_regenerate_script_message else null
+            }
+            GenerationWorker.STAGE_STORYBOARD -> {
+                if (storyboards.isNotEmpty()) R.string.project_regenerate_storyboard_message else null
+            }
+            GenerationWorker.STAGE_IMAGE -> {
+                if (storyboards.any { it.imageStatus == AssetStatus.COMPLETED || isExistingFile(it.imageLocalPath) }) {
+                    R.string.project_regenerate_images_message
+                } else null
+            }
+            GenerationWorker.STAGE_VIDEO -> {
+                if (storyboards.any { it.videoStatus == AssetStatus.COMPLETED || it.videoTaskId != null || isExistingFile(it.videoLocalPath) }) {
+                    R.string.project_regenerate_videos_message
+                } else null
+            }
+            GenerationWorker.STAGE_FINAL_VIDEO -> {
+                if (project?.finalVideoStatus == AssetStatus.COMPLETED || isExistingFile(project?.finalVideoLocalPath)) {
+                    R.string.project_regenerate_final_video_message
+                } else null
+            }
+            GenerationWorker.STAGE_FULL -> {
+                if (hasAnyGeneratedContent(project, storyboards)) R.string.project_regenerate_full_message else null
+            }
+            else -> null
+        }
+    }
+
+    private fun hasAnyGeneratedContent(project: DramaProject?, storyboards: List<StoryboardShot>): Boolean {
+        return !project?.generatedScript.isNullOrBlank() ||
+            storyboards.isNotEmpty() ||
+            project?.finalVideoStatus == AssetStatus.COMPLETED ||
+            isExistingFile(project?.finalVideoLocalPath)
     }
 
     private fun enqueueGeneration(stage: String, messageRes: Int) {
@@ -302,6 +367,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         hasFinalVideo = project.finalVideoStatus == AssetStatus.COMPLETED && isExistingFile(project.finalVideoLocalPath)
         binding.playVideosButton.isEnabled = hasGeneratedVideos
         binding.playFinalVideoButton.isEnabled = hasFinalVideo
+        bindGenerationButtonTexts(project, storyboards)
         binding.titleText.text = project.title
         binding.statusText.text = getString(R.string.project_status_label) + "：${project.status.toDisplayText()}\n" +
             getString(R.string.project_stage_label) + "：${project.currentStage.toDisplayText()}"
@@ -381,6 +447,39 @@ class ProjectDetailActivity : AppCompatActivity() {
 
     private fun isExistingFile(path: String?): Boolean {
         return !path.isNullOrBlank() && File(path).exists()
+    }
+
+    private fun bindGenerationButtonTexts(project: DramaProject, storyboards: List<StoryboardShot>) {
+        binding.generateFullButton.setText(
+            if (hasAnyGeneratedContent(project, storyboards)) R.string.project_regenerate_full else R.string.project_generate_full
+        )
+        binding.generateScriptButton.setText(
+            if (!project.generatedScript.isNullOrBlank()) R.string.project_regenerate_script else R.string.project_generate_script
+        )
+        binding.generateStoryboardButton.setText(
+            if (storyboards.isNotEmpty()) R.string.project_regenerate_storyboards else R.string.project_generate_storyboards
+        )
+        binding.generateImagesButton.setText(
+            if (storyboards.any { it.imageStatus == AssetStatus.COMPLETED || isExistingFile(it.imageLocalPath) }) {
+                R.string.project_regenerate_images
+            } else {
+                R.string.project_generate_images
+            }
+        )
+        binding.generateVideosButton.setText(
+            if (storyboards.any { it.videoStatus == AssetStatus.COMPLETED || it.videoTaskId != null || isExistingFile(it.videoLocalPath) }) {
+                R.string.project_regenerate_videos
+            } else {
+                R.string.project_generate_videos
+            }
+        )
+        binding.composeFinalVideoButton.setText(
+            if (project.finalVideoStatus == AssetStatus.COMPLETED || isExistingFile(project.finalVideoLocalPath)) {
+                R.string.project_recompose_final_video
+            } else {
+                R.string.project_compose_final_video
+            }
+        )
     }
 
     private fun bindActiveGenerationStatus(project: DramaProject, storyboards: List<StoryboardShot>) {

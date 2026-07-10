@@ -98,7 +98,7 @@ class AgnesVideoRepository(
         private const val DEFAULT_WIDTH = 768
         private const val DEFAULT_HEIGHT = 1152
         private const val POLL_INTERVAL_MS = 10_000L
-        private const val MAX_POLL_COUNT = 30
+        private const val MAX_POLL_COUNT = 60
     }
 }
 
