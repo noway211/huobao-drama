@@ -77,6 +77,9 @@ class ProjectDetailActivity : AppCompatActivity() {
         }
         binding.playFinalVideoButton.setOnClickListener { openFinalVideoPlayer() }
         binding.playVideosButton.setOnClickListener { openVideoPlayer() }
+        binding.viewScriptButton.setOnClickListener { openScriptViewer() }
+        binding.viewStoryboardButton.setOnClickListener { openStoryboardViewer() }
+        binding.viewImagesButton.setOnClickListener { openImageGallery() }
         binding.deleteProjectButton.setOnClickListener { confirmDeleteProject() }
         observeGenerationWork(projectId)
         loadProject(projectId)
@@ -339,6 +342,27 @@ class ProjectDetailActivity : AppCompatActivity() {
         )
     }
 
+    private fun openScriptViewer() {
+        startActivity(
+            Intent(this, ScriptViewerActivity::class.java)
+                .putExtra(ScriptViewerActivity.EXTRA_PROJECT_ID, projectId)
+        )
+    }
+
+    private fun openStoryboardViewer() {
+        startActivity(
+            Intent(this, StoryboardViewerActivity::class.java)
+                .putExtra(StoryboardViewerActivity.EXTRA_PROJECT_ID, projectId)
+        )
+    }
+
+    private fun openImageGallery() {
+        startActivity(
+            Intent(this, ImageGalleryActivity::class.java)
+                .putExtra(ImageGalleryActivity.EXTRA_PROJECT_ID, projectId)
+        )
+    }
+
     private fun confirmDeleteProject() {
         AlertDialog.Builder(this)
             .setTitle(R.string.project_delete_title)
@@ -367,6 +391,11 @@ class ProjectDetailActivity : AppCompatActivity() {
         hasFinalVideo = project.finalVideoStatus == AssetStatus.COMPLETED && isExistingFile(project.finalVideoLocalPath)
         binding.playVideosButton.isEnabled = hasGeneratedVideos
         binding.playFinalVideoButton.isEnabled = hasFinalVideo
+        binding.viewScriptButton.isEnabled = !project.generatedScript.isNullOrBlank()
+        binding.viewStoryboardButton.isEnabled = storyboards.isNotEmpty()
+        binding.viewImagesButton.isEnabled = storyboards.any {
+            isExistingFile(it.imageLocalPath) || !it.imageUrl.isNullOrBlank()
+        }
         bindGenerationButtonTexts(project, storyboards)
         binding.titleText.text = project.title
         binding.statusText.text = getString(R.string.project_status_label) + "：${project.status.toDisplayText()}\n" +
@@ -390,15 +419,6 @@ class ProjectDetailActivity : AppCompatActivity() {
                 append('\n').append(getString(R.string.project_error_label)).append("：").append(error)
             }
         }
-
-        val script = project.generatedScript.orEmpty()
-        binding.scriptTitleText.visibility = if (script.isBlank()) View.GONE else View.VISIBLE
-        binding.scriptText.visibility = if (script.isBlank()) View.GONE else View.VISIBLE
-        binding.scriptText.text = script
-
-        binding.storyboardTitleText.visibility = if (storyboards.isEmpty()) View.GONE else View.VISIBLE
-        binding.storyboardText.visibility = if (storyboards.isEmpty()) View.GONE else View.VISIBLE
-        binding.storyboardText.text = formatStoryboards(storyboards)
     }
 
     private fun ProjectStatus.toDisplayText(): String {
@@ -543,42 +563,6 @@ class ProjectDetailActivity : AppCompatActivity() {
             if (selector(shot) == AssetStatus.PROCESSING) return Pair(index + 1, shot)
         }
         return null
-    }
-
-    private fun formatStoryboards(storyboards: List<StoryboardShot>): String {
-        return storyboards.joinToString(separator = "\n\n") { shot ->
-            buildString {
-                append("#").append(shot.shotNumber).append("  ").append(shot.scene).append('\n')
-                append(getString(R.string.project_action_label)).append("：").append(shot.action).append('\n')
-                append(getString(R.string.project_dialogue_label)).append("：").append(shot.dialogue).append('\n')
-                append(getString(R.string.project_camera_label)).append("：").append(shot.camera).append('\n')
-                append(getString(R.string.project_image_status_label)).append("：").append(shot.imageStatus.toDisplayText()).append('\n')
-                shot.imageUrl?.takeIf { it.isNotBlank() }?.let { imageUrl ->
-                    append(getString(R.string.project_image_url_label)).append("：").append(imageUrl).append('\n')
-                }
-                shot.imageLocalPath?.takeIf { it.isNotBlank() }?.let { imageLocalPath ->
-                    append(getString(R.string.project_image_local_path_label)).append("：").append(imageLocalPath).append('\n')
-                }
-                shot.imageErrorMessage?.takeIf { it.isNotBlank() }?.let { error ->
-                    append(getString(R.string.project_error_label)).append("：").append(error).append('\n')
-                }
-                append(getString(R.string.project_video_status_label)).append("：").append(shot.videoStatus.toDisplayText()).append('\n')
-                shot.videoTaskId?.takeIf { it.isNotBlank() }?.let { taskId ->
-                    append(getString(R.string.project_video_task_label)).append("：").append(taskId).append('\n')
-                }
-                shot.videoUrl?.takeIf { it.isNotBlank() }?.let { videoUrl ->
-                    append(getString(R.string.project_video_url_label)).append("：").append(videoUrl).append('\n')
-                }
-                shot.videoLocalPath?.takeIf { it.isNotBlank() }?.let { videoLocalPath ->
-                    append(getString(R.string.project_video_local_path_label)).append("：").append(videoLocalPath).append('\n')
-                }
-                shot.videoErrorMessage?.takeIf { it.isNotBlank() }?.let { error ->
-                    append(getString(R.string.project_error_label)).append("：").append(error).append('\n')
-                }
-                append(getString(R.string.project_image_prompt_label)).append("：").append(shot.imagePrompt).append('\n')
-                append(getString(R.string.project_video_prompt_label)).append("：").append(shot.videoPrompt)
-            }
-        }
     }
 
     private fun showMissingProject() {

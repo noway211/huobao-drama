@@ -76,33 +76,97 @@
             android:text="@string/project_cancel_generation"
             android:visibility="gone" />
 
-        <Button
-            android:id="@+id/generateScriptButton"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="@string/project_generate_script" />
+            android:orientation="horizontal">
 
-        <Button
-            android:id="@+id/generateStoryboardButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/project_generate_storyboards" />
+            <Button
+                android:id="@+id/generateScriptButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:text="@string/project_generate_script" />
 
-        <Button
-            android:id="@+id/generateImagesButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/project_generate_images" />
+            <Button
+                android:id="@+id/viewScriptButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="@string/project_view_script" />
+        </LinearLayout>
 
-        <Button
-            android:id="@+id/generateVideosButton"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="@string/project_generate_videos" />
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/generateStoryboardButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:text="@string/project_generate_storyboards" />
+
+            <Button
+                android:id="@+id/viewStoryboardButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="@string/project_view_storyboard" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/generateImagesButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:text="@string/project_generate_images" />
+
+            <Button
+                android:id="@+id/viewImagesButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="@string/project_view_images" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/generateVideosButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:text="@string/project_generate_videos" />
+
+            <Button
+                android:id="@+id/playVideosButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="@string/project_play_videos" />
+        </LinearLayout>
 
         <Button
             android:id="@+id/composeFinalVideoButton"
@@ -119,59 +183,10 @@
             android:text="@string/project_play_final_video" />
 
         <Button
-            android:id="@+id/playVideosButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/project_play_videos" />
-
-        <Button
             android:id="@+id/deleteProjectButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:text="@string/project_delete" />
-
-        <TextView
-            android:id="@+id/storyboardTitleText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/project_storyboards"
-            android:textColor="@color/zdrama_text_primary"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/storyboardText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:background="@color/zdrama_surface"
-            android:lineSpacingExtra="4dp"
-            android:padding="16dp"
-            android:textColor="@color/zdrama_text_primary"
-            android:textSize="15sp" />
-
-        <TextView
-            android:id="@+id/scriptTitleText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/project_generated_script"
-            android:textColor="@color/zdrama_text_primary"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/scriptText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:background="@color/zdrama_surface"
-            android:lineSpacingExtra="4dp"
-            android:padding="16dp"
-            android:textColor="@color/zdrama_text_primary"
-            android:textSize="15sp" />
     </LinearLayout>
 </ScrollView>

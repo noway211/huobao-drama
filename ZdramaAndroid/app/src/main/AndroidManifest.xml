@@ -16,6 +16,15 @@
             android:name=".ui.project.VideoPlayerActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.project.ScriptViewerActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.project.StoryboardViewerActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.project.ImageGalleryActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.project.ProjectDetailActivity"
             android:exported="false" />
         <activity
