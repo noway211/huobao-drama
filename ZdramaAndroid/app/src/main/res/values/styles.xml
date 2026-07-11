@@ -5,5 +5,11 @@
         <item name="colorOnPrimary">@color/zdrama_on_primary</item>
         <item name="android:windowBackground">@color/zdrama_black</item>
         <item name="android:fontFamily">sans</item>
+        <item name="materialButtonStyle">@style/Widget.Zdrama.Button</item>
+    </style>
+
+    <style name="Widget.Zdrama.Button" parent="Widget.MaterialComponents.Button">
+        <item name="backgroundTint">@color/zdrama_button_background_tint</item>
+        <item name="android:textColor">@color/zdrama_button_text_color</item>
     </style>
 </resources>

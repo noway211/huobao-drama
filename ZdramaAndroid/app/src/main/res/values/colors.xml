@@ -5,4 +5,6 @@
     <color name="zdrama_on_primary">#FFFFFF</color>
     <color name="zdrama_text_primary">#F5F7FA</color>
     <color name="zdrama_text_secondary">#B8C0CC</color>
+    <color name="zdrama_button_disabled_bg">#3A3E48</color>
+    <color name="zdrama_button_disabled_text">#8892A0</color>
 </resources>
