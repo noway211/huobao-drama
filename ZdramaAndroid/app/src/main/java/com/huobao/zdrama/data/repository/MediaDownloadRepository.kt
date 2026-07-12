@@ -1,6 +1,8 @@
 package com.huobao.zdrama.data.repository
 
 import android.content.Context
+import com.huobao.zdrama.data.remote.ApiLogEntry
+import com.huobao.zdrama.data.remote.ApiLogStore
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -36,9 +38,25 @@ class MediaDownloadRepository(
         }
         val targetFile = File(targetDir, "shot_${shotId}_${mediaType.fileNamePart}.$extension")
         val request = Request.Builder().url(url).build()
+        val startTime = System.currentTimeMillis()
         return runCatching {
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw IOException("Media download failed: HTTP ${response.code}")
+                if (!response.isSuccessful) {
+                    ApiLogStore.add(
+                        ApiLogEntry(
+                            timestamp = startTime,
+                            method = "GET",
+                            url = url,
+                            statusCode = response.code,
+                            durationMs = System.currentTimeMillis() - startTime,
+                            requestBody = "download ${mediaType.name} → project=$projectId shot=$shotId",
+                            responseBody = null,
+                            errorMessage = "HTTP ${response.code}",
+                            isSuccess = false
+                        )
+                    )
+                    throw IOException("Media download failed: HTTP ${response.code}")
+                }
                 val body = response.body ?: throw IOException("Media download failed: empty response")
                 targetFile.outputStream().use { output ->
                     body.byteStream().use { input ->
@@ -46,8 +64,46 @@ class MediaDownloadRepository(
                     }
                 }
             }
+            val bytes = targetFile.length()
+            ApiLogStore.add(
+                ApiLogEntry(
+                    timestamp = startTime,
+                    method = "GET",
+                    url = url,
+                    statusCode = 200,
+                    durationMs = System.currentTimeMillis() - startTime,
+                    requestBody = "download ${mediaType.name} → project=$projectId shot=$shotId",
+                    responseBody = "saved ${formatBytes(bytes)} to ${targetFile.absolutePath}",
+                    errorMessage = null,
+                    isSuccess = true
+                )
+            )
             targetFile.absolutePath
+        }.onFailure { throwable ->
+            // 记录异常型失败(网络中断、write 失败)。HTTP 错误码已在上面记录,不重复。
+            if (throwable !is IOException || throwable.message?.startsWith("Media download failed: HTTP") != true) {
+                ApiLogStore.add(
+                    ApiLogEntry(
+                        timestamp = startTime,
+                        method = "GET",
+                        url = url,
+                        statusCode = null,
+                        durationMs = System.currentTimeMillis() - startTime,
+                        requestBody = "download ${mediaType.name} → project=$projectId shot=$shotId",
+                        responseBody = null,
+                        errorMessage = throwable.message ?: throwable.javaClass.simpleName,
+                        isSuccess = false
+                    )
+                )
+            }
         }
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes < 1024) return "${bytes}B"
+        if (bytes < 1024 * 1024) return "${bytes / 1024}KB"
+        val mb = bytes.toDouble() / (1024.0 * 1024.0)
+        return "%.2fMB".format(mb)
     }
 
     private fun extensionFromUrl(url: String, mediaType: MediaType): String {

@@ -80,6 +80,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         binding.viewScriptButton.setOnClickListener { openScriptViewer() }
         binding.viewStoryboardButton.setOnClickListener { openStoryboardViewer() }
         binding.viewImagesButton.setOnClickListener { openImageGallery() }
+        binding.viewApiLogButton.setOnClickListener { openApiLog() }
         binding.deleteProjectButton.setOnClickListener { confirmDeleteProject() }
         observeGenerationWork(projectId)
         loadProject(projectId)
@@ -361,6 +362,10 @@ class ProjectDetailActivity : AppCompatActivity() {
             Intent(this, ImageGalleryActivity::class.java)
                 .putExtra(ImageGalleryActivity.EXTRA_PROJECT_ID, projectId)
         )
+    }
+
+    private fun openApiLog() {
+        startActivity(Intent(this, ApiLogActivity::class.java))
     }
 
     private fun confirmDeleteProject() {

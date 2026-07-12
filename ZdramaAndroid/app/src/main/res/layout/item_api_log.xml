@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="16dp"
+    android:background="@color/zdrama_surface"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/zdrama_text_primary"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/urlText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textColor="@color/zdrama_text_secondary"
+        android:textIsSelectable="true"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/requestLabelText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/api_log_request_label"
+        android:textColor="@color/zdrama_primary"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/requestBodyText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:background="@color/zdrama_black"
+        android:padding="8dp"
+        android:textColor="@color/zdrama_text_primary"
+        android:textIsSelectable="true"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/responseLabelText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/api_log_response_label"
+        android:textColor="@color/zdrama_primary"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/responseBodyText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:background="@color/zdrama_black"
+        android:padding="8dp"
+        android:textColor="@color/zdrama_text_primary"
+        android:textIsSelectable="true"
+        android:textSize="12sp" />
+</LinearLayout>

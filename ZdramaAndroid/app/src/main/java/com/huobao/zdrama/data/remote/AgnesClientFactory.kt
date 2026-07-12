@@ -18,6 +18,7 @@ class AgnesClientFactory {
                 override fun getApiKey(): String? = settings.apiKey
             }))
             .addInterceptor(loggingInterceptor)
+            .addInterceptor(ApiLogInterceptor())
             .connectTimeout(settings.requestTimeoutSeconds, TimeUnit.SECONDS)
             .readTimeout(settings.requestTimeoutSeconds, TimeUnit.SECONDS)
             .writeTimeout(settings.requestTimeoutSeconds, TimeUnit.SECONDS)

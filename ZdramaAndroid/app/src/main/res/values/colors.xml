@@ -7,4 +7,6 @@
     <color name="zdrama_text_secondary">#B8C0CC</color>
     <color name="zdrama_button_disabled_bg">#3A3E48</color>
     <color name="zdrama_button_disabled_text">#8892A0</color>
+    <color name="zdrama_success">#27AE60</color>
+    <color name="zdrama_error">#EB5757</color>
 </resources>

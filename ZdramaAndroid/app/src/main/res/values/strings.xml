@@ -88,6 +88,15 @@
     <string name="project_image_gallery_title">图片列表</string>
     <string name="project_image_placeholder_pending">图片尚未生成</string>
     <string name="project_image_placeholder_remote">图片在远端（无本地文件）</string>
+    <string name="project_view_api_log">查看日志</string>
+    <string name="api_log_title">API 调用日志</string>
+    <string name="api_log_clear">清空</string>
+    <string name="api_log_cleared">日志已清空</string>
+    <string name="api_log_empty">暂无 API 调用记录</string>
+    <string name="api_log_request_label">请求</string>
+    <string name="api_log_response_label">响应</string>
+    <string name="api_log_error_label">错误</string>
+    <string name="api_log_failed">失败</string>
     <string name="project_delete">删除项目</string>
     <string name="project_delete_title">删除项目？</string>
     <string name="project_delete_message">这会删除项目、分镜和本地生成媒体。</string>
