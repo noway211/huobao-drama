@@ -86,6 +86,7 @@ data class VideoGenerationResponse(
     @SerializedName("remixed_from_video_id") val remixedFromVideoId: String?,
     @SerializedName("video_url") val videoUrl: String?,
     val url: String?,
+    val metadata: VideoMetadata?,
     val error: JsonElement?
 )
 
@@ -94,5 +95,10 @@ data class VideoPollResponse(
     @SerializedName("remixed_from_video_id") val remixedFromVideoId: String?,
     @SerializedName("video_url") val videoUrl: String?,
     val url: String?,
+    val metadata: VideoMetadata?,
     val error: JsonElement?
+)
+
+data class VideoMetadata(
+    val url: String?
 )

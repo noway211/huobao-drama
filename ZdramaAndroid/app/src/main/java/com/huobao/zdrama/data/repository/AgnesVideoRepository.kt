@@ -41,7 +41,7 @@ class AgnesVideoRepository(
                 )
             )
 
-            val immediateUrl = response.remixedFromVideoId ?: response.videoUrl ?: response.url ?: response.videoId
+            val immediateUrl = response.metadata?.url ?: response.videoUrl ?: response.url ?: response.remixedFromVideoId
             if (response.status == "completed" && !immediateUrl.isNullOrBlank()) {
                 return@runCatching VideoGenerationResult(taskId = response.taskId ?: response.id, videoUrl = immediateUrl)
             }
@@ -61,7 +61,7 @@ class AgnesVideoRepository(
             val response = service.getVideo(taskId)
             when (response.status) {
                 "completed" -> {
-                    val videoUrl = response.remixedFromVideoId ?: response.videoUrl ?: response.url
+                    val videoUrl = response.metadata?.url ?: response.videoUrl ?: response.url ?: response.remixedFromVideoId
                     if (videoUrl.isNullOrBlank()) {
                         throw IllegalStateException("Agnes video completed without URL")
                     }
