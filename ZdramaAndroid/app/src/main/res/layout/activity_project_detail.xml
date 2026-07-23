@@ -71,8 +71,25 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
+            android:ellipsize="end"
+            android:maxLines="6"
             android:textColor="@color/zdrama_text_primary"
             android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/promptToggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="?android:attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:paddingVertical="4dp"
+            android:text="@string/project_prompt_expand"
+            android:textColor="@color/zdrama_primary"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/metaText"

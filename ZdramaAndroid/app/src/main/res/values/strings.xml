@@ -20,6 +20,8 @@
     <string name="create_project_title">创建项目</string>
     <string name="project_title_label">标题</string>
     <string name="project_prompt_label">故事提示词</string>
+    <string name="project_prompt_expand">展开全文</string>
+    <string name="project_prompt_collapse">收起</string>
     <string name="project_style_label">风格</string>
     <string name="project_audience_label">目标受众</string>
     <string name="project_aspect_ratio_label">画面比例</string>

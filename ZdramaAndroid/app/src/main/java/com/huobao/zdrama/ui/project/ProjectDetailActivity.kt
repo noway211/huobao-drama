@@ -40,6 +40,8 @@ class ProjectDetailActivity : AppCompatActivity() {
     private var hasActiveGenerationWork = false
     private var activeGenerationRefreshJob: Job? = null
     private val generationWorkInfosByName = mutableMapOf<String, List<WorkInfo>>()
+    private var promptExpanded = false
+    private var boundPrompt: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,6 +84,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         binding.viewImagesButton.setOnClickListener { openImageGallery() }
         binding.viewApiLogButton.setOnClickListener { openApiLog() }
         binding.deleteProjectButton.setOnClickListener { confirmDeleteProject() }
+        binding.promptToggle.setOnClickListener { togglePrompt() }
         observeGenerationWork(projectId)
         loadProject(projectId)
     }
@@ -368,6 +371,36 @@ class ProjectDetailActivity : AppCompatActivity() {
         startActivity(Intent(this, ApiLogActivity::class.java))
     }
 
+    private fun bindPrompt(prompt: String) {
+        if (boundPrompt == prompt) {
+            // 同一段文本重复绑定不重置展开状态,只更新 toggle 文案
+            applyPromptExpanded()
+            return
+        }
+        boundPrompt = prompt
+        promptExpanded = false
+        binding.promptText.text = prompt
+        // 用 post 等 TextView 排版完成后再判断行数
+        binding.promptText.post {
+            val needsToggle = binding.promptText.lineCount > PROMPT_COLLAPSED_MAX_LINES
+            binding.promptToggle.visibility = if (needsToggle) View.VISIBLE else View.GONE
+            applyPromptExpanded()
+        }
+    }
+
+    private fun togglePrompt() {
+        promptExpanded = !promptExpanded
+        applyPromptExpanded()
+    }
+
+    private fun applyPromptExpanded() {
+        binding.promptText.maxLines =
+            if (promptExpanded) Int.MAX_VALUE else PROMPT_COLLAPSED_MAX_LINES
+        binding.promptToggle.setText(
+            if (promptExpanded) R.string.project_prompt_collapse else R.string.project_prompt_expand
+        )
+    }
+
     private fun confirmDeleteProject() {
         AlertDialog.Builder(this)
             .setTitle(R.string.project_delete_title)
@@ -406,7 +439,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         binding.statusText.text = getString(R.string.project_status_label) + "：${project.status.toDisplayText()}\n" +
             getString(R.string.project_stage_label) + "：${project.currentStage.toDisplayText()}"
         bindActiveGenerationStatus(project, storyboards)
-        binding.promptText.text = project.prompt
+        bindPrompt(project.prompt)
         binding.metaText.text = buildString {
             append(getString(R.string.project_style_label)).append("：").append(project.style).append('\n')
             append(getString(R.string.project_audience_label)).append("：").append(project.targetAudience).append('\n')
@@ -578,6 +611,7 @@ class ProjectDetailActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_PROJECT_ID = "extra_project_id"
         private const val ACTIVE_REFRESH_INTERVAL_MS = 1500L
+        private const val PROMPT_COLLAPSED_MAX_LINES = 6
     }
 
     private sealed class GenerationPreflight {
