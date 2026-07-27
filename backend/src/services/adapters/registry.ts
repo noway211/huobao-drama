@@ -41,7 +41,8 @@ class OpenAIVideoAdapter implements VideoProviderAdapter {
 
   parseGenerateResponse(result: any): any {
     if (result.status === 'completed' && result.video_id) {
-      return { isAsync: false, videoUrl: result.video_id }
+      const videoUrl = result.metadata?.url || result.video_url || result.url || result.remixed_from_video_id
+      return { isAsync: false, videoUrl }
     }
     if (result.id || result.task_id) {
       return { isAsync: true, taskId: String(result.task_id || result.id) }
@@ -62,10 +63,8 @@ class OpenAIVideoAdapter implements VideoProviderAdapter {
 
   parsePollResponse(result: any): any {
     if (result.status === 'completed') {
-      return {
-        status: 'completed',
-        videoUrl: result.remixed_from_video_id || result.video_url || undefined,
-      }
+      const videoUrl = result.metadata?.url || result.video_url || result.url || result.remixed_from_video_id
+      return { status: 'completed', videoUrl }
     }
     if (result.status === 'failed') {
       return { status: 'failed', error: result.error?.message || result.error || 'Generation failed' }
@@ -74,7 +73,7 @@ class OpenAIVideoAdapter implements VideoProviderAdapter {
   }
 
   extractVideoUrl(result: any): string | null {
-    return result.video_id || null
+    return result.metadata?.url || result.video_url || result.url || result.remixed_from_video_id || null
   }
 }
 

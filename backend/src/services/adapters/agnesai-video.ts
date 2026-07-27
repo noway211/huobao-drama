@@ -65,7 +65,8 @@ export class AgnesAIVideoAdapter implements VideoProviderAdapter {
 
   parseGenerateResponse(result: any): VideoGenResponse {
     if (result.status === 'completed' && result.video_id) {
-      return { isAsync: false, videoUrl: result.remixed_from_video_id || result.video_id }
+      const videoUrl = result.metadata?.url || result.video_url || result.url || result.remixed_from_video_id
+      return { isAsync: false, videoUrl }
     }
     if (result.id || result.task_id) {
       return { isAsync: true, taskId: String(result.task_id || result.id) }
@@ -86,8 +87,7 @@ export class AgnesAIVideoAdapter implements VideoProviderAdapter {
 
   parsePollResponse(result: any): VideoPollResponse {
     if (result.status === 'completed') {
-      // remixed_from_video_id 是视频的下载 URL
-      const videoUrl = result.remixed_from_video_id || result.video_url || result.url || undefined
+      const videoUrl = result.metadata?.url || result.video_url || result.url || result.remixed_from_video_id
       return { status: 'completed', videoUrl }
     }
     if (result.status === 'failed') {
@@ -97,7 +97,7 @@ export class AgnesAIVideoAdapter implements VideoProviderAdapter {
   }
 
   extractVideoUrl(result: any): string | null {
-    return result.remixed_from_video_id || result.video_url || result.url || null
+    return result.metadata?.url || result.video_url || result.url || result.remixed_from_video_id || null
   }
 
   /**
