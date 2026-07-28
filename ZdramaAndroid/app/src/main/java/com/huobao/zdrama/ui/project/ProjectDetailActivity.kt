@@ -79,6 +79,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         }
         binding.playFinalVideoButton.setOnClickListener { openFinalVideoPlayer() }
         binding.playVideosButton.setOnClickListener { openVideoPlayer() }
+        binding.rewriteScriptButton.setOnClickListener { confirmRewrite() }
         binding.viewScriptButton.setOnClickListener { openScriptViewer() }
         binding.viewStoryboardButton.setOnClickListener { openStoryboardViewer() }
         binding.viewImagesButton.setOnClickListener { openImageGallery() }
@@ -165,6 +166,7 @@ class ProjectDetailActivity : AppCompatActivity() {
     private fun setGenerationButtonsEnabled(enabled: Boolean) {
         binding.generateFullButton.isEnabled = enabled
         binding.generateScriptButton.isEnabled = enabled
+        binding.rewriteScriptButton.isEnabled = enabled
         binding.generateStoryboardButton.isEnabled = enabled
         binding.generateImagesButton.isEnabled = enabled
         binding.generateVideosButton.isEnabled = enabled
@@ -266,8 +268,18 @@ class ProjectDetailActivity : AppCompatActivity() {
         val storyboards = getStoryboardsUseCase.execute(projectId)
 
         return when (stage) {
+            GenerationWorker.STAGE_REWRITE -> {
+                val episode = dramaRepository.getEpisodeForProject(projectId)
+                if (episode?.content.isNullOrBlank()) {
+                    GenerationPreflight.Blocked(R.string.project_rewrite_no_content)
+                } else {
+                    GenerationPreflight.Ready
+                }
+            }
             GenerationWorker.STAGE_STORYBOARD -> {
-                if (project.generatedScript.isNullOrBlank()) {
+                val episode = dramaRepository.getEpisodeForProject(projectId)
+                val hasScript = !episode?.scriptContent.isNullOrBlank() || !project.generatedScript.isNullOrBlank()
+                if (!hasScript) {
                     GenerationPreflight.Blocked(R.string.project_generation_missing_script)
                 } else {
                     GenerationPreflight.Ready
@@ -369,6 +381,38 @@ class ProjectDetailActivity : AppCompatActivity() {
 
     private fun openApiLog() {
         startActivity(Intent(this, ApiLogActivity::class.java))
+    }
+
+    private fun confirmRewrite() {
+        if (hasActiveGenerationWork) {
+            Toast.makeText(this, R.string.project_generation_running, Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            val episode = dramaRepository.getEpisodeForProject(projectId)
+            if (episode?.content.isNullOrBlank()) {
+                Toast.makeText(this@ProjectDetailActivity, R.string.project_rewrite_no_content, Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            if (!episode?.scriptContent.isNullOrBlank()) {
+                AlertDialog.Builder(this@ProjectDetailActivity)
+                    .setTitle(R.string.project_regenerate_title)
+                    .setMessage(R.string.project_regenerate_rewrite_message)
+                    .setNegativeButton(R.string.project_regenerate_cancel, null)
+                    .setPositiveButton(R.string.project_regenerate_confirm) { _, _ ->
+                        enqueueRewrite()
+                    }
+                    .show()
+            } else {
+                enqueueRewrite()
+            }
+        }
+    }
+
+    private fun enqueueRewrite() {
+        GenerationWorker.enqueue(this, projectId, GenerationWorker.STAGE_REWRITE)
+        Toast.makeText(this, R.string.project_rewrite_queued, Toast.LENGTH_SHORT).show()
+        loadProject(projectId)
     }
 
     private fun bindPrompt(prompt: String) {

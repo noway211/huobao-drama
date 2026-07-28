@@ -54,6 +54,25 @@ data class DramaProject(
     val updatedAt: Long
 )
 
+enum class EpisodeStatus {
+    DRAFT,
+    REWRITING,
+    COMPLETED,
+    FAILED
+}
+
+data class Episode(
+    val id: Long,
+    val projectId: Long,
+    val episodeNumber: Int,
+    val title: String,
+    val content: String?,
+    val scriptContent: String?,
+    val status: EpisodeStatus,
+    val createdAt: Long,
+    val updatedAt: Long
+)
+
 data class StoryboardShot(
     val id: Long,
     val projectId: Long,

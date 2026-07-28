@@ -18,15 +18,15 @@ class AgnesStoryboardRepository(
     private val clientFactory: AgnesClientFactory = AgnesClientFactory(),
     private val gson: Gson = Gson()
 ) {
-    suspend fun generateStoryboards(settings: AgnesSettings, project: DramaProject): Result<List<StoryboardShot>> {
+    suspend fun generateStoryboards(settings: AgnesSettings, project: DramaProject, script: String? = null): Result<List<StoryboardShot>> {
         if (settings.apiKey.isBlank()) {
             return Result.failure(IllegalArgumentException("Agnes API Key is required"))
         }
         if (settings.textModel.isBlank()) {
             return Result.failure(IllegalArgumentException("Text model is required"))
         }
-        val script = project.generatedScript.orEmpty()
-        if (script.isBlank()) {
+        val scriptToUse = script ?: project.generatedScript.orEmpty()
+        if (scriptToUse.isBlank()) {
             return Result.failure(IllegalArgumentException("Generate script before storyboard"))
         }
 
@@ -37,7 +37,7 @@ class AgnesStoryboardRepository(
                     model = settings.textModel,
                     messages = listOf(
                         ChatMessage(role = "system", content = SYSTEM_PROMPT),
-                        ChatMessage(role = "user", content = buildUserPrompt(project, script))
+                        ChatMessage(role = "user", content = buildUserPrompt(project, scriptToUse))
                     ),
                     temperature = 0.3,
                     max_tokens = 6000
@@ -101,10 +101,16 @@ class AgnesStoryboardRepository(
     }
 
     private fun buildUserPrompt(project: DramaProject, script: String): String {
+        val sceneCount = countScenes(script)
+        val shotCountHint = if (sceneCount > 0) {
+            "Script contains $sceneCount scene headers (## S01, ## S02 ...). Generate exactly one storyboard shot per scene, in order."
+        } else {
+            "Expected shot count: ${project.shotCount}"
+        }
         return """
             Project title: ${project.title}
             Aspect ratio: ${project.aspectRatio}
-            Expected shot count: ${project.shotCount}
+            $shotCountHint
             Default shot duration seconds: ${project.shotDurationSeconds}
 
             Script:
@@ -112,6 +118,14 @@ class AgnesStoryboardRepository(
 
             Return only a JSON array. Each item must use these keys: shot_number, scene, action, dialogue, camera, image_prompt, video_prompt, duration_seconds.
         """.trimIndent()
+    }
+
+    /**
+     * Count scene headers in rewritten script (format: `## S01 | ...`, `## S02 | ...`).
+     * Returns 0 if the script has no scene headers (i.e. it's from the old generate flow).
+     */
+    private fun countScenes(script: String): Int {
+        return SCENE_HEADER_REGEX.findAll(script).count()
     }
 
     private data class StoryboardItem(
@@ -128,5 +142,7 @@ class AgnesStoryboardRepository(
     companion object {
         private const val TAG = "AgnesStoryboardRepository"
         private const val SYSTEM_PROMPT = "You convert short-drama scripts into production storyboard JSON for mobile vertical video. Return JSON only."
+        // Matches scene headers in rewritten scripts: `## S01 | ...`, `## S02 · ...`, etc.
+        private val SCENE_HEADER_REGEX = Regex("(?m)^##\\s*S\\d+\\b")
     }
 }

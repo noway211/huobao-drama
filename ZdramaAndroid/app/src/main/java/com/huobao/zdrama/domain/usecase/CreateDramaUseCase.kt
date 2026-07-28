@@ -31,6 +31,13 @@ class CreateDramaUseCase(
             createdAt = now,
             updatedAt = now
         )
-        return dramaRepository.createProject(project)
+        val projectId = dramaRepository.createProject(project)
+        // Auto-create episode 1 with the prompt as raw content
+        dramaRepository.createEpisodeForProject(
+            projectId = projectId,
+            title = input.title,
+            content = input.prompt
+        )
+        return projectId
     }
 }

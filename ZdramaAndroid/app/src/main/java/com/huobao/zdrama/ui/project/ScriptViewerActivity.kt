@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 
 class ScriptViewerActivity : AppCompatActivity() {
     private lateinit var binding: ActivityScriptViewerBinding
+    private lateinit var dramaRepository: DramaRepository
     private lateinit var getProjectDetailUseCase: GetProjectDetailUseCase
     private var projectId: Long = 0L
 
@@ -20,7 +21,8 @@ class ScriptViewerActivity : AppCompatActivity() {
         binding = ActivityScriptViewerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        getProjectDetailUseCase = GetProjectDetailUseCase(DramaRepository(this))
+        dramaRepository = DramaRepository(this)
+        getProjectDetailUseCase = GetProjectDetailUseCase(dramaRepository)
         projectId = intent.getLongExtra(EXTRA_PROJECT_ID, 0L)
         if (projectId <= 0L) {
             finishWithMessage(R.string.project_missing)
@@ -41,7 +43,9 @@ class ScriptViewerActivity : AppCompatActivity() {
                 finishWithMessage(R.string.project_missing)
                 return@launch
             }
-            val script = project.generatedScript.orEmpty()
+            // Prefer episode's scriptContent, fall back to project.generatedScript
+            val episode = dramaRepository.getEpisodeForProject(projectId)
+            val script = episode?.scriptContent ?: project.generatedScript.orEmpty()
             if (script.isBlank()) {
                 finishWithMessage(R.string.project_no_script)
                 return@launch

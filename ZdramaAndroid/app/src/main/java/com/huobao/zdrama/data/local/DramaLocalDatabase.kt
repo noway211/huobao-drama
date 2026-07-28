@@ -13,6 +13,7 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(SQL_CREATE_PROJECTS)
         db.execSQL(SQL_CREATE_STORYBOARDS)
+        db.execSQL(SQL_CREATE_EPISODES)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -43,11 +44,30 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
             db.execSQL("ALTER TABLE $TABLE_PROJECTS ADD COLUMN $COL_FINAL_VIDEO_LOCAL_PATH TEXT")
             db.execSQL("ALTER TABLE $TABLE_PROJECTS ADD COLUMN $COL_FINAL_VIDEO_ERROR_MESSAGE TEXT")
         }
+        if (oldVersion < 8) {
+            db.execSQL(SQL_CREATE_EPISODES)
+            db.execSQL("""
+                INSERT INTO $TABLE_EPISODES ($COL_PROJECT_ID, $COL_EPISODE_NUMBER, $COL_EPISODE_TITLE, $COL_EPISODE_CONTENT, $COL_EPISODE_SCRIPT_CONTENT, $COL_EPISODE_STATUS, $COL_CREATED_AT, $COL_UPDATED_AT)
+                SELECT $COL_ID, 1, $COL_TITLE, $COL_PROMPT, $COL_GENERATED_SCRIPT,
+                    CASE WHEN $COL_GENERATED_SCRIPT IS NOT NULL THEN 'COMPLETED' ELSE 'DRAFT' END,
+                    $COL_CREATED_AT, $COL_UPDATED_AT
+                FROM $TABLE_PROJECTS
+            """)
+            db.execSQL("ALTER TABLE $TABLE_STORYBOARDS ADD COLUMN $COL_EPISODE_ID INTEGER")
+            db.execSQL("""
+                UPDATE $TABLE_STORYBOARDS
+                SET $COL_EPISODE_ID = (
+                    SELECT $COL_ID FROM $TABLE_EPISODES
+                    WHERE $TABLE_EPISODES.$COL_PROJECT_ID = $TABLE_STORYBOARDS.$COL_PROJECT_ID
+                    LIMIT 1
+                )
+            """)
+        }
     }
 
     companion object {
         private const val DATABASE_NAME = "zdrama.db"
-        private const val DATABASE_VERSION = 7
+        private const val DATABASE_VERSION = 8
 
         const val TABLE_PROJECTS = "projects"
         const val COL_ID = "id"
@@ -87,6 +107,14 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
         const val COL_VIDEO_URL = "video_url"
         const val COL_VIDEO_LOCAL_PATH = "video_local_path"
         const val COL_VIDEO_ERROR_MESSAGE = "video_error_message"
+
+        const val TABLE_EPISODES = "episodes"
+        const val COL_EPISODE_ID = "episode_id"
+        const val COL_EPISODE_NUMBER = "episode_number"
+        const val COL_EPISODE_TITLE = "episode_title"
+        const val COL_EPISODE_CONTENT = "content"
+        const val COL_EPISODE_SCRIPT_CONTENT = "script_content"
+        const val COL_EPISODE_STATUS = "episode_status"
 
         private const val SQL_CREATE_PROJECTS = """
             CREATE TABLE IF NOT EXISTS $TABLE_PROJECTS (
@@ -131,6 +159,20 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
                 $COL_VIDEO_URL TEXT,
                 $COL_VIDEO_LOCAL_PATH TEXT,
                 $COL_VIDEO_ERROR_MESSAGE TEXT,
+                $COL_CREATED_AT INTEGER NOT NULL,
+                $COL_UPDATED_AT INTEGER NOT NULL
+            )
+        """
+
+        private const val SQL_CREATE_EPISODES = """
+            CREATE TABLE IF NOT EXISTS $TABLE_EPISODES (
+                $COL_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COL_PROJECT_ID INTEGER NOT NULL,
+                $COL_EPISODE_NUMBER INTEGER NOT NULL DEFAULT 1,
+                $COL_EPISODE_TITLE TEXT NOT NULL DEFAULT '',
+                $COL_EPISODE_CONTENT TEXT,
+                $COL_EPISODE_SCRIPT_CONTENT TEXT,
+                $COL_EPISODE_STATUS TEXT NOT NULL DEFAULT 'DRAFT',
                 $COL_CREATED_AT INTEGER NOT NULL,
                 $COL_UPDATED_AT INTEGER NOT NULL
             )

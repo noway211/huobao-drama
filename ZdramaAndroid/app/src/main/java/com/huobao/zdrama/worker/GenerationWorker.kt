@@ -29,6 +29,7 @@ import com.huobao.zdrama.domain.usecase.GenerateProjectScriptUseCase
 import com.huobao.zdrama.domain.usecase.GenerateStoryboardImagesUseCase
 import com.huobao.zdrama.domain.usecase.GenerateStoryboardVideosUseCase
 import com.huobao.zdrama.domain.usecase.GenerateStoryboardsUseCase
+import com.huobao.zdrama.domain.usecase.RewriteEpisodeScriptUseCase
 import com.huobao.zdrama.ui.project.ProjectDetailActivity
 import kotlin.Result as KotlinResult
 
@@ -48,6 +49,7 @@ class GenerationWorker(
         val mediaDownloadRepository = MediaDownloadRepository(applicationContext)
         val result = when (stage) {
             STAGE_TEXT -> runText(projectId, settings, dramaRepository)
+            STAGE_REWRITE -> runRewrite(projectId, settings, dramaRepository)
             STAGE_STORYBOARD -> runStoryboard(projectId, settings, dramaRepository)
             STAGE_IMAGE -> runImages(projectId, settings, dramaRepository, mediaDownloadRepository)
             STAGE_VIDEO -> runVideos(projectId, settings, dramaRepository, mediaDownloadRepository)
@@ -86,6 +88,17 @@ class GenerationWorker(
         dramaRepository: DramaRepository
     ): KotlinResult<Unit> {
         return GenerateProjectScriptUseCase(
+            dramaRepository,
+            AgnesTextRepository()
+        ).execute(projectId, settings).map { Unit }
+    }
+
+    private suspend fun runRewrite(
+        projectId: Long,
+        settings: AgnesSettings,
+        dramaRepository: DramaRepository
+    ): KotlinResult<Unit> {
+        return RewriteEpisodeScriptUseCase(
             dramaRepository,
             AgnesTextRepository()
         ).execute(projectId, settings).map { Unit }
@@ -186,6 +199,7 @@ class GenerationWorker(
     private fun stageMessageRes(stage: String): Int {
         return when (stage) {
             STAGE_TEXT -> R.string.generation_notification_text
+            STAGE_REWRITE -> R.string.project_rewriting_script
             STAGE_STORYBOARD -> R.string.generation_notification_storyboard
             STAGE_IMAGE -> R.string.generation_notification_image
             STAGE_VIDEO -> R.string.generation_notification_video
@@ -197,6 +211,7 @@ class GenerationWorker(
 
     companion object {
         const val STAGE_TEXT = "text"
+        const val STAGE_REWRITE = "rewrite"
         const val STAGE_STORYBOARD = "storyboard"
         const val STAGE_IMAGE = "image"
         const val STAGE_VIDEO = "video"
@@ -235,6 +250,7 @@ class GenerationWorker(
         fun workNamesForProject(projectId: Long): List<String> {
             return listOf(
                 STAGE_TEXT,
+                STAGE_REWRITE,
                 STAGE_STORYBOARD,
                 STAGE_IMAGE,
                 STAGE_VIDEO,

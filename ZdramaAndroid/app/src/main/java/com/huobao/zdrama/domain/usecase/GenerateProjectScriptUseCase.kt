@@ -3,6 +3,7 @@ package com.huobao.zdrama.domain.usecase
 import com.huobao.zdrama.data.repository.AgnesTextRepository
 import com.huobao.zdrama.data.repository.DramaRepository
 import com.huobao.zdrama.data.settings.AgnesSettings
+import com.huobao.zdrama.domain.model.EpisodeStatus
 import com.huobao.zdrama.domain.model.GenerationStage
 import com.huobao.zdrama.domain.model.ProjectStatus
 
@@ -31,6 +32,15 @@ class GenerateProjectScriptUseCase(
                 generatedScript = script,
                 errorMessage = null
             )
+            // Sync to episode.scriptContent
+            val episode = dramaRepository.getEpisodeForProject(projectId)
+            if (episode != null) {
+                dramaRepository.updateEpisodeScriptContent(
+                    episodeId = episode.id,
+                    scriptContent = script,
+                    status = EpisodeStatus.COMPLETED
+                )
+            }
         }.onFailure { throwable ->
             dramaRepository.updateProjectTextResult(
                 projectId = projectId,
