@@ -35,6 +35,7 @@
     <string name="project_required_error">标题和故事提示词不能为空</string>
     <string name="project_invalid_number_error">分镜数量和时长必须是正数</string>
     <string name="project_list_title">项目列表</string>
+    <string name="project_list_hint_long_press_delete">长按项目可删除</string>
     <string name="project_empty">暂无项目</string>
     <string name="project_detail_title">项目详情</string>
     <string name="project_status_label">状态</string>
@@ -102,6 +103,7 @@
     <string name="project_delete">删除项目</string>
     <string name="project_delete_title">删除项目？</string>
     <string name="project_delete_message">这会删除项目、分镜和本地生成媒体。</string>
+    <string name="project_list_delete_message">删除项目「%1$s」？这会一并清除分镜、图片、视频和本地媒体。</string>
     <string name="project_delete_confirm">删除</string>
     <string name="project_delete_cancel">取消</string>
     <string name="project_deleted">项目已删除</string>

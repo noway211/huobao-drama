@@ -10,7 +10,8 @@ import com.huobao.zdrama.domain.model.GenerationStage
 import com.huobao.zdrama.domain.model.ProjectStatus
 
 class ProjectAdapter(
-    private val onProjectClick: (DramaProject) -> Unit
+    private val onProjectClick: (DramaProject) -> Unit,
+    private val onProjectLongClick: (DramaProject) -> Unit = {}
 ) : RecyclerView.Adapter<ProjectAdapter.ProjectViewHolder>() {
     private val projects = mutableListOf<DramaProject>()
 
@@ -40,6 +41,10 @@ class ProjectAdapter(
             binding.statusText.text = "${project.status.toDisplayText()} · ${project.currentStage.toDisplayText()} · ${context.getString(R.string.project_shots_summary, project.shotCount)}"
             binding.promptText.text = project.prompt
             binding.root.setOnClickListener { onProjectClick(project) }
+            binding.root.setOnLongClickListener {
+                onProjectLongClick(project)
+                true
+            }
         }
 
         private fun ProjectStatus.toDisplayText(): String {
