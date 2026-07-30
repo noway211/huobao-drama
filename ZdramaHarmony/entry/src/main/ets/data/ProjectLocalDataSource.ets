@@ -10,8 +10,10 @@ import {
   assetStatusFrom
 } from '../model/DramaModels';
 
+// 项目表名
 const TABLE = 'projects';
 
+// 查询时使用的列名列表
 const COLUMNS = [
   'id', 'title', 'prompt', 'style', 'target_audience', 'aspect_ratio',
   'shot_count', 'shot_duration_seconds', 'status', 'current_stage',
@@ -19,6 +21,7 @@ const COLUMNS = [
   'final_video_local_path', 'final_video_error_message', 'created_at', 'updated_at'
 ];
 
+// 读取可空字符串列：列值为 NULL 时返回 null，否则返回字符串
 function nullableString(rs: relationalStore.ResultSet, column: string): string | null {
   const idx = rs.getColumnIndex(column);
   if (rs.isColumnNull(idx)) {
@@ -27,6 +30,7 @@ function nullableString(rs: relationalStore.ResultSet, column: string): string |
   return rs.getString(idx);
 }
 
+// 将结果集当前行映射为 DramaProject 对象（枚举列字符串转枚举）
 function mapRow(rs: relationalStore.ResultSet): DramaProject {
   return {
     id: rs.getLong(rs.getColumnIndex('id')),
@@ -51,6 +55,7 @@ function mapRow(rs: relationalStore.ResultSet): DramaProject {
 
 /** Ports com.huobao.zdrama.data.local.ProjectLocalDataSource. */
 export class ProjectLocalDataSource {
+  // 插入一条项目记录，返回新记录的自增 id
   async insertProject(project: DramaProject): Promise<number> {
     const store = await DramaDatabase.getStore();
     const values: relationalStore.ValuesBucket = {
@@ -74,6 +79,7 @@ export class ProjectLocalDataSource {
     return store.insert(TABLE, values);
   }
 
+  // 查询全部项目，按更新时间倒序返回
   async getProjects(): Promise<DramaProject[]> {
     const store = await DramaDatabase.getStore();
     const predicates = new relationalStore.RdbPredicates(TABLE);
@@ -90,6 +96,7 @@ export class ProjectLocalDataSource {
     return result;
   }
 
+  // 按 id 查询单个项目，不存在返回 null
   async getProject(projectId: number): Promise<DramaProject | null> {
     const store = await DramaDatabase.getStore();
     const predicates = new relationalStore.RdbPredicates(TABLE);
@@ -105,6 +112,7 @@ export class ProjectLocalDataSource {
     }
   }
 
+  // 按 id 删除项目，返回删除的行数
   async deleteProject(projectId: number): Promise<number> {
     const store = await DramaDatabase.getStore();
     const predicates = new relationalStore.RdbPredicates(TABLE);
@@ -112,6 +120,7 @@ export class ProjectLocalDataSource {
     return store.delete(predicates);
   }
 
+  // 更新项目的文本生成结果（状态、阶段、脚本、错误信息）并刷新更新时间，返回受影响行数
   async updateProjectTextResult(
     projectId: number,
     status: ProjectStatus,

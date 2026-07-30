@@ -15,8 +15,10 @@ const TAG = 'DramaDatabase';
  * No FK constraints — cascades are handled in the repository layer.
  */
 
+// 数据库文件名
 const DB_NAME = 'zdrama.db';
 
+// 建表 SQL：projects（项目表），枚举列以字符串名存储，无外键约束
 const CREATE_PROJECTS = `
 CREATE TABLE IF NOT EXISTS projects (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,6 +40,7 @@ CREATE TABLE IF NOT EXISTS projects (
   updated_at INTEGER NOT NULL
 )`;
 
+// 建表 SQL：episodes（剧集表），归属于某个 project
 const CREATE_EPISODES = `
 CREATE TABLE IF NOT EXISTS episodes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,6 +54,7 @@ CREATE TABLE IF NOT EXISTS episodes (
   updated_at INTEGER NOT NULL
 )`;
 
+// 建表 SQL：storyboards（分镜表），当前 MVP 阶段仅建表、暂不写入
 const CREATE_STORYBOARDS = `
 CREATE TABLE IF NOT EXISTS storyboards (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,7 +85,7 @@ export class DramaDatabase {
   private static store: relationalStore.RdbStore | null = null;
   private static initializing: Promise<relationalStore.RdbStore> | null = null;
 
-  /** Lazily opens (and creates the schema for) the shared RDB store. */
+  /** 懒加载获取（首次会建表）共享的 RDB 数据库实例。 */
   static async getStore(): Promise<relationalStore.RdbStore> {
     if (DramaDatabase.store) {
       return DramaDatabase.store;
@@ -98,6 +102,7 @@ export class DramaDatabase {
     }
   }
 
+  // 实际打开数据库并创建三张表（projects/episodes/storyboards）
   private static async open(): Promise<relationalStore.RdbStore> {
     const config: relationalStore.StoreConfig = {
       name: DB_NAME,

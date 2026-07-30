@@ -9,10 +9,12 @@ struct Index {
   @State projects: DramaProject[] = [];
   @State loading: boolean = true;
 
+  // 页面每次显示时刷新项目列表
   onPageShow(): void {
     this.loadProjects();
   }
 
+  // 加载项目列表数据，处理加载状态与失败提示
   async loadProjects(): Promise<void> {
     this.loading = true;
     try {
@@ -24,6 +26,7 @@ struct Index {
     }
   }
 
+  // 弹出确认对话框，确认后删除指定项目并刷新列表
   confirmDelete(project: DramaProject): void {
     promptAction.showDialog({
       title: '删除项目？',
@@ -43,6 +46,7 @@ struct Index {
     });
   }
 
+  // 单个项目卡片：展示标题、状态阶段分镜数与提示词，点击进入详情，长按删除
   @Builder
   ProjectCard(project: DramaProject) {
     Column() {
@@ -89,9 +93,10 @@ struct Index {
     )
   }
 
+  // 页面整体布局：顶部标题栏、项目列表（加载/空/列表三态）、底部创建按钮
   build() {
     Column() {
-      // Top bar
+      // 顶部栏
       Row() {
         Text('项目列表')
           .fontSize(22)
@@ -144,7 +149,7 @@ struct Index {
         .scrollBar(BarState.Off)
       }
 
-      // Create button
+      // 创建按钮
       Column() {
         Button('创建项目')
           .width('100%')

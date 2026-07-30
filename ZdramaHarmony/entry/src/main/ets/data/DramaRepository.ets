@@ -16,18 +16,22 @@ export class DramaRepository {
   private projects = new ProjectLocalDataSource();
   private episodes = new EpisodeLocalDataSource();
 
+  // 创建新项目，返回自增主键 id
   createProject(project: DramaProject): Promise<number> {
     return this.projects.insertProject(project);
   }
 
+  // 获取全部项目列表
   getProjects(): Promise<DramaProject[]> {
     return this.projects.getProjects();
   }
 
+  // 按 id 获取单个项目，不存在返回 null
   getProject(id: number): Promise<DramaProject | null> {
     return this.projects.getProject(id);
   }
 
+  // 更新项目的文本生成结果（状态、阶段、脚本、错误信息），返回是否有行被更新
   async updateProjectTextResult(
     projectId: number,
     status: ProjectStatus,
@@ -40,10 +44,12 @@ export class DramaRepository {
     return rows > 0;
   }
 
+  // 获取项目对应的剧集（当前每个项目仅一集），不存在返回 null
   getEpisodeForProject(projectId: number): Promise<Episode | null> {
     return this.episodes.getEpisodeForProject(projectId);
   }
 
+  // 为项目创建一集（默认第 1 集、DRAFT 草稿状态），返回新剧集 id
   async createEpisodeForProject(projectId: number, title: string, content: string): Promise<number> {
     const now = Date.now();
     const episode: Episode = {
@@ -60,6 +66,7 @@ export class DramaRepository {
     return this.episodes.insertEpisode(episode);
   }
 
+  // 更新剧集的脚本内容与状态，返回是否有行被更新
   async updateEpisodeScriptContent(
     episodeId: number,
     scriptContent: string,
@@ -69,12 +76,13 @@ export class DramaRepository {
     return rows > 0;
   }
 
+  // 更新剧集的正文内容，返回是否有行被更新
   async updateEpisodeContent(episodeId: number, content: string): Promise<boolean> {
     const rows = await this.episodes.updateEpisodeContent(episodeId, content);
     return rows > 0;
   }
 
-  /** Cascade delete: episodes + project row. (Storyboards/media added later.) */
+  /** 级联删除：先删该项目的剧集，再删项目行（分镜/媒体资源后续再补）。 */
   async deleteProject(projectId: number): Promise<boolean> {
     await this.episodes.deleteEpisodesForProject(projectId);
     const rows = await this.projects.deleteProject(projectId);
@@ -82,9 +90,9 @@ export class DramaRepository {
   }
 
   /**
-   * Ports ZdramaApplication.resetOrphanGenerationJobs: on cold start, flip any
-   * project stuck in PROCESSING (app was killed mid-request) to FAILED so it
-   * doesn't stay "生成中" forever. Returns the number of projects reset.
+   * 对应 ZdramaApplication.resetOrphanGenerationJobs：冷启动时，将卡在
+   * PROCESSING（应用在请求中途被杀）的项目置为 FAILED，避免其永远停留在
+   * “生成中”。返回被重置的项目数量。
    */
   async resetOrphanProcessingProjects(): Promise<number> {
     const projects = await this.projects.getProjects();

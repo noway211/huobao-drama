@@ -14,6 +14,7 @@ struct SettingsPage {
   @State videoModel: string = '';
   @State testing: boolean = false;
 
+  // 页面显示时从本地存储读取已保存的设置并回填到输入框
   async onPageShow(): Promise<void> {
     const s = await SettingsStore.load();
     this.apiKey = s.apiKey;
@@ -23,6 +24,7 @@ struct SettingsPage {
     this.videoModel = s.videoModel;
   }
 
+  // 将当前输入框内容组装为设置对象（超时使用默认值）
   private currentSettings(): AgnesSettings {
     const d = defaultSettings();
     return {
@@ -35,6 +37,7 @@ struct SettingsPage {
     };
   }
 
+  // 保存当前设置到本地存储并提示结果
   async save(): Promise<void> {
     try {
       await SettingsStore.save(this.currentSettings());
@@ -44,6 +47,7 @@ struct SettingsPage {
     }
   }
 
+  // 测试文本模型连通性：校验必填项，保存设置后发起测试并提示结果
   async testConnection(): Promise<void> {
     if (this.apiKey.trim().length === 0) {
       promptAction.showToast({ message: '请先填写 API Key' });
@@ -57,6 +61,7 @@ struct SettingsPage {
     try {
       await SettingsStore.save(this.currentSettings());
     } catch (e) {
+      // 非致命错误：仍使用内存中的设置继续测试
       // Non-fatal: still attempt the test with in-memory settings.
     }
     const repo = new AgnesTextRepository();
@@ -65,6 +70,7 @@ struct SettingsPage {
     promptAction.showToast({ message: result.ok ? '连接测试成功' : `连接测试失败：${result.error}` });
   }
 
+  // 通用带标签的单行输入项：标签 + 文本输入框
   @Builder
   Field(label: string, value: string, onChange: (v: string) => void, placeholder: string) {
     Column() {
@@ -87,6 +93,7 @@ struct SettingsPage {
     .margin({ bottom: 16 })
   }
 
+  // 页面整体布局：顶部返回栏 + 可滚动的各项设置表单与测试/保存按钮
   build() {
     Column() {
       Row() {
@@ -109,7 +116,7 @@ struct SettingsPage {
         Column() {
           this.Field('API Key', this.apiKey, (v: string) => this.apiKey = v, 'sk-...')
           this.Field('Base URL', this.baseUrl, (v: string) => this.baseUrl = v, 'https://apihub.agnes-ai.com/')
-          this.Field('文本模型', this.textModel, (v: string) => this.textModel = v, '例如 gpt-4o')
+          this.Field('文本模型', this.textModel, (v: string) => this.textModel = v, 'agnes-2.0-flash')
           this.Field('图片模型', this.imageModel, (v: string) => this.imageModel = v, 'agnes-image-2.0-flash')
           this.Field('视频模型', this.videoModel, (v: string) => this.videoModel = v, 'agnes-video-v2.0')
 

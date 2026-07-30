@@ -9,8 +9,10 @@ import { ApiLogStore } from './ApiLogStore';
 const DOMAIN = 0x0001;
 const TAG = 'AgnesTextRepository';
 
+// 生成剧本时使用的系统提示词（prompt 文本，请勿改动内容）
 const SYSTEM_PROMPT = 'You are an expert short-drama writer for mobile vertical video production.';
 
+// 改写剧本时使用的系统提示词（prompt 文本，请勿改动内容）
 const REWRITE_SYSTEM_PROMPT = `你是一位专业的短剧编剧。请将用户提供的原始内容改写为格式化短剧剧本。
 
 格式规范：
@@ -27,11 +29,13 @@ const REWRITE_SYSTEM_PROMPT = `你是一位专业的短剧编剧。请将用户�
 - 心理描写转化为角色表情/动作
 - 长段叙述拆分为多个短场景`;
 
+// 单条聊天消息：角色（system/user/assistant）与内容文本
 interface ChatMessage {
   role: string;
   content: string;
 }
 
+// chat/completions 接口的请求体结构
 interface ChatCompletionRequest {
   model: string;
   messages: ChatMessage[];
@@ -39,13 +43,14 @@ interface ChatCompletionRequest {
   max_tokens: number;
 }
 
+// chat/completions 请求头结构（内容类型与鉴权）
 interface ChatRequestHeader {
   'Content-Type': string;
   'Authorization': string;
 }
 
 /**
- * Result wrapper mirroring Kotlin's Result<String>: either ok text or an error.
+ * 结果封装，对应 Kotlin 的 Result<String>：要么返回成功文本，要么返回错误信息。
  */
 export interface TextResult {
   ok: boolean;
@@ -53,25 +58,29 @@ export interface TextResult {
   error: string;
 }
 
+// 构造成功结果
 function ok(value: string): TextResult {
   return { ok: true, value, error: '' };
 }
 
+// 构造失败结果
 function fail(error: string): TextResult {
   return { ok: false, value: '', error };
 }
 
+// 拼接基础 URL 与路径，确保二者之间只有一个斜杠
 function joinBaseUrl(baseUrl: string, path: string): string {
   const base = baseUrl.endsWith('/') ? baseUrl : baseUrl + '/';
   return base + path;
 }
 
 /**
- * Ports com.huobao.zdrama.data.repository.AgnesTextRepository.
- * Uses @ohos.net.http instead of Retrofit; auth + api-logging done inline
- * (equivalent to AgnesAuthInterceptor + ApiLogInterceptor).
+ * 移植自 com.huobao.zdrama.data.repository.AgnesTextRepository。
+ * 使用 @ohos.net.http 代替 Retrofit；鉴权与 API 日志记录在方法内内联完成
+ *（等价于 AgnesAuthInterceptor + ApiLogInterceptor）。
  */
 export class AgnesTextRepository {
+  // 根据项目信息生成短剧剧本
   async generateScript(settings: AgnesSettings, project: DramaProject): Promise<TextResult> {
     if (settings.apiKey.trim().length === 0) {
       return fail('Agnes API Key is required');
@@ -86,6 +95,7 @@ export class AgnesTextRepository {
     return this.chatCompletion(settings, messages, 0.7, 4000, '未返回脚本文本');
   }
 
+  // 将原始内容改写为格式化短剧剧本
   async rewriteScript(settings: AgnesSettings, rawContent: string): Promise<TextResult> {
     if (settings.apiKey.trim().length === 0) {
       return fail('Agnes API Key is required');
@@ -103,6 +113,7 @@ export class AgnesTextRepository {
     return this.chatCompletion(settings, messages, 0.7, 6000, '未返回改写内容');
   }
 
+  // 根据项目信息构建生成剧本的用户提示词
   private buildUserPrompt(project: DramaProject): string {
     return `Title: ${project.title}
 Story prompt: ${project.prompt}
@@ -115,6 +126,7 @@ Shot duration seconds: ${project.shotDurationSeconds}
 Generate a concise mobile short-drama script. Return numbered shots. For each shot include scene, character action, dialogue, camera direction, and image/video generation notes.`;
   }
 
+  // 根据原始内容构建改写剧本的用户提示词
   private buildRewriteUserPrompt(rawContent: string): string {
     return `请将以下内容改写为格式化短剧剧本。
 
@@ -123,9 +135,9 @@ ${rawContent}`;
   }
 
   /**
-   * Ports AgnesConnectionRepository.testTextModel — a lightweight ping.
-   * Single "ping" user message, no system prompt, temp 0, max_tokens 8.
-   * Succeeds on any 2xx HTTP response (does not require non-blank content).
+   * 移植自 AgnesConnectionRepository.testTextModel —— 一个轻量级连通性检测。
+   * 仅发送单条 "ping" 用户消息，无系统提示词，temperature 为 0，max_tokens 为 8。
+   * 只要 HTTP 返回任意 2xx 即视为成功（不要求返回非空内容）。
    */
   async testTextModel(settings: AgnesSettings): Promise<TextResult> {
     if (settings.apiKey.trim().length === 0) {
@@ -144,6 +156,7 @@ ${rawContent}`;
     return ok('ok');
   }
 
+  // 发起聊天补全请求并解析出文本内容，内容为空时返回带提示的错误
   private async chatCompletion(
     settings: AgnesSettings,
     messages: ChatMessage[],
@@ -170,7 +183,7 @@ ${rawContent}`;
     return ok(text);
   }
 
-  /** Low-level POST v1/chat/completions. On success `value` is the raw body. */
+  /** 底层 POST v1/chat/completions 请求。成功时 `value` 为原始响应体，并记录 API 日志。 */
   private async postChat(
     settings: AgnesSettings,
     messages: ChatMessage[],

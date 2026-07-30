@@ -1,4 +1,4 @@
-/** Shared dark-theme palette, ported from the Android colors.xml dark theme. */
+/** 共享的深色主题配色，移植自 Android colors.xml 的深色主题 */
 export class Theme {
   static readonly bg = '#121212';
   static readonly surface = '#1E1E1E';
@@ -13,7 +13,7 @@ export class Theme {
   static readonly error = '#EF5350';
 }
 
-/** Map ProjectStatus / stage enum values to Chinese labels for display. */
+/** 将 ProjectStatus / stage 枚举值映射为用于展示的中文标签 */
 export function statusLabel(status: string): string {
   switch (status) {
     case 'DRAFT': return '草稿';
@@ -25,6 +25,7 @@ export function statusLabel(status: string): string {
   }
 }
 
+/** 将生成阶段 stage 枚举值映射为中文标签 */
 export function stageLabel(stage: string): string {
   switch (stage) {
     case 'NONE': return '未开始';

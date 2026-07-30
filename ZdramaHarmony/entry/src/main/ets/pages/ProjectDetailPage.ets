@@ -18,6 +18,7 @@ struct ProjectDetailPage {
   @State promptExpanded: boolean = false;
   private projectId: number = 0;
 
+  // 组件即将出现：从路由参数中读取项目 ID
   aboutToAppear(): void {
     const params = router.getParams() as DetailParams;
     if (params && params.projectId) {
@@ -25,15 +26,18 @@ struct ProjectDetailPage {
     }
   }
 
+  // 页面每次显示时重新加载数据
   onPageShow(): void {
     this.reload();
   }
 
+  // 重新拉取项目与剧集数据
   async reload(): Promise<void> {
     this.project = await UseCases.getProject(this.projectId);
     this.episode = await UseCases.getEpisode(this.projectId);
   }
 
+  // 是否已有脚本（剧集脚本或项目生成脚本任一非空）
   private hasScript(): boolean {
     const fromEpisode = this.episode?.scriptContent;
     const fromProject = this.project?.generatedScript;
@@ -41,12 +45,15 @@ struct ProjectDetailPage {
       (!!fromProject && fromProject.trim().length > 0);
   }
 
+  // 是否有可改写的原始内容（剧集 content 非空）
   private hasRawContent(): boolean {
     const raw = this.episode?.content;
     return !!raw && raw.trim().length > 0;
   }
 
   /**
+   * 估算提示词是否超过 6 行，用于决定是否显示展开/收起按钮，对齐 Android 端逻辑。
+   * ArkUI 无直接获取行数的 API，故按换行符与文本长度估算（窄屏每行约 24 字符）。
    * Heuristic mirror of Android's "only show toggle when prompt exceeds 6 lines".
    * ArkUI has no direct line-count API, so estimate from newlines and length
    * (~24 chars per line on a narrow phone column).
@@ -66,6 +73,7 @@ struct ProjectDetailPage {
     return estimated > 6;
   }
 
+  // 执行前置校验：未配置 API Key 则提示并中断，否则执行传入动作
   private async runWithGuard(action: () => Promise<void>): Promise<void> {
     const hasKey = await SettingsStore.hasApiKey();
     if (!hasKey) {
@@ -75,6 +83,7 @@ struct ProjectDetailPage {
     await action();
   }
 
+  // 若已有脚本则弹窗二次确认，确认后再执行；无脚本直接执行
   private confirmIfScriptExists(message: string, onProceed: () => void): void {
     if (!this.hasScript()) {
       onProceed();
@@ -94,6 +103,7 @@ struct ProjectDetailPage {
     });
   }
 
+  // 调用生成脚本用例，处理忙碌状态、结果提示并刷新数据
   async doGenerate(): Promise<void> {
     this.busy = true;
     this.busyLabel = '创作脚本中…';
@@ -104,6 +114,7 @@ struct ProjectDetailPage {
     await this.reload();
   }
 
+  // 调用改写脚本用例：先校验有原始内容，再处理忙碌状态、结果提示并刷新
   async doRewrite(): Promise<void> {
     if (!this.hasRawContent()) {
       promptAction.showToast({ message: '没有可改写的原始内容，请先在故事提示词中输入剧情内容' });
@@ -118,6 +129,7 @@ struct ProjectDetailPage {
     await this.reload();
   }
 
+  // 点击“创作脚本”：校验 Key 并在已有脚本时确认后执行生成
   onGenerateClick(): void {
     this.runWithGuard(async () => {
       this.confirmIfScriptExists(
@@ -126,6 +138,7 @@ struct ProjectDetailPage {
     });
   }
 
+  // 点击“改写脚本”：校验 Key 并在已有脚本时确认后执行改写
   onRewriteClick(): void {
     this.runWithGuard(async () => {
       this.confirmIfScriptExists(
@@ -134,6 +147,7 @@ struct ProjectDetailPage {
     });
   }
 
+  // 弹窗确认删除当前项目，确认后删除并返回上一页
   confirmDelete(): void {
     promptAction.showDialog({
       title: '删除项目？',
@@ -153,6 +167,7 @@ struct ProjectDetailPage {
     });
   }
 
+  // 信息行：左侧标签 + 右侧内容的一行展示
   @Builder
   InfoRow(label: string, value: string) {
     Row() {
@@ -170,9 +185,10 @@ struct ProjectDetailPage {
     .margin({ bottom: 10 })
   }
 
+  // 页面整体布局：顶部返回/删除栏 + 项目信息、原始内容、脚本操作按钮的可滚动内容
   build() {
     Column() {
-      // Top bar
+      // 顶部栏
       Row() {
         Button('返回')
           .fontSize(14)

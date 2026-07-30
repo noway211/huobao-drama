@@ -12,14 +12,14 @@ import {
 } from '../model/DramaModels';
 
 /**
- * Ports the MVP subset of com.huobao.zdrama.domain.usecase.*.
- * Kept as static methods on one class since each is thin.
+ * 移植 com.huobao.zdrama.domain.usecase.* 的 MVP 子集。
+ * 由于每个用例都很轻量，统一实现为一个类上的静态方法。
  */
 export class UseCases {
   private static repo = new DramaRepository();
   private static text = new AgnesTextRepository();
 
-  /** CreateDramaUseCase: insert project (DRAFT) + auto-create episode 1. */
+  /** CreateDramaUseCase：插入项目（草稿状态）并自动创建第 1 集。 */
   static async createDrama(input: CreateDramaInput): Promise<number> {
     const now = Date.now();
     const project: DramaProject = {
@@ -46,28 +46,32 @@ export class UseCases {
     return projectId;
   }
 
+  // 获取所有项目列表
   static getProjects(): Promise<DramaProject[]> {
     return UseCases.repo.getProjects();
   }
 
+  // 根据 ID 获取单个项目
   static getProject(projectId: number): Promise<DramaProject | null> {
     return UseCases.repo.getProject(projectId);
   }
 
+  // 获取项目对应的剧集
   static getEpisode(projectId: number): Promise<Episode | null> {
     return UseCases.repo.getEpisodeForProject(projectId);
   }
 
+  // 删除指定项目
   static deleteProject(projectId: number): Promise<boolean> {
     return UseCases.repo.deleteProject(projectId);
   }
 
-  /** Cold-start recovery: reset orphan PROCESSING projects to FAILED. */
+  /** 冷启动恢复：将残留的 PROCESSING 状态项目重置为 FAILED。 */
   static resetOrphanProcessingProjects(): Promise<number> {
     return UseCases.repo.resetOrphanProcessingProjects();
   }
 
-  /** GenerateProjectScriptUseCase: create screenplay from the project prompt. */
+  /** GenerateProjectScriptUseCase：根据项目提示词生成剧本，并同步更新项目与剧集状态。 */
   static async generateScript(projectId: number, settings: AgnesSettings): Promise<TextResult> {
     const project = await UseCases.repo.getProject(projectId);
     if (!project) {
@@ -92,7 +96,7 @@ export class UseCases {
     return result;
   }
 
-  /** RewriteEpisodeScriptUseCase: rewrite episode.content into a screenplay. */
+  /** RewriteEpisodeScriptUseCase：将 episode.content 改写为剧本，并同步更新项目与剧集状态。 */
   static async rewriteScript(projectId: number, settings: AgnesSettings): Promise<TextResult> {
     const episode = await UseCases.repo.getEpisodeForProject(projectId);
     if (!episode) {

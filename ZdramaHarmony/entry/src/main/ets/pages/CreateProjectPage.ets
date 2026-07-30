@@ -15,6 +15,7 @@ struct CreateProjectPage {
   @State duration: string = '5';
   @State saving: boolean = false;
 
+  // 校验输入并创建项目草稿，成功后跳转到项目详情页
   async save(): Promise<void> {
     const title = this.title.trim();
     const prompt = this.prompt.trim();
@@ -50,6 +51,7 @@ struct CreateProjectPage {
     }
   }
 
+  // 通用带标签的表单项：根据 multiline 渲染多行文本域或单行输入框
   @Builder
   Field(label: string, value: string, onChange: (v: string) => void, placeholder: string, multiline: boolean) {
     Column() {
@@ -83,6 +85,7 @@ struct CreateProjectPage {
     .margin({ bottom: 16 })
   }
 
+  // 页面整体布局：顶部返回栏 + 可滚动的创建表单与保存按钮
   build() {
     Column() {
       Row() {

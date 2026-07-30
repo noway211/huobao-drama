@@ -14,6 +14,7 @@ struct ScriptViewerPage {
   @State loading: boolean = true;
   private projectId: number = 0;
 
+  // 组件即将出现：从路由参数中读取项目 ID
   aboutToAppear(): void {
     const params = router.getParams() as ViewerParams;
     if (params && params.projectId) {
@@ -21,12 +22,14 @@ struct ScriptViewerPage {
     }
   }
 
+  // 页面显示时加载脚本内容：优先剧集脚本，无则回退到项目脚本，均无则提示并返回
   async onPageShow(): Promise<void> {
     this.loading = true;
     const project = await UseCases.getProject(this.projectId);
     const episode = await UseCases.getEpisode(this.projectId);
     this.title = project?.title ?? '脚本';
 
+    // 优先使用剧集脚本内容，回退到项目生成的脚本
     // Prefer episode.scriptContent, fall back to project.generatedScript.
     const fromEpisode = episode?.scriptContent;
     const fromProject = project?.generatedScript;
@@ -42,6 +45,7 @@ struct ScriptViewerPage {
     }
   }
 
+  // 页面整体布局：顶部返回栏与标题 + 可滚动的脚本文本（加载中显示进度圈）
   build() {
     Column() {
       Row() {

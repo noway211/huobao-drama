@@ -2,13 +2,16 @@ import { relationalStore } from '@kit.ArkData';
 import { DramaDatabase } from './DramaDatabase';
 import { Episode, EpisodeStatus, episodeStatusFrom } from '../model/DramaModels';
 
+// 剧集表名
 const TABLE = 'episodes';
 
+// 查询时使用的列名列表
 const COLUMNS = [
   'id', 'project_id', 'episode_number', 'episode_title', 'content',
   'script_content', 'episode_status', 'created_at', 'updated_at'
 ];
 
+// 读取可空字符串列：列值为 NULL 时返回 null，否则返回字符串
 function nullableString(rs: relationalStore.ResultSet, column: string): string | null {
   const idx = rs.getColumnIndex(column);
   if (rs.isColumnNull(idx)) {
@@ -17,6 +20,7 @@ function nullableString(rs: relationalStore.ResultSet, column: string): string |
   return rs.getString(idx);
 }
 
+// 将结果集当前行映射为 Episode 对象
 function mapRow(rs: relationalStore.ResultSet): Episode {
   return {
     id: rs.getLong(rs.getColumnIndex('id')),
@@ -33,6 +37,7 @@ function mapRow(rs: relationalStore.ResultSet): Episode {
 
 /** Ports com.huobao.zdrama.data.local.EpisodeLocalDataSource. */
 export class EpisodeLocalDataSource {
+  // 插入一条剧集记录，返回新记录的自增 id
   async insertEpisode(episode: Episode): Promise<number> {
     const store = await DramaDatabase.getStore();
     const values: relationalStore.ValuesBucket = {
@@ -48,6 +53,7 @@ export class EpisodeLocalDataSource {
     return store.insert(TABLE, values);
   }
 
+  // 查询项目的首集（按集号升序取第一条），不存在返回 null
   async getEpisodeForProject(projectId: number): Promise<Episode | null> {
     const store = await DramaDatabase.getStore();
     const predicates = new relationalStore.RdbPredicates(TABLE);
@@ -65,6 +71,7 @@ export class EpisodeLocalDataSource {
     }
   }
 
+  // 按 id 查询单集，不存在返回 null
   async getEpisodeById(episodeId: number): Promise<Episode | null> {
     const store = await DramaDatabase.getStore();
     const predicates = new relationalStore.RdbPredicates(TABLE);
@@ -80,6 +87,7 @@ export class EpisodeLocalDataSource {
     }
   }
 
+  // 更新指定剧集的正文内容并刷新更新时间，返回受影响行数
   async updateEpisodeContent(episodeId: number, content: string): Promise<number> {
     const store = await DramaDatabase.getStore();
     const predicates = new relationalStore.RdbPredicates(TABLE);
@@ -91,6 +99,7 @@ export class EpisodeLocalDataSource {
     return store.update(values, predicates);
   }
 
+  // 更新指定剧集的脚本内容与状态并刷新更新时间，返回受影响行数
   async updateEpisodeScriptContent(
     episodeId: number,
     scriptContent: string,
@@ -107,6 +116,7 @@ export class EpisodeLocalDataSource {
     return store.update(values, predicates);
   }
 
+  // 删除某项目下的全部剧集，返回删除的行数
   async deleteEpisodesForProject(projectId: number): Promise<number> {
     const store = await DramaDatabase.getStore();
     const predicates = new relationalStore.RdbPredicates(TABLE);
