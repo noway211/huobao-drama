@@ -1,0 +1,50 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "/Users/peterzhu/.ohos/config/default_ZdramaHarmony_R5mjKKljFSq-D6JxTiQn5lDZ3FmdYv78ty9ejJSpfYY=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001A5338BEA730444EFFCF1EA410FCDC4EF0FC40C5F29BF03059527C587FE967F32C5642EF7C04D2",
+          "profile": "/Users/peterzhu/.ohos/config/default_ZdramaHarmony_R5mjKKljFSq-D6JxTiQn5lDZ3FmdYv78ty9ejJSpfYY=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "/Users/peterzhu/.ohos/config/default_ZdramaHarmony_R5mjKKljFSq-D6JxTiQn5lDZ3FmdYv78ty9ejJSpfYY=.p12",
+          "storePassword": "0000001A55367CB006E020C007798F5C0B630F9F302C0DAEF4E020D9FC14DF5FED85AAD3595AA0C80F9F"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "compatibleSdkVersion": "5.0.0(12)",
+        "targetSdkVersion": "5.0.4(16)",
+        "runtimeOS": "HarmonyOS"
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

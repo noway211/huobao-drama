@@ -1,0 +1,11 @@
+# DevEco Studio / hvigor build output
+/build
+/*/build
+/.hvigor
+.hvigor/
+/.cxx
+/oh_modules
+/*/oh_modules
+.idea
+local.properties
+*.log

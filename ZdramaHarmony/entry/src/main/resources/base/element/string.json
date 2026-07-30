@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "视频短剧 entry 模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "视频短剧入口"
+    },
+    {
+      "name": "app_name",
+      "value": "视频短剧"
+    }
+  ]
+}
