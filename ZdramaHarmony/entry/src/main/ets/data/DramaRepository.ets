@@ -80,4 +80,27 @@ export class DramaRepository {
     const rows = await this.projects.deleteProject(projectId);
     return rows > 0;
   }
+
+  /**
+   * Ports ZdramaApplication.resetOrphanGenerationJobs: on cold start, flip any
+   * project stuck in PROCESSING (app was killed mid-request) to FAILED so it
+   * doesn't stay "生成中" forever. Returns the number of projects reset.
+   */
+  async resetOrphanProcessingProjects(): Promise<number> {
+    const projects = await this.projects.getProjects();
+    let reset = 0;
+    for (const project of projects) {
+      if (project.status === ProjectStatus.PROCESSING) {
+        await this.projects.updateProjectTextResult(
+          project.id,
+          ProjectStatus.FAILED,
+          project.currentStage,
+          project.generatedScript,
+          '生成任务中断（应用被关闭），请重新开始'
+        );
+        reset++;
+      }
+    }
+    return reset;
+  }
 }

@@ -36,8 +36,12 @@ struct SettingsPage {
   }
 
   async save(): Promise<void> {
-    await SettingsStore.save(this.currentSettings());
-    promptAction.showToast({ message: '已保存' });
+    try {
+      await SettingsStore.save(this.currentSettings());
+      promptAction.showToast({ message: '设置已保存' });
+    } catch (e) {
+      promptAction.showToast({ message: '设置保存失败' });
+    }
   }
 
   async testConnection(): Promise<void> {
@@ -50,12 +54,15 @@ struct SettingsPage {
       return;
     }
     this.testing = true;
-    await SettingsStore.save(this.currentSettings());
+    try {
+      await SettingsStore.save(this.currentSettings());
+    } catch (e) {
+      // Non-fatal: still attempt the test with in-memory settings.
+    }
     const repo = new AgnesTextRepository();
-    // Reuse rewriteScript with a tiny payload as a lightweight ping.
-    const result = await repo.rewriteScript(this.currentSettings(), 'ping');
+    const result = await repo.testTextModel(this.currentSettings());
     this.testing = false;
-    promptAction.showToast({ message: result.ok ? '连接成功' : `连接失败：${result.error}` });
+    promptAction.showToast({ message: result.ok ? '连接测试成功' : `连接测试失败：${result.error}` });
   }
 
   @Builder

@@ -46,6 +46,26 @@ struct ProjectDetailPage {
     return !!raw && raw.trim().length > 0;
   }
 
+  /**
+   * Heuristic mirror of Android's "only show toggle when prompt exceeds 6 lines".
+   * ArkUI has no direct line-count API, so estimate from newlines and length
+   * (~24 chars per line on a narrow phone column).
+   */
+  private promptOverflows(): boolean {
+    const text = this.project?.prompt ?? '';
+    if (text.length === 0) {
+      return false;
+    }
+    let lines = 1;
+    for (const ch of text) {
+      if (ch === '\n') {
+        lines++;
+      }
+    }
+    const estimated = lines + Math.floor(text.length / 24);
+    return estimated > 6;
+  }
+
   private async runWithGuard(action: () => Promise<void>): Promise<void> {
     const hasKey = await SettingsStore.hasApiKey();
     if (!hasKey) {
@@ -55,17 +75,17 @@ struct ProjectDetailPage {
     await action();
   }
 
-  private confirmIfScriptExists(onProceed: () => void): void {
+  private confirmIfScriptExists(message: string, onProceed: () => void): void {
     if (!this.hasScript()) {
       onProceed();
       return;
     }
     promptAction.showDialog({
-      title: '已有脚本',
-      message: '当前项目已存在脚本，继续将覆盖现有内容。',
+      title: '重新生成？',
+      message: message,
       buttons: [
         { text: '取消', color: Theme.textSecondary },
-        { text: '继续', color: Theme.primary }
+        { text: '继续生成', color: Theme.primary }
       ]
     }).then((r) => {
       if (r.index === 1) {
@@ -86,7 +106,7 @@ struct ProjectDetailPage {
 
   async doRewrite(): Promise<void> {
     if (!this.hasRawContent()) {
-      promptAction.showToast({ message: '没有可改写的原始内容' });
+      promptAction.showToast({ message: '没有可改写的原始内容，请先在故事提示词中输入剧情内容' });
       return;
     }
     this.busy = true;
@@ -100,13 +120,17 @@ struct ProjectDetailPage {
 
   onGenerateClick(): void {
     this.runWithGuard(async () => {
-      this.confirmIfScriptExists(() => this.doGenerate());
+      this.confirmIfScriptExists(
+        '当前项目已有脚本，重新创作脚本会影响后续分镜、图片、视频和成片。是否继续？',
+        () => this.doGenerate());
     });
   }
 
   onRewriteClick(): void {
     this.runWithGuard(async () => {
-      this.confirmIfScriptExists(() => this.doRewrite());
+      this.confirmIfScriptExists(
+        '当前已有改写后的脚本，重新改写会覆盖现有内容。是否继续？',
+        () => this.doRewrite());
     });
   }
 
@@ -121,7 +145,7 @@ struct ProjectDetailPage {
     }).then(async (r) => {
       if (r.index === 1) {
         const ok = await UseCases.deleteProject(this.projectId);
-        promptAction.showToast({ message: ok ? '项目已删除' : '删除失败' });
+        promptAction.showToast({ message: ok ? '项目已删除' : '项目删除失败' });
         if (ok) {
           router.back();
         }
@@ -167,6 +191,8 @@ struct ProjectDetailPage {
           .backgroundColor(Theme.surfaceAlt)
           .fontColor(Theme.primary)
           .height(36)
+          .enabled(!this.busy)
+          .opacity(this.busy ? 0.5 : 1)
           .onClick(() => this.confirmDelete())
       }
       .width('100%')
@@ -219,11 +245,13 @@ struct ProjectDetailPage {
                 .width('100%')
                 .maxLines(this.promptExpanded ? 1000 : 6)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
-              Text(this.promptExpanded ? '收起' : '展开')
-                .fontSize(13)
-                .fontColor(Theme.primary)
-                .margin({ top: 8 })
-                .onClick(() => this.promptExpanded = !this.promptExpanded)
+              if (this.promptOverflows()) {
+                Text(this.promptExpanded ? '收起' : '展开')
+                  .fontSize(13)
+                  .fontColor(Theme.primary)
+                  .margin({ top: 8 })
+                  .onClick(() => this.promptExpanded = !this.promptExpanded)
+              }
             }
             .alignItems(HorizontalAlign.Start)
             .padding(16)

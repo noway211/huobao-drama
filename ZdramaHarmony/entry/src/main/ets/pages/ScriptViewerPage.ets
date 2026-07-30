@@ -37,7 +37,8 @@ struct ScriptViewerPage {
     this.loading = false;
 
     if (content.trim().length === 0) {
-      promptAction.showToast({ message: '暂无脚本内容' });
+      promptAction.showToast({ message: '暂无脚本' });
+      router.back();
     }
   }
 

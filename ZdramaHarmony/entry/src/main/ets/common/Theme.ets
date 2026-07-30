@@ -32,7 +32,7 @@ export function stageLabel(stage: string): string {
     case 'STORYBOARD': return '分镜';
     case 'IMAGE': return '图片';
     case 'VIDEO': return '视频';
-    case 'FINAL_VIDEO': return '成片';
+    case 'FINAL_VIDEO': return '成片合成';
     default: return stage;
   }
 }

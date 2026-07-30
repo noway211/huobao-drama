@@ -35,7 +35,7 @@ struct Index {
     }).then(async (result) => {
       if (result.index === 1) {
         const ok = await UseCases.deleteProject(project.id);
-        promptAction.showToast({ message: ok ? '项目已删除' : '删除失败' });
+        promptAction.showToast({ message: ok ? '项目已删除' : '项目删除失败' });
         if (ok) {
           this.loadProjects();
         }
@@ -58,10 +58,7 @@ struct Index {
         Text(statusLabel(project.status))
           .fontSize(13)
           .fontColor(Theme.primary)
-        Text(`  ·  阶段：${stageLabel(project.currentStage)}`)
-          .fontSize(13)
-          .fontColor(Theme.textSecondary)
-        Text(`  ·  ${project.shotCount} 镜`)
+        Text(` · ${stageLabel(project.currentStage)} · ${project.shotCount} 个分镜`)
           .fontSize(13)
           .fontColor(Theme.textSecondary)
       }

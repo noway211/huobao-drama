@@ -57,4 +57,10 @@ ZdramaHarmony/
 - 成片 MP4 拼接（Harmony 侧 AVMuxer/AVDemuxer，需同格式校验或转码兜底）
 - 视频播放器、图片画廊、API 日志查看页
 - 后台长时任务（Android 的 WorkManager 前台服务 → Harmony ContinuousTask）
-- 冷启动僵尸 PROCESSING 状态清理
+
+## 已对齐 Android 的行为细节
+
+- 创建项目默认值：风格「现代短剧」、受众「大众受众」、分镜 8、时长 5、画幅 9:16
+- 设置「测试文本模型」：专用 ping（单条 `ping`、temp 0、max_tokens 8），与 Android 一致
+- 冷启动清理：进程启动时把僵尸 `PROCESSING` 项目重置为 `FAILED`（对应 `ZdramaApplication`）
+- 创作/改写脚本的覆盖确认框文案、脚本查看空态返回、各类 Toast 文案均与 Android 逐字对齐

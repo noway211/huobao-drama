@@ -62,6 +62,11 @@ export class UseCases {
     return UseCases.repo.deleteProject(projectId);
   }
 
+  /** Cold-start recovery: reset orphan PROCESSING projects to FAILED. */
+  static resetOrphanProcessingProjects(): Promise<number> {
+    return UseCases.repo.resetOrphanProcessingProjects();
+  }
+
   /** GenerateProjectScriptUseCase: create screenplay from the project prompt. */
   static async generateScript(projectId: number, settings: AgnesSettings): Promise<TextResult> {
     const project = await UseCases.repo.getProject(projectId);

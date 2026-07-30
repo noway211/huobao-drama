@@ -8,10 +8,10 @@ import { Theme } from '../common/Theme';
 struct CreateProjectPage {
   @State title: string = '';
   @State prompt: string = '';
-  @State style: string = '';
-  @State audience: string = '';
+  @State style: string = '现代短剧';
+  @State audience: string = '大众受众';
   @State aspectRatioStr: string = '9:16';
-  @State shotCount: string = '6';
+  @State shotCount: string = '8';
   @State duration: string = '5';
   @State saving: boolean = false;
 
@@ -32,8 +32,8 @@ struct CreateProjectPage {
     const input: CreateDramaInput = {
       title: title,
       prompt: prompt,
-      style: this.style.trim().length > 0 ? this.style.trim() : '现代都市',
-      targetAudience: this.audience.trim().length > 0 ? this.audience.trim() : '通用',
+      style: this.style.trim().length > 0 ? this.style.trim() : '现代短剧',
+      targetAudience: this.audience.trim().length > 0 ? this.audience.trim() : '大众受众',
       aspectRatio: this.aspectRatioStr.trim().length > 0 ? this.aspectRatioStr.trim() : '9:16',
       shotCount: shots,
       shotDurationSeconds: dur
@@ -42,11 +42,11 @@ struct CreateProjectPage {
     this.saving = true;
     try {
       const projectId = await UseCases.createDrama(input);
-      promptAction.showToast({ message: '项目已保存' });
+      promptAction.showToast({ message: '草稿已保存' });
       router.replaceUrl({ url: 'pages/ProjectDetailPage', params: { projectId: projectId } });
     } catch (e) {
       this.saving = false;
-      promptAction.showToast({ message: '保存失败' });
+      promptAction.showToast({ message: '草稿保存失败' });
     }
   }
 
@@ -105,10 +105,10 @@ struct CreateProjectPage {
         Column() {
           this.Field('标题', this.title, (v: string) => this.title = v, '短剧标题', false)
           this.Field('故事提示词', this.prompt, (v: string) => this.prompt = v, '简述剧情或原始内容', true)
-          this.Field('风格', this.style, (v: string) => this.style = v, '现代都市', false)
-          this.Field('目标受众', this.audience, (v: string) => this.audience = v, '通用', false)
+          this.Field('风格', this.style, (v: string) => this.style = v, '现代短剧', false)
+          this.Field('目标受众', this.audience, (v: string) => this.audience = v, '大众受众', false)
           this.Field('画幅比例', this.aspectRatioStr, (v: string) => this.aspectRatioStr = v, '9:16', false)
-          this.Field('分镜数量', this.shotCount, (v: string) => this.shotCount = v, '6', false)
+          this.Field('分镜数量', this.shotCount, (v: string) => this.shotCount = v, '8', false)
           this.Field('单镜时长(秒)', this.duration, (v: string) => this.duration = v, '5', false)
 
           Button(this.saving ? '保存中…' : '保存')

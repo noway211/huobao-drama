@@ -122,12 +122,60 @@ Generate a concise mobile short-drama script. Return numbered shots. For each sh
 ${rawContent}`;
   }
 
+  /**
+   * Ports AgnesConnectionRepository.testTextModel — a lightweight ping.
+   * Single "ping" user message, no system prompt, temp 0, max_tokens 8.
+   * Succeeds on any 2xx HTTP response (does not require non-blank content).
+   */
+  async testTextModel(settings: AgnesSettings): Promise<TextResult> {
+    if (settings.apiKey.trim().length === 0) {
+      return fail('Agnes API Key is required');
+    }
+    if (settings.textModel.trim().length === 0) {
+      return fail('Text model is required');
+    }
+    const messages: ChatMessage[] = [
+      { role: 'user', content: 'ping' }
+    ];
+    const raw = await this.postChat(settings, messages, 0.0, 8);
+    if (!raw.ok) {
+      return fail(raw.error);
+    }
+    return ok('ok');
+  }
+
   private async chatCompletion(
     settings: AgnesSettings,
     messages: ChatMessage[],
     temperature: number,
     maxTokens: number,
     blankErrorHint: string
+  ): Promise<TextResult> {
+    const raw = await this.postChat(settings, messages, temperature, maxTokens);
+    if (!raw.ok) {
+      return fail(raw.error);
+    }
+
+    let parsed: ChatResponse;
+    try {
+      parsed = JSON.parse(raw.value) as ChatResponse;
+    } catch (e) {
+      return fail('无法解析响应 JSON');
+    }
+
+    const text = ChatResponseTextExtractor.extract(parsed);
+    if (text.trim().length === 0) {
+      return fail(`Agnes ${blankErrorHint}，请检查文本模型是否支持 chat/completions`);
+    }
+    return ok(text);
+  }
+
+  /** Low-level POST v1/chat/completions. On success `value` is the raw body. */
+  private async postChat(
+    settings: AgnesSettings,
+    messages: ChatMessage[],
+    temperature: number,
+    maxTokens: number
   ): Promise<TextResult> {
     const url = joinBaseUrl(settings.baseUrl, 'v1/chat/completions');
     const body: ChatCompletionRequest = {
@@ -171,19 +219,7 @@ ${rawContent}`;
       if (response.responseCode < 200 || response.responseCode >= 300) {
         return fail(`HTTP ${response.responseCode}: ${responseText}`);
       }
-
-      let parsed: ChatResponse;
-      try {
-        parsed = JSON.parse(responseText) as ChatResponse;
-      } catch (e) {
-        return fail('无法解析响应 JSON');
-      }
-
-      const text = ChatResponseTextExtractor.extract(parsed);
-      if (text.trim().length === 0) {
-        return fail(`Agnes ${blankErrorHint}，请检查文本模型是否支持 chat/completions`);
-      }
-      return ok(text);
+      return ok(responseText);
     } catch (err) {
       const bizErr = err as BusinessError;
       const message = `${bizErr.code}: ${bizErr.message}`;
