@@ -1,11 +1,13 @@
 import { ProjectLocalDataSource } from './ProjectLocalDataSource';
 import { EpisodeLocalDataSource } from './EpisodeLocalDataSource';
+import { StoryboardLocalDataSource } from './StoryboardLocalDataSource';
 import {
   DramaProject,
   Episode,
   EpisodeStatus,
   ProjectStatus,
-  GenerationStage
+  GenerationStage,
+  StoryboardShot
 } from '../model/DramaModels';
 
 /**
@@ -15,6 +17,7 @@ import {
 export class DramaRepository {
   private projects = new ProjectLocalDataSource();
   private episodes = new EpisodeLocalDataSource();
+  private storyboards = new StoryboardLocalDataSource();
 
   // 创建新项目，返回自增主键 id
   createProject(project: DramaProject): Promise<number> {
@@ -47,6 +50,16 @@ export class DramaRepository {
   // 获取项目对应的剧集（当前每个项目仅一集），不存在返回 null
   getEpisodeForProject(projectId: number): Promise<Episode | null> {
     return this.episodes.getEpisodeForProject(projectId);
+  }
+
+  // 全量替换项目的分镜记录，先删后插
+  replaceStoryboards(projectId: number, shots: StoryboardShot[]): Promise<void> {
+    return this.storyboards.replaceStoryboards(projectId, shots);
+  }
+
+  // 获取项目的全部分镜（按 shotNumber 升序）
+  getStoryboards(projectId: number): Promise<StoryboardShot[]> {
+    return this.storyboards.getStoryboards(projectId);
   }
 
   // 为项目创建一集（默认第 1 集、DRAFT 草稿状态），返回新剧集 id
@@ -82,8 +95,9 @@ export class DramaRepository {
     return rows > 0;
   }
 
-  /** 级联删除：先删该项目的剧集，再删项目行（分镜/媒体资源后续再补）。 */
+  /** 级联删除：先删分镜和剧集，再删项目行。 */
   async deleteProject(projectId: number): Promise<boolean> {
+    await this.storyboards.deleteStoryboardsForProject(projectId);
     await this.episodes.deleteEpisodesForProject(projectId);
     const rows = await this.projects.deleteProject(projectId);
     return rows > 0;

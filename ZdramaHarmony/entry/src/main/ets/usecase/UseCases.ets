@@ -1,10 +1,12 @@
 import { DramaRepository } from '../data/DramaRepository';
 import { AgnesTextRepository, TextResult } from '../remote/AgnesTextRepository';
+import { AgnesStoryboardRepository } from '../remote/AgnesStoryboardRepository';
 import { AgnesSettings } from '../model/AgnesSettings';
 import {
   CreateDramaInput,
   DramaProject,
   Episode,
+  StoryboardShot,
   ProjectStatus,
   GenerationStage,
   AssetStatus,
@@ -18,6 +20,7 @@ import {
 export class UseCases {
   private static repo = new DramaRepository();
   private static text = new AgnesTextRepository();
+  private static storyboard = new AgnesStoryboardRepository();
 
   /** CreateDramaUseCase：插入项目（草稿状态）并自动创建第 1 集。 */
   static async createDrama(input: CreateDramaInput): Promise<number> {
@@ -59,6 +62,11 @@ export class UseCases {
   // 获取项目对应的剧集
   static getEpisode(projectId: number): Promise<Episode | null> {
     return UseCases.repo.getEpisodeForProject(projectId);
+  }
+
+  // 获取项目的全部分镜
+  static getStoryboards(projectId: number): Promise<StoryboardShot[]> {
+    return UseCases.repo.getStoryboards(projectId);
   }
 
   // 删除指定项目
@@ -122,6 +130,38 @@ export class UseCases {
         episode.id, episode.scriptContent ?? '', EpisodeStatus.FAILED);
       await UseCases.repo.updateProjectTextResult(
         projectId, ProjectStatus.FAILED, GenerationStage.TEXT, episode.scriptContent, result.error);
+    }
+    return result;
+  }
+
+  /** GenerateStoryboardsUseCase：根据剧本文本生成分镜并保存到数据库。 */
+  static async generateStoryboards(projectId: number, settings: AgnesSettings): Promise<TextResult> {
+    const project = await UseCases.repo.getProject(projectId);
+    if (!project) {
+      return { ok: false, value: '', error: 'Project not found' };
+    }
+
+    // 优先读剧集脚本，无则回退到项目脚本
+    const episode = await UseCases.repo.getEpisodeForProject(projectId);
+    const script = episode?.scriptContent ?? project.generatedScript;
+    if (!script || script.trim().length === 0) {
+      return { ok: false, value: '', error: '请先创作或改写脚本' };
+    }
+
+    await UseCases.repo.updateProjectTextResult(
+      projectId, ProjectStatus.PROCESSING, GenerationStage.STORYBOARD, project.generatedScript, null);
+
+    const result = await UseCases.storyboard.generateStoryboards(settings, project, script);
+    if (result.ok) {
+      const shots = UseCases.storyboard.parseShots(result.value);
+      if (shots.length > 0) {
+        await UseCases.repo.replaceStoryboards(projectId, shots);
+      }
+      await UseCases.repo.updateProjectTextResult(
+        projectId, ProjectStatus.COMPLETED, GenerationStage.STORYBOARD, project.generatedScript, null);
+    } else {
+      await UseCases.repo.updateProjectTextResult(
+        projectId, ProjectStatus.FAILED, GenerationStage.STORYBOARD, project.generatedScript, result.error);
     }
     return result;
   }

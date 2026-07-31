@@ -9,8 +9,21 @@ import { ApiLogStore } from './ApiLogStore';
 const DOMAIN = 0x0001;
 const TAG = 'AgnesTextRepository';
 
-// 生成剧本时使用的系统提示词（prompt 文本，请勿改动内容）
-const SYSTEM_PROMPT = 'You are an expert short-drama writer for mobile vertical video production.';
+// 创作剧本时使用的系统提示词（prompt 文本，请勿改动内容）
+const SYSTEM_PROMPT = `你是一位专业的短剧编剧。请根据用户提供的项目信息创作格式化短剧剧本。
+
+格式规范：
+- 场景头：## S编号 | 内景/外景 · 地点 | 时间段
+- 动作描写：自然段落，增强画面感，不包含镜头语言
+- 对白格式：角色名：（状态/表情）台词内容
+- 每个场景控制在 30-60 秒内容
+- 场景编号连续递增（S01, S02, S03...）
+
+创作原则：
+- 根据标题和故事提示词展开完整剧本
+- 设计有吸引力的开场钩子
+- 用对白推动情节，减少旁白
+- 心理描写转化为角色表情/动作`;
 
 // 改写剧本时使用的系统提示词（prompt 文本，请勿改动内容）
 const REWRITE_SYSTEM_PROMPT = `你是一位专业的短剧编剧。请将用户提供的原始内容改写为格式化短剧剧本。
@@ -80,7 +93,7 @@ function joinBaseUrl(baseUrl: string, path: string): string {
  *（等价于 AgnesAuthInterceptor + ApiLogInterceptor）。
  */
 export class AgnesTextRepository {
-  // 根据项目信息生成短剧剧本
+  // 根据项目信息创作短剧剧本（使用 ## S 场景格式）
   async generateScript(settings: AgnesSettings, project: DramaProject): Promise<TextResult> {
     if (settings.apiKey.trim().length === 0) {
       return fail('Agnes API Key is required');
@@ -115,15 +128,15 @@ export class AgnesTextRepository {
 
   // 根据项目信息构建生成剧本的用户提示词
   private buildUserPrompt(project: DramaProject): string {
-    return `Title: ${project.title}
-Story prompt: ${project.prompt}
-Style: ${project.style}
-Target audience: ${project.targetAudience}
-Aspect ratio: ${project.aspectRatio}
-Shot count: ${project.shotCount}
-Shot duration seconds: ${project.shotDurationSeconds}
+    return `请根据以下项目信息创作一部短视频短剧剧本。
 
-Generate a concise mobile short-drama script. Return numbered shots. For each shot include scene, character action, dialogue, camera direction, and image/video generation notes.`;
+项目标题：${project.title}
+故事提示词：${project.prompt}
+风格：${project.style}
+目标受众：${project.targetAudience}
+画幅比例：${project.aspectRatio}
+镜头数量：${project.shotCount}
+单镜头时长：${project.shotDurationSeconds}秒`;
   }
 
   // 根据原始内容构建改写剧本的用户提示词

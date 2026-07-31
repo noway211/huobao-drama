@@ -126,3 +126,29 @@ export interface Episode {
   createdAt: number;
   updatedAt: number;
 }
+
+// 分镜镜头实体，对应 storyboards 表中的一条记录
+export interface StoryboardShot {
+  id: number;
+  projectId: number;
+  episodeId: number | null;
+  shotNumber: number;
+  scene: string;
+  action: string;
+  dialogue: string;
+  camera: string;
+  imagePrompt: string;
+  videoPrompt: string;
+  durationSeconds: number;
+  imageStatus: AssetStatus;
+  imageUrl: string | null;
+  imageLocalPath: string | null;
+  imageErrorMessage: string | null;
+  videoStatus: AssetStatus;
+  videoTaskId: string | null;
+  videoUrl: string | null;
+  videoLocalPath: string | null;
+  videoErrorMessage: string | null;
+  createdAt: number;
+  updatedAt: number;
+}

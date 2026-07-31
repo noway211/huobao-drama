@@ -16,6 +16,7 @@ struct ProjectDetailPage {
   @State busy: boolean = false;
   @State busyLabel: string = '';
   @State promptExpanded: boolean = false;
+  @State hasStoryboards: boolean = false;
   private projectId: number = 0;
 
   // 组件即将出现：从路由参数中读取项目 ID
@@ -35,6 +36,8 @@ struct ProjectDetailPage {
   async reload(): Promise<void> {
     this.project = await UseCases.getProject(this.projectId);
     this.episode = await UseCases.getEpisode(this.projectId);
+    const storyboards = await UseCases.getStoryboards(this.projectId);
+    this.hasStoryboards = storyboards.length > 0;
   }
 
   // 是否已有脚本（剧集脚本或项目生成脚本任一非空）
@@ -138,13 +141,54 @@ struct ProjectDetailPage {
     });
   }
 
-  // 点击“改写脚本”：校验 Key 并在已有脚本时确认后执行改写
-  onRewriteClick(): void {
+  // 点击”改写脚本”：校验 Key 并在已有脚本时确认后执行改写
+  onRewriteClick() {
     this.runWithGuard(async () => {
       this.confirmIfScriptExists(
         '当前已有改写后的脚本，重新改写会覆盖现有内容。是否继续？',
         () => this.doRewrite());
     });
+  }
+
+  // 执行分镜生成：更新 busy 状态，调用用例，提示结果后刷新
+  async doGenerateStoryboards(): Promise<void> {
+    this.busy = true;
+    this.busyLabel = '生成分镜中…';
+    const settings = await SettingsStore.load();
+    const result = await UseCases.generateStoryboards(this.projectId, settings);
+    this.busy = false;
+    promptAction.showToast({ message: result.ok ? '分镜已生成' : `失败：${result.error}` });
+    await this.reload();
+  }
+
+  // 点击”生成分镜”：校验 Key，有已有分镜时确认后生成
+  onGenerateStoryboardClick() {
+    this.runWithGuard(async () => {
+      if (this.hasStoryboards) {
+        const r = await promptAction.showDialog({
+          title: '重新生成？',
+          message: '当前已有分镜，重新生成会覆盖现有内容。是否继续？',
+          buttons: [
+            { text: '取消', color: Theme.textSecondary },
+            { text: '继续生成', color: Theme.primary }
+          ]
+        });
+        if (r.index === 1) {
+          this.doGenerateStoryboards();
+        }
+      } else {
+        this.doGenerateStoryboards();
+      }
+    });
+  }
+
+  // 点击”查看分镜”：跳转到分镜查看页面
+  onViewStoryboardClick() {
+    if (!this.hasStoryboards) {
+      promptAction.showToast({ message: '暂无分镜' });
+      return;
+    }
+    router.pushUrl({ url: 'pages/StoryboardViewerPage', params: { projectId: this.projectId } });
   }
 
   // 弹窗确认删除当前项目，确认后删除并返回上一页
@@ -313,6 +357,33 @@ struct ProjectDetailPage {
               .onClick(() => {
                 router.pushUrl({ url: 'pages/ScriptViewerPage', params: { projectId: this.projectId } });
               })
+              .margin({ bottom: 10 })
+
+            // Storyboard action buttons (2-col row: 生成分镜 / 查看分镜)
+            Row() {
+              Button(this.busy ? this.busyLabel : '生成分镜')
+                .layoutWeight(1)
+                .height(46)
+                .fontSize(14)
+                .fontColor(Color.White)
+                .backgroundColor(this.busy ? Theme.primaryDisabled : Theme.primary)
+                .borderRadius(10)
+                .enabled(!this.busy)
+                .onClick(() => this.onGenerateStoryboardClick())
+              Button('查看分镜')
+                .layoutWeight(1)
+                .height(46)
+                .fontSize(14)
+                .fontColor(Theme.textPrimary)
+                .backgroundColor(Theme.surfaceAlt)
+                .borderRadius(10)
+                .enabled(!this.busy && this.hasStoryboards)
+                .opacity(this.hasStoryboards ? 1 : 0.5)
+                .margin({ left: 10 })
+                .onClick(() => this.onViewStoryboardClick())
+            }
+            .width('100%')
+            .margin({ bottom: 24 })
           }
           .width('100%')
           .padding({ left: 16, right: 16, bottom: 24 })
