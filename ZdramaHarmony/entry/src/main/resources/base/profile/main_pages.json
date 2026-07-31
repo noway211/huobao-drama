@@ -5,6 +5,7 @@
     "pages/CreateProjectPage",
     "pages/ProjectDetailPage",
     "pages/ScriptViewerPage",
-	"pages/StoryboardViewerPage"
+	"pages/StoryboardViewerPage",
+		"pages/StoryboardImagePage"
   ]
 }

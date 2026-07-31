@@ -7,7 +7,8 @@ import {
   EpisodeStatus,
   ProjectStatus,
   GenerationStage,
-  StoryboardShot
+  StoryboardShot,
+  AssetStatus
 } from '../model/DramaModels';
 
 /**
@@ -60,6 +61,22 @@ export class DramaRepository {
   // 获取项目的全部分镜（按 shotNumber 升序）
   getStoryboards(projectId: number): Promise<StoryboardShot[]> {
     return this.storyboards.getStoryboards(projectId);
+  }
+
+  // 更新单个分镜的图片提示词
+  async updateShotImagePrompt(shotId: number, newPrompt: string): Promise<void> {
+    return this.storyboards.updateShotImagePrompt(shotId, newPrompt);
+  }
+
+  // 更新单个分镜的图片生成结果（代理到 StoryboardLocalDataSource）
+  async updateShotImage(
+    shotId: number,
+    imageStatus: AssetStatus,
+    imageUrl: string | null,
+    imageLocalPath: string | null,
+    imageErrorMessage: string | null
+  ): Promise<void> {
+    return this.storyboards.updateShotImage(shotId, imageStatus, imageUrl, imageLocalPath, imageErrorMessage);
   }
 
   // 为项目创建一集（默认第 1 集、DRAFT 草稿状态），返回新剧集 id

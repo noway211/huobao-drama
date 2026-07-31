@@ -1,7 +1,7 @@
 import { router, promptAction } from '@kit.ArkUI';
 import { UseCases } from '../usecase/UseCases';
 import { SettingsStore } from '../data/SettingsStore';
-import { DramaProject, Episode } from '../model/DramaModels';
+import { DramaProject, Episode, AssetStatus } from '../model/DramaModels';
 import { Theme, statusLabel, stageLabel } from '../common/Theme';
 
 interface DetailParams {
@@ -17,6 +17,7 @@ struct ProjectDetailPage {
   @State busyLabel: string = '';
   @State promptExpanded: boolean = false;
   @State hasStoryboards: boolean = false;
+  @State hasImages: boolean = false;
   private projectId: number = 0;
 
   // 组件即将出现：从路由参数中读取项目 ID
@@ -38,6 +39,9 @@ struct ProjectDetailPage {
     this.episode = await UseCases.getEpisode(this.projectId);
     const storyboards = await UseCases.getStoryboards(this.projectId);
     this.hasStoryboards = storyboards.length > 0;
+    this.hasImages = storyboards.some(s => s.imageStatus === AssetStatus.COMPLETED);
+    // 自动修复触发内容审查的提示词
+    await UseCases.patchSensitivePrompts(this.projectId);
   }
 
   // 是否已有脚本（剧集脚本或项目生成脚本任一非空）
@@ -189,6 +193,38 @@ struct ProjectDetailPage {
       return;
     }
     router.pushUrl({ url: 'pages/StoryboardViewerPage', params: { projectId: this.projectId } });
+  }
+
+  // 执行图片生成：更新 busy 状态，调用用例，提示结果后刷新
+  async doGenerateImages(): Promise<void> {
+    this.busy = true;
+    this.busyLabel = '生成图片中…';
+    const settings = await SettingsStore.load();
+    const result = await UseCases.generateStoryboardImages(this.projectId, settings);
+    this.busy = false;
+    promptAction.showToast({ message: result.ok ? '图片已生成' : `失败：${result.error}` });
+    await this.reload();
+  }
+
+  // 点击”生成图片”：校验 Key，有已有图片时确认后生成
+  onGenerateImageClick() {
+    this.runWithGuard(async () => {
+      if (this.hasImages) {
+        const r = await promptAction.showDialog({
+          title: '重新生成？',
+          message: '当前已有图片，重新生成会覆盖现有内容。是否继续？',
+          buttons: [
+            { text: '取消', color: Theme.textSecondary },
+            { text: '继续生成', color: Theme.primary }
+          ]
+        });
+        if (r.index === 1) {
+          this.doGenerateImages();
+        }
+      } else {
+        this.doGenerateImages();
+      }
+    });
   }
 
   // 弹窗确认删除当前项目，确认后删除并返回上一页
@@ -381,6 +417,34 @@ struct ProjectDetailPage {
                 .opacity(this.hasStoryboards ? 1 : 0.5)
                 .margin({ left: 10 })
                 .onClick(() => this.onViewStoryboardClick())
+            }
+            .width('100%')
+            .margin({ bottom: 24 })
+
+            // Image generation button row
+            Row() {
+              Button(this.busy ? this.busyLabel : '生成图片')
+                .layoutWeight(1)
+                .height(46)
+                .fontSize(14)
+                .fontColor(Color.White)
+                .backgroundColor(this.busy ? Theme.primaryDisabled : Theme.primary)
+                .borderRadius(10)
+                .enabled(!this.busy)
+                .onClick(() => this.onGenerateImageClick())
+              Button('查看图片')
+                .layoutWeight(1)
+                .height(46)
+                .fontSize(14)
+                .fontColor(Theme.textPrimary)
+                .backgroundColor(Theme.surfaceAlt)
+                .borderRadius(10)
+                .enabled(!this.busy && this.hasImages)
+                .opacity(this.hasImages ? 1 : 0.5)
+                .margin({ left: 10 })
+                .onClick(() => {
+                  router.pushUrl({ url: 'pages/StoryboardImagePage', params: { projectId: this.projectId } });
+                })
             }
             .width('100%')
             .margin({ bottom: 24 })

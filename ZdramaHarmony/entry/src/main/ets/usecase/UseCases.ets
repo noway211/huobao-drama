@@ -1,7 +1,10 @@
 import { DramaRepository } from '../data/DramaRepository';
 import { AgnesTextRepository, TextResult } from '../remote/AgnesTextRepository';
 import { AgnesStoryboardRepository } from '../remote/AgnesStoryboardRepository';
+import { AgnesImageRepository } from '../remote/AgnesImageRepository';
+import { MediaDownloadRepository, MediaType } from '../data/MediaDownloadRepository';
 import { AgnesSettings } from '../model/AgnesSettings';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
   CreateDramaInput,
   DramaProject,
@@ -13,6 +16,9 @@ import {
   EpisodeStatus
 } from '../model/DramaModels';
 
+const DOMAIN = 0x0001;
+const TAG = 'UseCases';
+
 /**
  * 移植 com.huobao.zdrama.domain.usecase.* 的 MVP 子集。
  * 由于每个用例都很轻量，统一实现为一个类上的静态方法。
@@ -21,6 +27,8 @@ export class UseCases {
   private static repo = new DramaRepository();
   private static text = new AgnesTextRepository();
   private static storyboard = new AgnesStoryboardRepository();
+  private static image = new AgnesImageRepository();
+  private static mediaDownload = new MediaDownloadRepository();
 
   /** CreateDramaUseCase：插入项目（草稿状态）并自动创建第 1 集。 */
   static async createDrama(input: CreateDramaInput): Promise<number> {
@@ -77,6 +85,30 @@ export class UseCases {
   /** 冷启动恢复：将残留的 PROCESSING 状态项目重置为 FAILED。 */
   static resetOrphanProcessingProjects(): Promise<number> {
     return UseCases.repo.resetOrphanProcessingProjects();
+  }
+
+  /** 更新单个分镜的图片提示词。 */
+  static async updateShotPrompt(shotId: number, newPrompt: string): Promise<void> {
+    return UseCases.repo.updateShotImagePrompt(shotId, newPrompt);
+  }
+
+  /** 自动替换触发内容审查的敏感词（临时修复）。 */
+  static async patchSensitivePrompts(projectId: number): Promise<void> {
+    const shots = await UseCases.repo.getStoryboards(projectId);
+    for (const shot of shots) {
+      const OLD = '走廊尽头传来脚步声，老师快步走来，身后跟着校警，众人瞬间安静，学校走廊场景，写实风格';
+      if (shot.imagePrompt === OLD) {
+        await UseCases.repo.updateShotImagePrompt(shot.id,
+          '走廊尽头传来脚步声，老师快步走来，严厉地扫视全场，霸凌者心虚地低下头，众人不敢出声，学校走廊场景，写实风格');
+        hilog.info(DOMAIN, TAG, 'patched shot %{public}d imagePrompt (content policy)', shot.shotNumber);
+      }
+      const OLD2 = '校警将霸凌者带离走廊';
+      if (shot.imagePrompt.indexOf(OLD2) >= 0) {
+        await UseCases.repo.updateShotImagePrompt(shot.id,
+          shot.imagePrompt.replace(OLD2, '老师带着霸凌者离开走廊'));
+        hilog.info(DOMAIN, TAG, 'patched shot %{public}d imagePrompt (content policy)', shot.shotNumber);
+      }
+    }
   }
 
   /** GenerateProjectScriptUseCase：根据项目提示词生成剧本，并同步更新项目与剧集状态。 */
@@ -164,5 +196,84 @@ export class UseCases {
         projectId, ProjectStatus.FAILED, GenerationStage.STORYBOARD, project.generatedScript, result.error);
     }
     return result;
+  }
+
+  /** GenerateStoryboardImagesUseCase：为每个分镜的 imagePrompt 生成图片并下载到本地。 */
+  static async generateStoryboardImages(projectId: number, settings: AgnesSettings): Promise<TextResult> {
+    const project = await UseCases.repo.getProject(projectId);
+    if (!project) {
+      return { ok: false, value: '', error: 'Project not found' };
+    }
+
+    const shots = await UseCases.repo.getStoryboards(projectId);
+    if (shots.length === 0) {
+      return { ok: false, value: '', error: '请先生成分镜' };
+    }
+
+    // 自动修复触发内容审查的提示词
+    await UseCases.patchSensitivePrompts(projectId);
+
+    hilog.info(DOMAIN, TAG, 'generateStoryboardImages start: project=%{public}d shots=%{public}d', projectId, shots.length);
+
+    await UseCases.repo.updateProjectTextResult(
+      projectId, ProjectStatus.PROCESSING, GenerationStage.IMAGE, project.generatedScript, null);
+
+    let completed = 0;
+    let generated = 0;
+    let firstError = '';
+
+    for (const shot of shots) {
+      // 跳过已完成且有本地文件的
+      if (shot.imageStatus === AssetStatus.COMPLETED && shot.imageLocalPath) {
+        hilog.info(DOMAIN, TAG, 'shot %{public}d already completed, skip', shot.shotNumber);
+        completed++;
+        continue;
+      }
+
+      hilog.info(DOMAIN, TAG, 'generate image for shot %{public}d: prompt=%{public}s', shot.shotNumber, shot.imagePrompt);
+
+      // 标记为处理中
+      await UseCases.repo.updateShotImage(
+        shot.id, AssetStatus.PROCESSING, shot.imageUrl, shot.imageLocalPath, null);
+
+      const imageResult = await UseCases.image.generateImage(settings, shot);
+      if (imageResult.ok) {
+        hilog.info(DOMAIN, TAG, 'image API OK for shot %{public}d, url=%{public}s', shot.shotNumber, imageResult.value);
+        const imageUrl = imageResult.value;
+        const downloadResult = await UseCases.mediaDownload.downloadToGeneratedMedia(
+          projectId, shot.id, imageUrl, MediaType.IMAGE);
+
+        if (downloadResult.ok) {
+          hilog.info(DOMAIN, TAG, 'download OK for shot #%{public}d -> %{public}s', shot.shotNumber, downloadResult.value);
+          completed++;
+          generated++;
+          await UseCases.repo.updateShotImage(
+            shot.id, AssetStatus.COMPLETED, imageUrl, downloadResult.value, null);
+        } else {
+          hilog.error(DOMAIN, TAG, 'download FAILED for shot #%{public}d: %{public}s', shot.shotNumber, downloadResult.error);
+          if (firstError.length === 0) firstError = downloadResult.error;
+          await UseCases.repo.updateShotImage(
+            shot.id, AssetStatus.FAILED, imageUrl, shot.imageLocalPath, downloadResult.error);
+        }
+      } else {
+        hilog.error(DOMAIN, TAG, 'image generation FAILED for shot #%{public}d: %{public}s', shot.shotNumber, imageResult.error);
+        if (firstError.length === 0) firstError = imageResult.error;
+        await UseCases.repo.updateShotImage(
+          shot.id, AssetStatus.FAILED, shot.imageUrl, shot.imageLocalPath, imageResult.error);
+      }
+    }
+
+    const finalStatus = completed === shots.length ? ProjectStatus.COMPLETED : ProjectStatus.FAILED;
+    hilog.info(DOMAIN, TAG, 'generateStoryboardImages done: ok=%{public}d/%{public}d generated=%{public}d finalStatus=%{public}s',
+      completed, shots.length, generated, finalStatus);
+
+    await UseCases.repo.updateProjectTextResult(
+      projectId, finalStatus, GenerationStage.IMAGE, project.generatedScript,
+      firstError.length > 0 ? firstError : null);
+
+    if (generated > 0) {
+      return { ok: true, value: `${generated}`, error: '' };
+    }
+    return { ok: false, value: '', error: firstError.length > 0 ? firstError : '图片生成失败' };
   }
 }

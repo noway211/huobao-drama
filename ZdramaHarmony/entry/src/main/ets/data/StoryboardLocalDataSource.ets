@@ -125,4 +125,42 @@ export class StoryboardLocalDataSource {
     predicates.equalTo('project_id', projectId);
     return store.delete(predicates);
   }
+
+  /**
+   * 更新单个分镜的图片提示词（image_prompt 列）。
+   */
+  async updateShotImagePrompt(shotId: number, newPrompt: string): Promise<void> {
+    const store = await DramaDatabase.getStore();
+    const values: relationalStore.ValuesBucket = {
+      'image_prompt': newPrompt,
+      'updated_at': Date.now()
+    };
+    const predicates = new relationalStore.RdbPredicates(TABLE);
+    predicates.equalTo('id', shotId);
+    await store.update(values, predicates);
+  }
+
+  /**
+   * 更新单个分镜的图片生成结果（image/URL、本地路径、错误信息），
+   * 对应 Android StoryboardLocalDataSource.updateShotImageAndUpdatedAt()。
+   */
+  async updateShotImage(
+    shotId: number,
+    imageStatus: AssetStatus,
+    imageUrl: string | null,
+    imageLocalPath: string | null,
+    imageErrorMessage: string | null
+  ): Promise<void> {
+    const store = await DramaDatabase.getStore();
+    const values: relationalStore.ValuesBucket = {
+      'image_status': imageStatus,
+      'image_url': imageUrl,
+      'image_local_path': imageLocalPath,
+      'image_error_message': imageErrorMessage,
+      'updated_at': Date.now()
+    };
+    const predicates = new relationalStore.RdbPredicates(TABLE);
+    predicates.equalTo('id', shotId);
+    await store.update(values, predicates);
+  }
 }
