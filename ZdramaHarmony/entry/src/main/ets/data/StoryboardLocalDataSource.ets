@@ -165,6 +165,32 @@ export class StoryboardLocalDataSource {
   }
 
   /**
+   * 更新单个分镜的视频生成结果（taskId、URL、本地路径、错误信息）。
+   * 对应 Android StoryboardLocalDataSource.updateShotVideo()。
+   */
+  async updateShotVideo(
+    shotId: number,
+    videoStatus: AssetStatus,
+    videoTaskId: string | null,
+    videoUrl: string | null,
+    videoLocalPath: string | null,
+    videoErrorMessage: string | null
+  ): Promise<void> {
+    const store = await DramaDatabase.getStore();
+    const values: relationalStore.ValuesBucket = {
+      'video_status': videoStatus,
+      'video_task_id': videoTaskId,
+      'video_url': videoUrl,
+      'video_local_path': videoLocalPath,
+      'video_error_message': videoErrorMessage,
+      'updated_at': Date.now()
+    };
+    const predicates = new relationalStore.RdbPredicates(TABLE);
+    predicates.equalTo('id', shotId);
+    await store.update(values, predicates);
+  }
+
+  /**
    * 更新单个分镜的视频提示词（video_prompt 列）。
    */
   async updateShotVideoPrompt(shotId: number, newPrompt: string): Promise<void> {

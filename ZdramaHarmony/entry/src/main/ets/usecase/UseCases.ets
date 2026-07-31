@@ -2,6 +2,7 @@ import { DramaRepository } from '../data/DramaRepository';
 import { AgnesTextRepository, TextResult } from '../remote/AgnesTextRepository';
 import { AgnesStoryboardRepository } from '../remote/AgnesStoryboardRepository';
 import { AgnesImageRepository } from '../remote/AgnesImageRepository';
+import { AgnesVideoRepository } from '../remote/AgnesVideoRepository';
 import { MediaDownloadRepository, MediaType } from '../data/MediaDownloadRepository';
 import { AgnesSettings } from '../model/AgnesSettings';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -28,6 +29,7 @@ export class UseCases {
   private static text = new AgnesTextRepository();
   private static storyboard = new AgnesStoryboardRepository();
   private static image = new AgnesImageRepository();
+  private static video = new AgnesVideoRepository();
   private static mediaDownload = new MediaDownloadRepository();
 
   /** CreateDramaUseCase：插入项目（草稿状态）并自动创建第 1 集。 */
@@ -288,5 +290,81 @@ export class UseCases {
       return { ok: true, value: `${generated}`, error: '' };
     }
     return { ok: false, value: '', error: firstError.length > 0 ? firstError : '图片生成失败' };
+  }
+
+  /** GenerateStoryboardVideosUseCase：为每个分镜的 videoPrompt 生成视频并下载到本地。 */
+  static async generateStoryboardVideos(projectId: number, settings: AgnesSettings): Promise<TextResult> {
+    const project = await UseCases.repo.getProject(projectId);
+    if (!project) {
+      return { ok: false, value: '', error: 'Project not found' };
+    }
+
+    const shots = await UseCases.repo.getStoryboards(projectId);
+    if (shots.length === 0) {
+      return { ok: false, value: '', error: '请先生成分镜' };
+    }
+
+    hilog.info(DOMAIN, TAG, 'generateStoryboardVideos start: project=%{public}d shots=%{public}d', projectId, shots.length);
+
+    await UseCases.repo.updateProjectTextResult(
+      projectId, ProjectStatus.PROCESSING, GenerationStage.VIDEO, project.generatedScript, null);
+
+    let completed = 0;
+    let generated = 0;
+    let firstError = '';
+
+    for (const shot of shots) {
+      // 跳过已完成且有本地文件的
+      if (shot.videoStatus === AssetStatus.COMPLETED && shot.videoLocalPath) {
+        hilog.info(DOMAIN, TAG, 'shot %{public}d video already completed, skip', shot.shotNumber);
+        completed++;
+        continue;
+      }
+
+      hilog.info(DOMAIN, TAG, 'generate video for shot %{public}d: prompt=%{public}s', shot.shotNumber, shot.videoPrompt);
+
+      // 标记为处理中
+      await UseCases.repo.updateShotVideo(
+        shot.id, AssetStatus.PROCESSING, shot.videoTaskId, shot.videoUrl, shot.videoLocalPath, null);
+
+      const videoResult = await UseCases.video.generateVideo(settings, shot);
+      if (videoResult.ok) {
+        hilog.info(DOMAIN, TAG, 'video API OK for shot %{public}d, url=%{public}s', shot.shotNumber, videoResult.value);
+        const videoUrl = videoResult.value;
+        const downloadResult = await UseCases.mediaDownload.downloadToGeneratedMedia(
+          projectId, shot.id, videoUrl, MediaType.VIDEO);
+
+        if (downloadResult.ok) {
+          hilog.info(DOMAIN, TAG, 'download OK for shot #%{public}d -> %{public}s', shot.shotNumber, downloadResult.value);
+          completed++;
+          generated++;
+          await UseCases.repo.updateShotVideo(
+            shot.id, AssetStatus.COMPLETED, null, videoUrl, downloadResult.value, null);
+        } else {
+          hilog.error(DOMAIN, TAG, 'download FAILED for shot #%{public}d: %{public}s', shot.shotNumber, downloadResult.error);
+          if (firstError.length === 0) firstError = downloadResult.error;
+          await UseCases.repo.updateShotVideo(
+            shot.id, AssetStatus.FAILED, null, videoUrl, shot.videoLocalPath, downloadResult.error);
+        }
+      } else {
+        hilog.error(DOMAIN, TAG, 'video generation FAILED for shot #%{public}d: %{public}s', shot.shotNumber, videoResult.error);
+        if (firstError.length === 0) firstError = videoResult.error;
+        await UseCases.repo.updateShotVideo(
+          shot.id, AssetStatus.FAILED, shot.videoTaskId, shot.videoUrl, shot.videoLocalPath, videoResult.error);
+      }
+    }
+
+    const finalStatus = completed === shots.length ? ProjectStatus.COMPLETED : ProjectStatus.FAILED;
+    hilog.info(DOMAIN, TAG, 'generateStoryboardVideos done: ok=%{public}d/%{public}d generated=%{public}d finalStatus=%{public}s',
+      completed, shots.length, generated, finalStatus);
+
+    await UseCases.repo.updateProjectTextResult(
+      projectId, finalStatus, GenerationStage.VIDEO, project.generatedScript,
+      firstError.length > 0 ? firstError : null);
+
+    if (generated > 0) {
+      return { ok: true, value: `${generated}`, error: '' };
+    }
+    return { ok: false, value: '', error: firstError.length > 0 ? firstError : '视频生成失败' };
   }
 }

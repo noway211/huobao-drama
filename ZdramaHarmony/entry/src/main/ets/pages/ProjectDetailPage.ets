@@ -18,6 +18,7 @@ struct ProjectDetailPage {
   @State promptExpanded: boolean = false;
   @State hasStoryboards: boolean = false;
   @State hasImages: boolean = false;
+  @State hasVideos: boolean = false;
   private projectId: number = 0;
 
   // 组件即将出现：从路由参数中读取项目 ID
@@ -40,6 +41,7 @@ struct ProjectDetailPage {
     const storyboards = await UseCases.getStoryboards(this.projectId);
     this.hasStoryboards = storyboards.length > 0;
     this.hasImages = storyboards.some(s => s.imageStatus === AssetStatus.COMPLETED);
+    this.hasVideos = storyboards.some(s => s.videoStatus === AssetStatus.COMPLETED);
     // 自动修复触发内容审查的提示词
     await UseCases.patchSensitivePrompts(this.projectId);
   }
@@ -223,6 +225,38 @@ struct ProjectDetailPage {
         }
       } else {
         this.doGenerateImages();
+      }
+    });
+  }
+
+  // 执行视频生成：更新 busy 状态，调用用例，提示结果后刷新
+  async doGenerateVideos(): Promise<void> {
+    this.busy = true;
+    this.busyLabel = '生成视频中…';
+    const settings = await SettingsStore.load();
+    const result = await UseCases.generateStoryboardVideos(this.projectId, settings);
+    this.busy = false;
+    promptAction.showToast({ message: result.ok ? '视频已生成' : `失败：${result.error}` });
+    await this.reload();
+  }
+
+  // 点击"生成视频"：校验 Key，有已有视频时确认后生成
+  onGenerateVideoClick() {
+    this.runWithGuard(async () => {
+      if (this.hasVideos) {
+        const r = await promptAction.showDialog({
+          title: '重新生成？',
+          message: '当前已有视频，重新生成会覆盖现有内容。是否继续？',
+          buttons: [
+            { text: '取消', color: Theme.textSecondary },
+            { text: '继续生成', color: Theme.primary }
+          ]
+        });
+        if (r.index === 1) {
+          this.doGenerateVideos();
+        }
+      } else {
+        this.doGenerateVideos();
       }
     });
   }
@@ -444,6 +478,34 @@ struct ProjectDetailPage {
                 .margin({ left: 10 })
                 .onClick(() => {
                   router.pushUrl({ url: 'pages/StoryboardImagePage', params: { projectId: this.projectId } });
+                })
+            }
+            .width('100%')
+            .margin({ bottom: 24 })
+
+            // Video generation button row
+            Row() {
+              Button(this.busy ? this.busyLabel : '生成视频')
+                .layoutWeight(1)
+                .height(46)
+                .fontSize(14)
+                .fontColor(Color.White)
+                .backgroundColor(this.busy ? Theme.primaryDisabled : Theme.primary)
+                .borderRadius(10)
+                .enabled(!this.busy)
+                .onClick(() => this.onGenerateVideoClick())
+              Button('查看视频')
+                .layoutWeight(1)
+                .height(46)
+                .fontSize(14)
+                .fontColor(Theme.textPrimary)
+                .backgroundColor(Theme.surfaceAlt)
+                .borderRadius(10)
+                .enabled(!this.busy && this.hasVideos)
+                .opacity(this.hasVideos ? 1 : 0.5)
+                .margin({ left: 10 })
+                .onClick(() => {
+                  router.pushUrl({ url: 'pages/StoryboardViewerPage', params: { projectId: this.projectId } });
                 })
             }
             .width('100%')

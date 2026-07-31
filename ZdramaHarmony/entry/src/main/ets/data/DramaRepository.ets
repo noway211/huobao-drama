@@ -84,6 +84,19 @@ export class DramaRepository {
     return this.storyboards.updateShotImage(shotId, imageStatus, imageUrl, imageLocalPath, imageErrorMessage);
   }
 
+  // 更新单个分镜的视频生成结果（代理到 StoryboardLocalDataSource）
+  async updateShotVideo(
+    shotId: number,
+    videoStatus: AssetStatus,
+    videoTaskId: string | null,
+    videoUrl: string | null,
+    videoLocalPath: string | null,
+    videoErrorMessage: string | null
+  ): Promise<void> {
+    return this.storyboards.updateShotVideo(
+      shotId, videoStatus, videoTaskId, videoUrl, videoLocalPath, videoErrorMessage);
+  }
+
   // 为项目创建一集（默认第 1 集、DRAFT 草稿状态），返回新剧集 id
   async createEpisodeForProject(projectId: number, title: string, content: string): Promise<number> {
     const now = Date.now();
