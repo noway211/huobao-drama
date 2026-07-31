@@ -92,10 +92,16 @@ export class UseCases {
     return UseCases.repo.updateShotImagePrompt(shotId, newPrompt);
   }
 
-  /** 自动替换触发内容审查的敏感词（临时修复）。 */
+  /** 更新单个分镜的视频提示词。 */
+  static async updateShotVideoPrompt(shotId: number, newPrompt: string): Promise<void> {
+    return UseCases.repo.updateShotVideoPrompt(shotId, newPrompt);
+  }
+
+  /** 自动替换触发内容审查的敏感词（临时修复）。对 imagePrompt 和 videoPrompt 均生效。 */
   static async patchSensitivePrompts(projectId: number): Promise<void> {
     const shots = await UseCases.repo.getStoryboards(projectId);
     for (const shot of shots) {
+      // 修 imagePrompt
       const OLD = '走廊尽头传来脚步声，老师快步走来，身后跟着校警，众人瞬间安静，学校走廊场景，写实风格';
       if (shot.imagePrompt === OLD) {
         await UseCases.repo.updateShotImagePrompt(shot.id,
@@ -108,6 +114,15 @@ export class UseCases {
           shot.imagePrompt.replace(OLD2, '老师带着霸凌者离开走廊'));
         hilog.info(DOMAIN, TAG, 'patched shot %{public}d imagePrompt (content policy)', shot.shotNumber);
       }
+
+      // 视频提示词同样替换敏感内容
+      if (shot.videoPrompt.indexOf(OLD2) >= 0) {
+        await UseCases.repo.updateShotVideoPrompt(shot.id,
+          shot.videoPrompt.replace(OLD2, '老师带着霸凌者离开走廊'));
+        hilog.info(DOMAIN, TAG, 'patched shot %{public}d videoPrompt (content policy)', shot.shotNumber);
+      }
+    }
+  }
     }
   }
 

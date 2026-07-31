@@ -163,4 +163,18 @@ export class StoryboardLocalDataSource {
     predicates.equalTo('id', shotId);
     await store.update(values, predicates);
   }
+
+  /**
+   * 更新单个分镜的视频提示词（video_prompt 列）。
+   */
+  async updateShotVideoPrompt(shotId: number, newPrompt: string): Promise<void> {
+    const store = await DramaDatabase.getStore();
+    const values: relationalStore.ValuesBucket = {
+      'video_prompt': newPrompt,
+      'updated_at': Date.now()
+    };
+    const predicates = new relationalStore.RdbPredicates(TABLE);
+    predicates.equalTo('id', shotId);
+    await store.update(values, predicates);
+  }
 }

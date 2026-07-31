@@ -68,6 +68,11 @@ export class DramaRepository {
     return this.storyboards.updateShotImagePrompt(shotId, newPrompt);
   }
 
+  // 更新单个分镜的视频提示词
+  async updateShotVideoPrompt(shotId: number, newPrompt: string): Promise<void> {
+    return this.storyboards.updateShotVideoPrompt(shotId, newPrompt);
+  }
+
   // 更新单个分镜的图片生成结果（代理到 StoryboardLocalDataSource）
   async updateShotImage(
     shotId: number,
