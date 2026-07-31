@@ -156,17 +156,13 @@ struct StoryboardViewerPage {
                   .margin({ bottom: 10 })
 
                 // ── 图片提示词（可点击编辑） ──
-                PromptCard({
-                  label: '图片提示词',
-                  text: shot.imagePrompt,
-                  onClick: () => this.startEditing(shot, 'image')
+                PromptCardBuilder('图片提示词', shot.imagePrompt, () => {
+                  this.startEditing(shot, 'image');
                 })
 
                 // ── 视频提示词（可点击编辑） ──
-                PromptCard({
-                  label: '视频提示词',
-                  text: shot.videoPrompt,
-                  onClick: () => this.startEditing(shot, 'video')
+                PromptCardBuilder('视频提示词', shot.videoPrompt, () => {
+                  this.startEditing(shot, 'video');
                 })
 
                 // ── 其余信息 ──
@@ -260,39 +256,33 @@ struct StoryboardViewerPage {
 }
 
 /**
- * 提示词卡片组件 — 展示标签 + 文本内容 + "点击编辑" 链接。
- * 避免内联重复代码，复用图片/视频两种提示词的展示样式。
+ * 提示词卡片 Builder — 展示标签 + 文本内容 + "点击编辑" 链接。
+ * 复用图片/视频两种提示词的展示样式。
  */
-@Component
-struct PromptCard {
-  @Prop label: string = '';
-  @Prop text: string = '';
-  @Prop onClick: () => void = () => {};
-
-  build() {
-    Column() {
-      Text(this.label)
-        .fontSize(13)
-        .fontColor(Theme.textSecondary)
-        .margin({ bottom: 4 })
-      Text(this.text)
-        .fontSize(14)
-        .fontColor(Theme.textPrimary)
-        .lineHeight(20)
-        .width('100%')
-      Row() {
-        Text('点击编辑')
-          .fontSize(12)
-          .fontColor(Theme.primary)
-      }
+@Builder
+function PromptCardBuilder(label: string, text: string, onClick: () => void) {
+  Column() {
+    Text(label)
+      .fontSize(13)
+      .fontColor(Theme.textSecondary)
+      .margin({ bottom: 4 })
+    Text(text)
+      .fontSize(14)
+      .fontColor(Theme.textPrimary)
+      .lineHeight(20)
       .width('100%')
-      .margin({ top: 6 })
-      .onClick(() => this.onClick())
+    Row() {
+      Text('点击编辑')
+        .fontSize(12)
+        .fontColor(Theme.primary)
     }
-    .padding(12)
     .width('100%')
-    .backgroundColor('#1A000000')
-    .borderRadius(8)
-    .margin({ bottom: 10 })
+    .margin({ top: 6 })
+    .onClick(() => onClick())
   }
+  .padding(12)
+  .width('100%')
+  .backgroundColor('#1A000000')
+  .borderRadius(8)
+  .margin({ bottom: 10 })
 }

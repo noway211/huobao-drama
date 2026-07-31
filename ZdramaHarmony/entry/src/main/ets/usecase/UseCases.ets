@@ -123,8 +123,6 @@ export class UseCases {
       }
     }
   }
-    }
-  }
 
   /** GenerateProjectScriptUseCase：根据项目提示词生成剧本，并同步更新项目与剧集状态。 */
   static async generateScript(projectId: number, settings: AgnesSettings): Promise<TextResult> {

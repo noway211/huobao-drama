@@ -110,6 +110,14 @@ class DramaRepository(context: Context) {
         ) > 0
     }
 
+    suspend fun updateShotImagePrompt(shotId: Long, newPrompt: String): Boolean = withContext(Dispatchers.IO) {
+        storyboardLocalDataSource.updateShotImagePrompt(shotId, newPrompt) > 0
+    }
+
+    suspend fun updateShotVideoPrompt(shotId: Long, newPrompt: String): Boolean = withContext(Dispatchers.IO) {
+        storyboardLocalDataSource.updateShotVideoPrompt(shotId, newPrompt) > 0
+    }
+
     // --- Episode methods ---
 
     suspend fun getEpisodeForProject(projectId: Long): Episode? = withContext(Dispatchers.IO) {

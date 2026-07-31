@@ -4,39 +4,41 @@
     android:layout_height="match_parent"
     android:background="@color/zdrama_black"
     android:orientation="vertical"
-    android:padding="24dp">
+    android:padding="16dp">
 
-    <TextView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/project_storyboard_title"
-        android:textColor="@color/zdrama_text_primary"
-        android:textSize="22sp"
-        android:textStyle="bold" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
-    <TextView
-        android:id="@+id/titleText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:textColor="@color/zdrama_text_secondary"
-        android:textSize="16sp" />
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/project_storyboard_title"
+            android:textColor="@color/zdrama_text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/shotCountText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/zdrama_text_secondary"
+            android:textSize="13sp" />
+    </LinearLayout>
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="16dp"
-        android:layout_weight="1"
-        android:background="@color/zdrama_surface"
-        android:padding="16dp">
+        android:layout_marginTop="12dp"
+        android:layout_weight="1">
 
-        <TextView
-            android:id="@+id/storyboardText"
+        <LinearLayout
+            android:id="@+id/cardContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:lineSpacingExtra="4dp"
-            android:textColor="@color/zdrama_text_primary"
-            android:textIsSelectable="true"
-            android:textSize="15sp" />
+            android:orientation="vertical" />
     </ScrollView>
 </LinearLayout>

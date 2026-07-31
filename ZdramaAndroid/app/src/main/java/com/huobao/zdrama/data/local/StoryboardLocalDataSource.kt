@@ -93,6 +93,32 @@ class StoryboardLocalDataSource(context: Context) {
         )
     }
 
+    fun updateShotImagePrompt(shotId: Long, newPrompt: String): Int {
+        val values = ContentValues().apply {
+            put(DramaLocalDatabase.COL_IMAGE_PROMPT, newPrompt)
+            put(DramaLocalDatabase.COL_UPDATED_AT, System.currentTimeMillis())
+        }
+        return database.writableDatabase.update(
+            DramaLocalDatabase.TABLE_STORYBOARDS,
+            values,
+            "${DramaLocalDatabase.COL_ID} = ?",
+            arrayOf(shotId.toString())
+        )
+    }
+
+    fun updateShotVideoPrompt(shotId: Long, newPrompt: String): Int {
+        val values = ContentValues().apply {
+            put(DramaLocalDatabase.COL_VIDEO_PROMPT, newPrompt)
+            put(DramaLocalDatabase.COL_UPDATED_AT, System.currentTimeMillis())
+        }
+        return database.writableDatabase.update(
+            DramaLocalDatabase.TABLE_STORYBOARDS,
+            values,
+            "${DramaLocalDatabase.COL_ID} = ?",
+            arrayOf(shotId.toString())
+        )
+    }
+
     private fun insertStoryboard(db: SQLiteDatabase, shot: StoryboardShot): Long {
         val now = System.currentTimeMillis()
         val values = ContentValues().apply {

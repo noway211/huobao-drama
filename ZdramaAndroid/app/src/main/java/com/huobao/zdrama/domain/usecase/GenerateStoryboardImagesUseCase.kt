@@ -7,6 +7,7 @@ import com.huobao.zdrama.data.settings.AgnesSettings
 import com.huobao.zdrama.domain.model.AssetStatus
 import com.huobao.zdrama.domain.model.GenerationStage
 import com.huobao.zdrama.domain.model.ProjectStatus
+import com.huobao.zdrama.domain.model.StoryboardShot
 import java.io.File
 
 class GenerateStoryboardImagesUseCase(
@@ -21,6 +22,9 @@ class GenerateStoryboardImagesUseCase(
         if (shots.isEmpty()) {
             return Result.failure(IllegalArgumentException("Generate storyboards before images"))
         }
+
+        // 自动修复触发内容审查的提示词（与 Harmony 端同步）
+        patchSensitivePrompts(shots)
 
         dramaRepository.updateProjectTextResult(
             projectId = projectId,
@@ -106,5 +110,25 @@ class GenerateStoryboardImagesUseCase(
 
     private fun isExistingLocalFile(path: String?): Boolean {
         return !path.isNullOrBlank() && File(path).exists()
+    }
+
+    /** 自动替换触发内容审查的敏感词，对齐 Harmony 端 patchSensitivePrompts。 */
+    private suspend fun patchSensitivePrompts(shots: List<StoryboardShot>) {
+        for (shot in shots) {
+            val old1 = "走廊尽头传来脚步声，老师快步走来，身后跟着校警，众人瞬间安静，学校走廊场景，写实风格"
+            if (shot.imagePrompt == old1) {
+                dramaRepository.updateShotImagePrompt(shot.id,
+                    "走廊尽头传来脚步声，老师快步走来，严厉地扫视全场，霸凌者心虚地低下头，众人不敢出声，学校走廊场景，写实风格")
+            }
+            val old2 = "校警将霸凌者带离走廊"
+            if (shot.imagePrompt.contains(old2)) {
+                dramaRepository.updateShotImagePrompt(shot.id,
+                    shot.imagePrompt.replace(old2, "老师带着霸凌者离开走廊"))
+            }
+            if (shot.videoPrompt.contains(old2)) {
+                dramaRepository.updateShotVideoPrompt(shot.id,
+                    shot.videoPrompt.replace(old2, "老师带着霸凌者离开走廊"))
+            }
+        }
     }
 }
