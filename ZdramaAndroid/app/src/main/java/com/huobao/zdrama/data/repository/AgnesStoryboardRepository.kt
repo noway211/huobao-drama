@@ -57,14 +57,14 @@ class AgnesStoryboardRepository(
                 StoryboardShot(
                     id = 0L,
                     projectId = project.id,
-                    shotNumber = item.shotNumber ?: index + 1,
+                    shotNumber = item.shotNumber?.toIntOrNull() ?: (index + 1),
                     scene = item.scene.orEmpty(),
                     action = item.action.orEmpty(),
                     dialogue = item.dialogue.orEmpty(),
                     camera = item.camera.orEmpty(),
                     imagePrompt = item.imagePrompt.orEmpty(),
                     videoPrompt = item.videoPrompt.orEmpty(),
-                    durationSeconds = item.durationSeconds ?: project.shotDurationSeconds,
+                    durationSeconds = item.durationSeconds?.toIntOrNull() ?: project.shotDurationSeconds,
                     imageStatus = AssetStatus.PENDING,
                     imageUrl = null,
                     imageLocalPath = null,
@@ -83,20 +83,31 @@ class AgnesStoryboardRepository(
 
     private fun parseStoryboardJson(content: String): List<StoryboardItem> {
         val json = extractJsonArray(content)
+        Log.d(TAG, "Extracted JSON length: ${json.length}, content preview: ${json.take(200)}...")
         val type = object : TypeToken<List<StoryboardItem>>() {}.type
-        return gson.fromJson(json, type)
+        return try {
+            gson.fromJson(json, type)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse storyboard JSON. Full content:\n$content", e)
+            throw e
+        }
     }
 
     private fun extractJsonArray(content: String): String {
+        // Try parse full content directly
         val parsed = runCatching { JsonParser.parseString(content) }.getOrNull()
         if (parsed != null && parsed.isJsonArray) {
             return content
         }
+        // Find the first [ and last ], extract everything between
         val start = content.indexOf('[')
         val end = content.lastIndexOf(']')
         if (start >= 0 && end > start) {
-            return content.substring(start, end + 1)
+            val extracted = content.substring(start, end + 1)
+            Log.d(TAG, "Extracted JSON array from wrapped content")
+            return extracted
         }
+        Log.e(TAG, "No JSON array found in response. Full content:\n$content")
         throw IllegalStateException("Agnes storyboard response is not JSON")
     }
 
@@ -129,14 +140,14 @@ class AgnesStoryboardRepository(
     }
 
     private data class StoryboardItem(
-        @SerializedName("shot_number") val shotNumber: Int?,
+        @SerializedName("shot_number") val shotNumber: String?,
         val scene: String?,
         val action: String?,
         val dialogue: String?,
         val camera: String?,
         @SerializedName("image_prompt") val imagePrompt: String?,
         @SerializedName("video_prompt") val videoPrompt: String?,
-        @SerializedName("duration_seconds") val durationSeconds: Int?
+        @SerializedName("duration_seconds") val durationSeconds: String?
     )
 
     companion object {
