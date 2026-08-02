@@ -3,6 +3,7 @@ package com.huobao.zdrama.ui.project
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.widget.MediaController
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -31,7 +32,8 @@ class VideoPlayerActivity : AppCompatActivity() {
             setAnchorView(binding.videoView)
         })
         binding.videoView.setOnCompletionListener { playNextIfAvailable() }
-        binding.videoView.setOnErrorListener { _: MediaPlayer?, _: Int, _: Int ->
+        binding.videoView.setOnErrorListener { _: MediaPlayer?, what: Int, extra: Int ->
+            Log.e(TAG, "Video playback failed: what=$what, extra=$extra")
             Toast.makeText(this, R.string.video_playback_failed, Toast.LENGTH_SHORT).show()
             true
         }
@@ -89,11 +91,13 @@ class VideoPlayerActivity : AppCompatActivity() {
         binding.shotText.setText(R.string.video_player_final_label)
         binding.previousButton.isEnabled = false
         binding.nextButton.isEnabled = false
-        binding.videoView.setVideoURI(Uri.fromFile(file))
+        val uri = Uri.fromFile(file)
+        Log.d(TAG, "Playing final video: path=${file.absolutePath}, exists=${file.exists()}, size=${file.length()}")
         binding.videoView.setOnPreparedListener {
             binding.videoView.start()
             binding.playButton.setText(R.string.video_pause)
         }
+        binding.videoView.setVideoURI(uri)
     }
 
     private fun playAt(index: Int) {
@@ -107,11 +111,12 @@ class VideoPlayerActivity : AppCompatActivity() {
             playableShots.size
         )
         val uri = shot.playableVideoUri() ?: return
-        binding.videoView.setVideoURI(uri)
+        Log.d(TAG, "Playing storyboard video: shotId=${shot.id}, uri=$uri, localPath=${shot.videoLocalPath}, url=${shot.videoUrl}")
         binding.videoView.setOnPreparedListener {
             binding.videoView.start()
             binding.playButton.setText(R.string.video_pause)
         }
+        binding.videoView.setVideoURI(uri)
         updateNavigationButtons()
     }
 
@@ -145,6 +150,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val TAG = "VideoPlayerActivity"
         const val EXTRA_PROJECT_ID = "extra_project_id"
         const val EXTRA_VIDEO_PATH = "extra_video_path"
     }
