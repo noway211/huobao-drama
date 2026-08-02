@@ -73,7 +73,8 @@ export class MediaDownloadRepository {
     const startedAt = Date.now();
     try {
       const response = await request.request(url, {
-        method: http.RequestMethod.GET
+        method: http.RequestMethod.GET,
+        expectDataType: http.HttpDataType.ARRAY_BUFFER
       });
 
       const responseCode = response.responseCode;
@@ -93,10 +94,23 @@ export class MediaDownloadRepository {
         return fail(`下载失败：HTTP ${responseCode}`);
       }
 
+      if (!(response.result instanceof ArrayBuffer)) {
+        const msg = `下载响应不是二进制数据：${typeof response.result}`;
+        hilog.error(DOMAIN, TAG, '%{public}s', msg);
+        return fail(msg);
+      }
+
+      const bytes = new Uint8Array(response.result);
+      if (!this.looksLikeMedia(bytes, mediaType)) {
+        const msg = `下载文件格式异常：${mediaType}`;
+        hilog.error(DOMAIN, TAG, '%{public}s', msg);
+        return fail(msg);
+      }
+
       // 写入文件
       let file: fileIo.File | null = null;
       try {
-        file = fileIo.openSync(targetFileStr, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY);
+        file = fileIo.openSync(targetFileStr, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
         const buf = response.result as ArrayBuffer;
         fileIo.writeSync(file.fd, buf);
       } catch (writeErr) {
@@ -107,6 +121,13 @@ export class MediaDownloadRepository {
         if (file) {
           fileIo.closeSync(file);
         }
+      }
+
+      const stat = fileIo.statSync(targetFileStr);
+      if (stat.size <= 0) {
+        const msg = `下载文件为空：${targetFileStr}`;
+        hilog.error(DOMAIN, TAG, '%{public}s', msg);
+        return fail(msg);
       }
 
       return ok(targetFileStr);
@@ -129,6 +150,39 @@ export class MediaDownloadRepository {
     } finally {
       request.destroy();
     }
+  }
+
+  // 基于文件头做轻量媒体格式校验，避免把空响应或 JSON/HTML 错误页保存为媒体文件。
+  private looksLikeMedia(bytes: Uint8Array, mediaType: MediaType): boolean {
+    if (bytes.length === 0) {
+      return false;
+    }
+
+    if (mediaType === MediaType.VIDEO) {
+      if (bytes.length < 12) {
+        return false;
+      }
+      return bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70;
+    }
+
+    if (bytes.length >= 8 &&
+      bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47 &&
+      bytes[4] === 0x0D && bytes[5] === 0x0A && bytes[6] === 0x1A && bytes[7] === 0x0A) {
+      return true;
+    }
+    if (bytes.length >= 3 && bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+      return true;
+    }
+    if (bytes.length >= 12 &&
+      bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+      bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
+      return true;
+    }
+    if (bytes.length >= 6 &&
+      bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
+      return true;
+    }
+    return false;
   }
 
   // 从 URL 路径中提取文件扩展名（不含点号），取不到返回空字符串

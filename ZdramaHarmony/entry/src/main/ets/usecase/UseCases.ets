@@ -6,6 +6,7 @@ import { AgnesVideoRepository } from '../remote/AgnesVideoRepository';
 import { MediaDownloadRepository, MediaType } from '../data/MediaDownloadRepository';
 import { AgnesSettings } from '../model/AgnesSettings';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { fileIo } from '@kit.CoreFileKit';
 import {
   CreateDramaInput,
   DramaProject,
@@ -20,6 +21,8 @@ import {
 const DOMAIN = 0x0001;
 const TAG = 'UseCases';
 
+type GenerationProgressCallback = (current: number, total: number, shotNumber: number, phase: string) => void;
+
 /**
  * 移植 com.huobao.zdrama.domain.usecase.* 的 MVP 子集。
  * 由于每个用例都很轻量，统一实现为一个类上的静态方法。
@@ -31,6 +34,17 @@ export class UseCases {
   private static image = new AgnesImageRepository();
   private static video = new AgnesVideoRepository();
   private static mediaDownload = new MediaDownloadRepository();
+
+  private static hasNonEmptyLocalFile(path: string | null): boolean {
+    if (!path || path.trim().length === 0) {
+      return false;
+    }
+    try {
+      return fileIo.statSync(path).size > 0;
+    } catch (_err) {
+      return false;
+    }
+  }
 
   /** CreateDramaUseCase：插入项目（草稿状态）并自动创建第 1 集。 */
   static async createDrama(input: CreateDramaInput): Promise<number> {
@@ -214,7 +228,11 @@ export class UseCases {
   }
 
   /** GenerateStoryboardImagesUseCase：为每个分镜的 imagePrompt 生成图片并下载到本地。 */
-  static async generateStoryboardImages(projectId: number, settings: AgnesSettings): Promise<TextResult> {
+  static async generateStoryboardImages(
+    projectId: number,
+    settings: AgnesSettings,
+    onProgress?: GenerationProgressCallback
+  ): Promise<TextResult> {
     const project = await UseCases.repo.getProject(projectId);
     if (!project) {
       return { ok: false, value: '', error: 'Project not found' };
@@ -236,13 +254,33 @@ export class UseCases {
     let completed = 0;
     let generated = 0;
     let firstError = '';
+    let current = 0;
 
     for (const shot of shots) {
-      // 跳过已完成且有本地文件的
-      if (shot.imageStatus === AssetStatus.COMPLETED && shot.imageLocalPath) {
-        hilog.info(DOMAIN, TAG, 'shot %{public}d already completed, skip', shot.shotNumber);
+      current++;
+      onProgress?.(current, shots.length, shot.shotNumber, '检查图片');
+
+      // 跳过已完成且本地文件非空的
+      if (shot.imageStatus === AssetStatus.COMPLETED && UseCases.hasNonEmptyLocalFile(shot.imageLocalPath)) {
+        hilog.info(DOMAIN, TAG, 'shot %{public}d image already completed, skip', shot.shotNumber);
         completed++;
         continue;
+      }
+
+      if (shot.imageStatus === AssetStatus.COMPLETED && shot.imageUrl && shot.imageUrl.trim().length > 0) {
+        hilog.info(DOMAIN, TAG, 'repair image for shot %{public}d from existing url', shot.shotNumber);
+        await UseCases.repo.updateShotImage(
+          shot.id, AssetStatus.PROCESSING, shot.imageUrl, shot.imageLocalPath, null);
+        onProgress?.(current, shots.length, shot.shotNumber, '下载图片');
+        const redownload = await UseCases.mediaDownload.downloadToGeneratedMedia(
+          projectId, shot.id, shot.imageUrl, MediaType.IMAGE);
+        if (redownload.ok) {
+          completed++;
+          generated++;
+          await UseCases.repo.updateShotImage(
+            shot.id, AssetStatus.COMPLETED, shot.imageUrl, redownload.value, null);
+          continue;
+        }
       }
 
       hilog.info(DOMAIN, TAG, 'generate image for shot %{public}d: prompt=%{public}s', shot.shotNumber, shot.imagePrompt);
@@ -251,10 +289,12 @@ export class UseCases {
       await UseCases.repo.updateShotImage(
         shot.id, AssetStatus.PROCESSING, shot.imageUrl, shot.imageLocalPath, null);
 
+      onProgress?.(current, shots.length, shot.shotNumber, '生成图片');
       const imageResult = await UseCases.image.generateImage(settings, shot);
       if (imageResult.ok) {
         hilog.info(DOMAIN, TAG, 'image API OK for shot %{public}d, url=%{public}s', shot.shotNumber, imageResult.value);
         const imageUrl = imageResult.value;
+        onProgress?.(current, shots.length, shot.shotNumber, '下载图片');
         const downloadResult = await UseCases.mediaDownload.downloadToGeneratedMedia(
           projectId, shot.id, imageUrl, MediaType.IMAGE);
 
@@ -293,7 +333,11 @@ export class UseCases {
   }
 
   /** GenerateStoryboardVideosUseCase：为每个分镜的 videoPrompt 生成视频并下载到本地。 */
-  static async generateStoryboardVideos(projectId: number, settings: AgnesSettings): Promise<TextResult> {
+  static async generateStoryboardVideos(
+    projectId: number,
+    settings: AgnesSettings,
+    onProgress?: GenerationProgressCallback
+  ): Promise<TextResult> {
     const project = await UseCases.repo.getProject(projectId);
     if (!project) {
       return { ok: false, value: '', error: 'Project not found' };
@@ -312,13 +356,33 @@ export class UseCases {
     let completed = 0;
     let generated = 0;
     let firstError = '';
+    let current = 0;
 
     for (const shot of shots) {
-      // 跳过已完成且有本地文件的
-      if (shot.videoStatus === AssetStatus.COMPLETED && shot.videoLocalPath) {
+      current++;
+      onProgress?.(current, shots.length, shot.shotNumber, '检查视频');
+
+      // 跳过已完成且本地文件非空的
+      if (shot.videoStatus === AssetStatus.COMPLETED && UseCases.hasNonEmptyLocalFile(shot.videoLocalPath)) {
         hilog.info(DOMAIN, TAG, 'shot %{public}d video already completed, skip', shot.shotNumber);
         completed++;
         continue;
+      }
+
+      if (shot.videoStatus === AssetStatus.COMPLETED && shot.videoUrl && shot.videoUrl.trim().length > 0) {
+        hilog.info(DOMAIN, TAG, 'repair video for shot %{public}d from existing url', shot.shotNumber);
+        await UseCases.repo.updateShotVideo(
+          shot.id, AssetStatus.PROCESSING, shot.videoTaskId, shot.videoUrl, shot.videoLocalPath, null);
+        onProgress?.(current, shots.length, shot.shotNumber, '下载视频');
+        const redownload = await UseCases.mediaDownload.downloadToGeneratedMedia(
+          projectId, shot.id, shot.videoUrl, MediaType.VIDEO);
+        if (redownload.ok) {
+          completed++;
+          generated++;
+          await UseCases.repo.updateShotVideo(
+            shot.id, AssetStatus.COMPLETED, shot.videoTaskId, shot.videoUrl, redownload.value, null);
+          continue;
+        }
       }
 
       hilog.info(DOMAIN, TAG, 'generate video for shot %{public}d: prompt=%{public}s', shot.shotNumber, shot.videoPrompt);
@@ -327,6 +391,7 @@ export class UseCases {
       await UseCases.repo.updateShotVideo(
         shot.id, AssetStatus.PROCESSING, shot.videoTaskId, shot.videoUrl, shot.videoLocalPath, null);
 
+      onProgress?.(current, shots.length, shot.shotNumber, '生成视频');
       const videoResult = await UseCases.video.generateVideo(settings, shot);
       if (videoResult.ok) {
         hilog.info(DOMAIN, TAG, 'video API OK for shot %{public}d, url=%{public}s', shot.shotNumber, videoResult.value);

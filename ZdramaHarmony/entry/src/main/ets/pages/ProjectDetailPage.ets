@@ -202,7 +202,9 @@ struct ProjectDetailPage {
     this.busy = true;
     this.busyLabel = '生成图片中…';
     const settings = await SettingsStore.load();
-    const result = await UseCases.generateStoryboardImages(this.projectId, settings);
+    const result = await UseCases.generateStoryboardImages(this.projectId, settings, (current, total, shotNumber, phase) => {
+      this.busyLabel = `${phase} ${current}/${total}（分镜 ${shotNumber}）`;
+    });
     this.busy = false;
     promptAction.showToast({ message: result.ok ? '图片已生成' : `失败：${result.error}` });
     await this.reload();
@@ -234,7 +236,9 @@ struct ProjectDetailPage {
     this.busy = true;
     this.busyLabel = '生成视频中…';
     const settings = await SettingsStore.load();
-    const result = await UseCases.generateStoryboardVideos(this.projectId, settings);
+    const result = await UseCases.generateStoryboardVideos(this.projectId, settings, (current, total, shotNumber, phase) => {
+      this.busyLabel = `${phase} ${current}/${total}（分镜 ${shotNumber}）`;
+    });
     this.busy = false;
     promptAction.showToast({ message: result.ok ? '视频已生成' : `失败：${result.error}` });
     await this.reload();
@@ -505,7 +509,7 @@ struct ProjectDetailPage {
                 .opacity(this.hasVideos ? 1 : 0.5)
                 .margin({ left: 10 })
                 .onClick(() => {
-                  router.pushUrl({ url: 'pages/StoryboardViewerPage', params: { projectId: this.projectId } });
+                  router.pushUrl({ url: 'pages/VideoViewerPage', params: { projectId: this.projectId } });
                 })
             }
             .width('100%')
