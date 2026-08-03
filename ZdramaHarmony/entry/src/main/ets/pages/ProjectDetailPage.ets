@@ -571,7 +571,7 @@ struct ProjectDetailPage {
                 .opacity(this.hasFinalVideo ? 1 : 0.5)
                 .margin({ left: 10 })
                 .onClick(() => {
-                  promptAction.showToast({ message: '成片播放请使用分镜视频' });
+                  router.pushUrl({ url: 'pages/FinalVideoPage', params: { projectId: this.projectId } });
                 })
             }
             .width('100%')

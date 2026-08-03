@@ -1,6 +1,12 @@
 {
   "apiType": "stageMode",
-  "buildOption": {},
+  "buildOption": {
+    "externalNativeOptions": {
+      "path": "./src/main/cpp/CMakeLists.txt",
+      "arguments": [],
+      "cppFlags": "-std=c++17 -frtti -fexceptions"
+    }
+  },
   "buildOptionSet": [
     {
       "name": "release",

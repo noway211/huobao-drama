@@ -4,6 +4,8 @@ import { AgnesStoryboardRepository } from '../remote/AgnesStoryboardRepository';
 import { AgnesImageRepository } from '../remote/AgnesImageRepository';
 import { AgnesVideoRepository } from '../remote/AgnesVideoRepository';
 import { MediaDownloadRepository, MediaType } from '../data/MediaDownloadRepository';
+import { LocalMp4Composer } from '../data/media/LocalMp4Composer';
+import { AppContext } from '../common/AppContext';
 import { AgnesSettings } from '../model/AgnesSettings';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { fileIo } from '@kit.CoreFileKit';
@@ -34,6 +36,7 @@ export class UseCases {
   private static image = new AgnesImageRepository();
   private static video = new AgnesVideoRepository();
   private static mediaDownload = new MediaDownloadRepository();
+  private static mp4Composer = new LocalMp4Composer();
 
   private static hasNonEmptyLocalFile(path: string | null): boolean {
     if (!path || path.trim().length === 0) {
@@ -470,14 +473,28 @@ export class UseCases {
 
     onProgress?.(1, 1, sorted[0].shotNumber, '合成成片');
 
-    // 鸿蒙平台当前没有公开的 ArkTS muxer/extractor API（OH_AVMuxer / OH_AVDemuxer
-    // 仅在 C NDK 层），因此这里以失败返回并把状态切到 FAILED。等后续允许写
-    // NAPI C++ 包装时，再把这一步替换成 LocalMp4Composer.compose()。
-    const notSupported = '鸿蒙平台暂不支持本地无损合成成片，请使用分镜视频播放';
-    hilog.warn(DOMAIN, TAG, 'composeFinalVideo not supported on Harmony ArkTS: %{public}s', notSupported);
+    const filesDir = AppContext.get().filesDir;
+    const outputPath = `${filesDir}/generated/${projectId}/final_video.mp4`;
+    const inputPaths = sorted
+      .map(s => s.videoLocalPath)
+      .filter((p) => !!p && p.length > 0) as string[];
+
+    let finalPath = '';
+    try {
+      finalPath = await UseCases.mp4Composer.compose(inputPaths, outputPath);
+    } catch (e) {
+      const msg = `视频合成失败：${(e as Error).message ?? String(e)}`;
+      hilog.error(DOMAIN, TAG, 'composeFinalVideo failed: %{public}s', msg);
+      await UseCases.repo.updateProjectFinalVideo(
+        projectId, ProjectStatus.FAILED, GenerationStage.FINAL_VIDEO,
+        AssetStatus.FAILED, null, msg, msg);
+      return { ok: false, value: '', error: msg };
+    }
+
     await UseCases.repo.updateProjectFinalVideo(
-      projectId, ProjectStatus.FAILED, GenerationStage.FINAL_VIDEO,
-      AssetStatus.FAILED, null, notSupported, notSupported);
-    return { ok: false, value: '', error: notSupported };
+      projectId, ProjectStatus.COMPLETED, GenerationStage.FINAL_VIDEO,
+      AssetStatus.COMPLETED, finalPath, null, null);
+    hilog.info(DOMAIN, TAG, 'composeFinalVideo OK: path=%{public}s', finalPath);
+    return { ok: true, value: finalPath, error: '' };
   }
 }

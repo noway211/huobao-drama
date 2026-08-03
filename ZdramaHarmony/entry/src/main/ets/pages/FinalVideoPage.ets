@@ -1,0 +1,197 @@
+import { router, promptAction } from '@kit.ArkUI';
+import { UseCases } from '../usecase/UseCases';
+import { Theme } from '../common/Theme';
+
+interface FinalVideoPageParams {
+  projectId: number;
+}
+
+/**
+ * 成片播放页 — 播放项目合成后的 final_video.mp4。
+ * 移植自 Android 的 StoryboardFinalVideoActivity。
+ */
+@Entry
+@Component
+struct FinalVideoPage {
+  @State title: string = '';
+  @State videoSrc: string = '';
+  @State loading: boolean = true;
+  @State errorText: string = '';
+  @State fullScreen: boolean = false;
+
+  private projectId: number = 0;
+
+  // 组件即将出现：从路由参数中读取项目 ID
+  aboutToAppear(): void {
+    const params = router.getParams() as FinalVideoPageParams;
+    if (!params || !params.projectId) {
+      this.errorText = '缺少项目 ID';
+      this.loading = false;
+      return;
+    }
+    this.projectId = params.projectId;
+    this.loadFinalVideo();
+  }
+
+  private async loadFinalVideo(): Promise<void> {
+    try {
+      const project = await UseCases.getProject(this.projectId);
+      if (!project) {
+        this.errorText = '项目不存在';
+        return;
+      }
+      this.title = project.title;
+      if (!project.finalVideoLocalPath || project.finalVideoLocalPath.length === 0) {
+        this.errorText = '成片视频不存在';
+        return;
+      }
+      this.videoSrc = project.finalVideoLocalPath.startsWith('file://')
+        ? project.finalVideoLocalPath
+        : `file://${project.finalVideoLocalPath}`;
+    } catch (e) {
+      this.errorText = `加载成片失败：${(e as Error).message ?? String(e)}`;
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  onBackPress(): boolean {
+    if (this.fullScreen) {
+      this.fullScreen = false;
+      return true;
+    }
+    return false;
+  }
+
+  build(): void {
+    Stack() {
+      Column() {
+        Row() {
+          Button('返回')
+            .fontSize(14)
+            .backgroundColor(Theme.surfaceAlt)
+            .fontColor(Theme.textPrimary)
+            .height(36)
+            .onClick((): void => {
+              if (this.fullScreen) {
+                this.fullScreen = false;
+              } else {
+                router.back();
+              }
+            })
+          Text(`${this.title} · 成片`)
+            .fontSize(18)
+            .fontColor(Theme.textPrimary)
+            .fontWeight(FontWeight.Bold)
+            .layoutWeight(1)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .margin({ left: 12 })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+
+        if (this.loading) {
+          Column() {
+            LoadingProgress()
+              .width(48)
+              .height(48)
+              .color(Theme.primary)
+          }
+          .layoutWeight(1)
+          .justifyContent(FlexAlign.Center)
+          .width('100%')
+        } else if (this.errorText.length > 0) {
+          Column() {
+            Text(this.errorText)
+              .fontSize(16)
+              .fontColor(Theme.textSecondary)
+              .margin({ bottom: 12 })
+            Button('返回项目详情')
+              .fontSize(14)
+              .backgroundColor(Theme.primary)
+              .fontColor(Color.White)
+              .height(40)
+              .onClick((): void => router.back())
+          }
+          .layoutWeight(1)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+          .width('100%')
+        } else {
+          Column() {
+            Video({ src: this.videoSrc, currentProgressRate: 1.0 })
+              .width('100%')
+              .height(240)
+              .controls(true)
+              .autoPlay(false)
+              .loop(false)
+              .objectFit(ImageFit.Contain)
+              .borderRadius(10)
+              .backgroundColor(Theme.surfaceAlt)
+              .onClick((): void => {
+                this.fullScreen = true;
+              })
+              .onError((): void => {
+                promptAction.showToast({ message: '成片播放出错' });
+              })
+
+            Text('点击视频进入全屏播放')
+              .fontSize(12)
+              .fontColor(Theme.textSecondary)
+              .margin({ top: 8 })
+              .width('100%')
+              .textAlign(TextAlign.Center)
+          }
+          .padding(16)
+          .width('100%')
+          .backgroundColor(Theme.surface)
+          .borderRadius(12)
+        }
+      }
+      .width('100%')
+      .height('100%')
+      .padding({ left: 16, right: 16 })
+      .backgroundColor(Theme.bg)
+
+      if (this.fullScreen && this.videoSrc.length > 0) {
+        Column() {
+          Row() {
+            Text(`${this.title} · 成片`)
+              .fontSize(16)
+              .fontColor(Color.White)
+              .layoutWeight(1)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            Button('关闭')
+              .fontSize(14)
+              .fontColor(Color.White)
+              .backgroundColor(Color.Transparent)
+              .onClick((): void => {
+                this.fullScreen = false;
+              })
+          }
+          .width('100%')
+          .padding({ left: 20, right: 20, top: 16, bottom: 12 })
+
+          Video({ src: this.videoSrc, currentProgressRate: 1.0 })
+            .width('100%')
+            .layoutWeight(1)
+            .controls(true)
+            .autoPlay(true)
+            .objectFit(ImageFit.Contain)
+            .onError((): void => {
+              promptAction.showToast({ message: '成片播放失败' });
+              this.fullScreen = false;
+            })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('#F5000000')
+        .position({ x: 0, y: 0 })
+      }
+    }
+    .width('100%')
+    .height('100%')
+  }
+}
