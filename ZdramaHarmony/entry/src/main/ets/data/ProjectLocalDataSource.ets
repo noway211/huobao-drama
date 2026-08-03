@@ -140,4 +140,29 @@ export class ProjectLocalDataSource {
     };
     return store.update(values, predicates);
   }
+
+  // 更新项目的成片生成结果（状态、阶段、成片状态、成片路径、错误信息）并刷新更新时间，返回受影响行数
+  async updateProjectFinalVideo(
+    projectId: number,
+    status: ProjectStatus,
+    currentStage: GenerationStage,
+    finalVideoStatus: AssetStatus,
+    finalVideoLocalPath: string | null,
+    finalVideoErrorMessage: string | null,
+    errorMessage: string | null
+  ): Promise<number> {
+    const store = await DramaDatabase.getStore();
+    const predicates = new relationalStore.RdbPredicates(TABLE);
+    predicates.equalTo('id', projectId);
+    const values: relationalStore.ValuesBucket = {
+      'status': status,
+      'current_stage': currentStage,
+      'final_video_status': finalVideoStatus,
+      'final_video_local_path': finalVideoLocalPath,
+      'final_video_error_message': finalVideoErrorMessage,
+      'error_message': errorMessage,
+      'updated_at': Date.now()
+    };
+    return store.update(values, predicates);
+  }
 }

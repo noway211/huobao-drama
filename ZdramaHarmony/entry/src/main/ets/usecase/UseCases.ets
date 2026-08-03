@@ -432,4 +432,52 @@ export class UseCases {
     }
     return { ok: false, value: '', error: firstError.length > 0 ? firstError : '视频生成失败' };
   }
+
+  /** ComposeFinalVideoUseCase：将全部分镜视频合成为一个成片 MP4。 */
+  static async composeFinalVideo(
+    projectId: number,
+    settings?: AgnesSettings,
+    onProgress?: GenerationProgressCallback
+  ): Promise<TextResult> {
+    const project = await UseCases.repo.getProject(projectId);
+    if (!project) {
+      return { ok: false, value: '', error: '项目不存在' };
+    }
+
+    const shots = await UseCases.repo.getStoryboards(projectId);
+    if (shots.length === 0) {
+      return { ok: false, value: '', error: '请先生成分镜' };
+    }
+
+    const sorted = shots.slice().sort((a, b) => a.shotNumber - b.shotNumber);
+    const missing = sorted.find(s =>
+      s.videoStatus !== AssetStatus.COMPLETED || !UseCases.hasNonEmptyLocalFile(s.videoLocalPath)
+    );
+    if (missing) {
+      const msg = '请先生成并下载全部分镜视频后再合成成片';
+      await UseCases.repo.updateProjectFinalVideo(
+        projectId, ProjectStatus.FAILED, GenerationStage.FINAL_VIDEO,
+        AssetStatus.FAILED, null, msg, msg);
+      return { ok: false, value: '', error: msg };
+    }
+
+    hilog.info(DOMAIN, TAG, 'composeFinalVideo start: project=%{public}d shots=%{public}d',
+      projectId, sorted.length);
+
+    await UseCases.repo.updateProjectFinalVideo(
+      projectId, ProjectStatus.PROCESSING, GenerationStage.FINAL_VIDEO,
+      AssetStatus.PROCESSING, null, null, null);
+
+    onProgress?.(1, 1, sorted[0].shotNumber, '合成成片');
+
+    // 鸿蒙平台当前没有公开的 ArkTS muxer/extractor API（OH_AVMuxer / OH_AVDemuxer
+    // 仅在 C NDK 层），因此这里以失败返回并把状态切到 FAILED。等后续允许写
+    // NAPI C++ 包装时，再把这一步替换成 LocalMp4Composer.compose()。
+    const notSupported = '鸿蒙平台暂不支持本地无损合成成片，请使用分镜视频播放';
+    hilog.warn(DOMAIN, TAG, 'composeFinalVideo not supported on Harmony ArkTS: %{public}s', notSupported);
+    await UseCases.repo.updateProjectFinalVideo(
+      projectId, ProjectStatus.FAILED, GenerationStage.FINAL_VIDEO,
+      AssetStatus.FAILED, null, notSupported, notSupported);
+    return { ok: false, value: '', error: notSupported };
+  }
 }

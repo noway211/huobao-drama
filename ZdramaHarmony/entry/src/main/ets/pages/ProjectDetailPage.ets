@@ -19,6 +19,7 @@ struct ProjectDetailPage {
   @State hasStoryboards: boolean = false;
   @State hasImages: boolean = false;
   @State hasVideos: boolean = false;
+  @State hasFinalVideo: boolean = false;
   private projectId: number = 0;
 
   // 组件即将出现：从路由参数中读取项目 ID
@@ -42,6 +43,8 @@ struct ProjectDetailPage {
     this.hasStoryboards = storyboards.length > 0;
     this.hasImages = storyboards.some(s => s.imageStatus === AssetStatus.COMPLETED);
     this.hasVideos = storyboards.some(s => s.videoStatus === AssetStatus.COMPLETED);
+    this.hasFinalVideo = this.project?.finalVideoStatus === AssetStatus.COMPLETED &&
+      (this.project?.finalVideoLocalPath?.length ?? 0) > 0;
     // 自动修复触发内容审查的提示词
     await UseCases.patchSensitivePrompts(this.projectId);
   }
@@ -263,6 +266,37 @@ struct ProjectDetailPage {
         this.doGenerateVideos();
       }
     });
+  }
+
+  // 执行成片合成：调 UseCases.composeFinalVideo，提示结果后刷新数据
+  async doComposeFinalVideo(): Promise<void> {
+    this.busy = true;
+    this.busyLabel = '合成成片中…';
+    const settings = await SettingsStore.load();
+    const result = await UseCases.composeFinalVideo(this.projectId, settings);
+    this.busy = false;
+    promptAction.showToast({ message: result.ok ? '成片已生成' : `合成失败：${result.error}` });
+    await this.reload();
+  }
+
+  // 点击"合成成片"：已有成片时弹二次确认；合成本身不需要 API Key
+  onComposeFinalVideoClick() {
+    if (this.hasFinalVideo) {
+      promptAction.showDialog({
+        title: '重新合成？',
+        message: '当前已有成片，重新合成会覆盖成片结果。是否继续？',
+        buttons: [
+          { text: '取消', color: Theme.textSecondary },
+          { text: '继续合成', color: Theme.primary }
+        ]
+      }).then((r) => {
+        if (r.index === 1) {
+          this.doComposeFinalVideo();
+        }
+      });
+    } else {
+      this.doComposeFinalVideo();
+    }
   }
 
   // 弹窗确认删除当前项目，确认后删除并返回上一页
@@ -510,6 +544,34 @@ struct ProjectDetailPage {
                 .margin({ left: 10 })
                 .onClick(() => {
                   router.pushUrl({ url: 'pages/VideoViewerPage', params: { projectId: this.projectId } });
+                })
+            }
+            .width('100%')
+            .margin({ bottom: 24 })
+
+            // Final video button row
+            Row() {
+              Button(this.busy ? this.busyLabel : '合成成片')
+                .layoutWeight(1)
+                .height(46)
+                .fontSize(14)
+                .fontColor(Color.White)
+                .backgroundColor(this.busy ? Theme.primaryDisabled : Theme.primary)
+                .borderRadius(10)
+                .enabled(!this.busy)
+                .onClick(() => this.onComposeFinalVideoClick())
+              Button('播放成片')
+                .layoutWeight(1)
+                .height(46)
+                .fontSize(14)
+                .fontColor(Theme.textPrimary)
+                .backgroundColor(Theme.surfaceAlt)
+                .borderRadius(10)
+                .enabled(!this.busy && this.hasFinalVideo)
+                .opacity(this.hasFinalVideo ? 1 : 0.5)
+                .margin({ left: 10 })
+                .onClick(() => {
+                  promptAction.showToast({ message: '成片播放请使用分镜视频' });
                 })
             }
             .width('100%')

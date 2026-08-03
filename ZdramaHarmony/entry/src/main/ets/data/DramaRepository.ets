@@ -48,6 +48,22 @@ export class DramaRepository {
     return rows > 0;
   }
 
+  // 更新项目的成片生成结果（状态、阶段、成片状态、成片路径、错误信息），返回是否有行被更新
+  async updateProjectFinalVideo(
+    projectId: number,
+    status: ProjectStatus,
+    currentStage: GenerationStage,
+    finalVideoStatus: AssetStatus,
+    finalVideoLocalPath: string | null,
+    finalVideoErrorMessage: string | null,
+    errorMessage: string | null
+  ): Promise<boolean> {
+    const rows = await this.projects.updateProjectFinalVideo(
+      projectId, status, currentStage, finalVideoStatus,
+      finalVideoLocalPath, finalVideoErrorMessage, errorMessage);
+    return rows > 0;
+  }
+
   // 获取项目对应的剧集（当前每个项目仅一集），不存在返回 null
   getEpisodeForProject(projectId: number): Promise<Episode | null> {
     return this.episodes.getEpisodeForProject(projectId);
