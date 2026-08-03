@@ -101,9 +101,10 @@ void TearDownMuxer(OH_AVMuxer *&muxer, int &fd) {
   }
 }
 
-// 打开文件 + OH_AVSource + OH_AVDemuxer，并选第一个 video track
+// 打开文件 + OH_AVSource + OH_AVDemuxer，并选 video + audio track（若存在）
 bool OpenInput(const std::string &path, int &fd, OH_AVSource *&source,
-              OH_AVDemuxer *&demuxer, int32_t &videoTrack) {
+              OH_AVDemuxer *&demuxer, int32_t &videoTrack,
+              int32_t &audioTrack) {
   fd = open(path.c_str(), O_RDONLY);
   if (fd < 0) return false;
   struct stat st{};
@@ -134,19 +135,26 @@ bool OpenInput(const std::string &path, int &fd, OH_AVSource *&source,
         trackCount < 0) {
       trackCount = 0;
     }
+    OH_AVFormat_Destroy(srcFmt);
   }
   if (trackCount == 0) trackCount = 32;  // 兜底
-  // 找 video track：track_type == 1
+  // 找 video + audio track。注意鸿蒙 OH_MediaType 枚举：
+  //   MEDIA_TYPE_AUD = 0（音频），MEDIA_TYPE_VID = 1（视频）
   videoTrack = -1;
+  audioTrack = -1;
   for (int32_t i = 0; i < trackCount; i++) {
     OH_AVFormat *t = OH_AVSource_GetTrackFormat(source, i);
     if (t == nullptr) continue;
-    int32_t type = 0;
-    OH_AVFormat_GetIntValue(t, "track_type", &type);
-    if (type == 1) {
-      videoTrack = i;
-      break;
+    int32_t type = -1;
+    if (OH_AVFormat_GetIntValue(t, "track_type", &type)) {
+      if (type == MEDIA_TYPE_VID && videoTrack < 0) {
+        videoTrack = i;
+      } else if (type == MEDIA_TYPE_AUD && audioTrack < 0) {
+        audioTrack = i;
+      }
     }
+    OH_AVFormat_Destroy(t);
+    if (videoTrack >= 0 && audioTrack >= 0) break;
   }
   if (videoTrack < 0) {
     SafeDestroyDemuxer(demuxer);
@@ -155,6 +163,7 @@ bool OpenInput(const std::string &path, int &fd, OH_AVSource *&source,
     fd = -1;
     return false;
   }
+  // 必须先选 video 轨；audio 轨可选
   if (OH_AVDemuxer_SelectTrackByID(demuxer, videoTrack) != AV_ERR_OK) {
     SafeDestroyDemuxer(demuxer);
     SafeDestroySource(source);
@@ -162,18 +171,22 @@ bool OpenInput(const std::string &path, int &fd, OH_AVSource *&source,
     fd = -1;
     return false;
   }
+  if (audioTrack >= 0) {
+    if (OH_AVDemuxer_SelectTrackByID(demuxer, audioTrack) != AV_ERR_OK) {
+      // audio 选不上视作"无音频"，不要因为这个让整文件失败
+      audioTrack = -1;
+    }
+  }
   return true;
 }
 
-// 从一个 demuxer 抽 video sample 写到 muxer
+// 从 demuxer 抽一条 track 的 sample 写到 muxer 对应 track
 // pts 平移：outputPts = timeOffsetUs + (sample.pts - firstPtsUs)
-bool AppendDemuxerToMuxer(OH_AVDemuxer *demuxer, OH_AVMuxer *muxer,
-                          int32_t sourceTrack, int32_t muxerTrack,
-                          int64_t &timeOffsetUs, int64_t &lastOutputTimeUs) {
-  // 给 sample buffer 分配 kSampleBufferSize 字节。
-  // demuxer 写入时如果 frame 实际更大，会失败（AV_ERR_NO_MEMORY），
-  // 这时我们没办法扩容，false 返回。
-  OH_AVMemory *mem = OH_AVMemory_Create(kSampleBufferSize);
+static bool ReadOneTrack(OH_AVDemuxer *demuxer, int32_t sourceTrack,
+                        OH_AVMuxer *muxer, int32_t muxerTrack,
+                        int32_t bufferSize, int64_t &timeOffsetUs,
+                        int64_t &lastOutputTimeUs) {
+  OH_AVMemory *mem = OH_AVMemory_Create(bufferSize);
   if (mem == nullptr) return false;
 
   int64_t firstPtsUs = 0;
@@ -199,8 +212,6 @@ bool AppendDemuxerToMuxer(OH_AVDemuxer *demuxer, OH_AVMuxer *muxer,
       }
       int64_t outPts = timeOffsetUs + (info.pts - firstPtsUs);
       if (outPts <= lastOutputTimeUs) {
-        // 单调性保险：理论上 demuxer 给出单调 PTS，但不同来源 PTS 起点不同，
-        // 这里强制单调，避免 muxer 抛错
         outPts = lastOutputTimeUs + 1;
       }
       info.pts = outPts;
@@ -210,14 +221,39 @@ bool AppendDemuxerToMuxer(OH_AVDemuxer *demuxer, OH_AVMuxer *muxer,
       }
       lastOutputTimeUs = outPts;
     } else {
-      // AV_ERR_EOF 或读错误：以"读完"处理。无法区分 EOF 和其它错误，
-      // 但如果下一帧还是错误就会被外部调用者抓到（不是这里）。
+      // AV_ERR_EOF 或读错误：以"读完"处理
       reachedEnd = true;
       break;
     }
   }
   SafeDestroyMemory(mem);
   return reachedEnd;
+}
+
+// 同时把 demuxer 的 video 和 audio track 抽到 muxer。
+//
+// 关键点：单调性游标必须"每条 track 各自维护"，不能 video / audio 共用一个。
+// 若共用，audio 的第一帧（源 PTS≈0）会被误判为"回退"，被强行推到 video 段末尾，
+// 导致成片音频轨从几秒后才开始，播放器会直接跳到那个位置。
+//
+// video / audio 各自以自己的第一帧为 PTS 原点，但共享同一个 timeOffsetUs 段起点，
+// 这样两轨在每一段内的相对关系保持不变，段与段之间顺序拼接。
+bool AppendDemuxerToMuxer(OH_AVDemuxer *demuxer, OH_AVMuxer *muxer,
+                          int32_t sourceVideoTrack, int32_t muxerVideoTrack,
+                          int32_t sourceAudioTrack, int32_t muxerAudioTrack,
+                          int64_t &timeOffsetUs, int64_t &lastVideoPtsUs,
+                          int64_t &lastAudioPtsUs) {
+  if (!ReadOneTrack(demuxer, sourceVideoTrack, muxer, muxerVideoTrack,
+                    kSampleBufferSize, timeOffsetUs, lastVideoPtsUs)) {
+    return false;
+  }
+  if (sourceAudioTrack >= 0 && muxerAudioTrack >= 0) {
+    if (!ReadOneTrack(demuxer, sourceAudioTrack, muxer, muxerAudioTrack,
+                      kSampleBufferSize, timeOffsetUs, lastAudioPtsUs)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // 真正干活的拼接函数
@@ -276,7 +312,9 @@ bool ConcatMp4Files(const std::string &outputPath,
   OH_AVSource *firstSource = nullptr;
   OH_AVDemuxer *firstDemuxer = nullptr;
   int32_t firstVideoTrack = -1;
-  if (!OpenInput(inputPaths[0], firstFd, firstSource, firstDemuxer, firstVideoTrack)) {
+  int32_t firstAudioTrack = -1;
+  if (!OpenInput(inputPaths[0], firstFd, firstSource, firstDemuxer,
+                firstVideoTrack, firstAudioTrack)) {
     return false;
   }
 
@@ -286,14 +324,14 @@ bool ConcatMp4Files(const std::string &outputPath,
     TearDownSource(firstSource, firstDemuxer, firstFd);
     return false;
   }
-  OH_AVFormat *outTrackFmt = OH_AVFormat_Create();
-  if (outTrackFmt == nullptr) {
+  OH_AVFormat *outVideoFmt = OH_AVFormat_Create();
+  if (outVideoFmt == nullptr) {
     SafeDestroyFormat(trackFmt);
     TearDownSource(firstSource, firstDemuxer, firstFd);
     return false;
   }
-  if (!OH_AVFormat_Copy(outTrackFmt, trackFmt)) {
-    SafeDestroyFormat(outTrackFmt);
+  if (!OH_AVFormat_Copy(outVideoFmt, trackFmt)) {
+    SafeDestroyFormat(outVideoFmt);
     SafeDestroyFormat(trackFmt);
     TearDownSource(firstSource, firstDemuxer, firstFd);
     return false;
@@ -304,48 +342,85 @@ bool ConcatMp4Files(const std::string &outputPath,
   unlink(outputPath.c_str());
   int outFd = open(outputPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
   if (outFd < 0) {
-    SafeDestroyFormat(outTrackFmt);
+    SafeDestroyFormat(outVideoFmt);
     TearDownSource(firstSource, firstDemuxer, firstFd);
     return false;
   }
   OH_AVMuxer *muxer = OH_AVMuxer_Create(outFd, AV_OUTPUT_FORMAT_MPEG_4);
   if (muxer == nullptr) {
     close(outFd);
-    SafeDestroyFormat(outTrackFmt);
+    SafeDestroyFormat(outVideoFmt);
     TearDownSource(firstSource, firstDemuxer, firstFd);
     unlink(outputPath.c_str());
     return false;
   }
-  int32_t muxerTrack = -1;
-  if (OH_AVMuxer_AddTrack(muxer, &muxerTrack, outTrackFmt) != AV_ERR_OK ||
-      muxerTrack < 0) {
+  int32_t muxerVideoTrack = -1;
+  if (OH_AVMuxer_AddTrack(muxer, &muxerVideoTrack, outVideoFmt) != AV_ERR_OK ||
+      muxerVideoTrack < 0) {
     SafeDestroyMuxer(muxer);
     close(outFd);
     unlink(outputPath.c_str());
-    SafeDestroyFormat(outTrackFmt);
+    SafeDestroyFormat(outVideoFmt);
     TearDownSource(firstSource, firstDemuxer, firstFd);
     return false;
   }
-  SafeDestroyFormat(outTrackFmt);
+  SafeDestroyFormat(outVideoFmt);
+
+  // audio track 可选：第一个文件若带 audio，复制其 format 并注册到 muxer。
+  // 注意：只检查"第一个文件"是否带 audio。若其它文件没 audio，对应位置会写静音
+  // （muxer 自动补 silence frame 取决于实现），但更稳的做法是"全有或全无"——
+  // 我们这里采用宽松策略：只复制并 AddTrack 一次。
+  int32_t muxerAudioTrack = -1;
+  OH_AVFormat *outAudioFmt = nullptr;
+  if (firstAudioTrack >= 0) {
+    OH_AVFormat *audioFmt = OH_AVSource_GetTrackFormat(firstSource, firstAudioTrack);
+    if (audioFmt != nullptr) {
+      outAudioFmt = OH_AVFormat_Create();
+      if (outAudioFmt != nullptr && OH_AVFormat_Copy(outAudioFmt, audioFmt)) {
+        if (OH_AVMuxer_AddTrack(muxer, &muxerAudioTrack, outAudioFmt) !=
+                AV_ERR_OK ||
+            muxerAudioTrack < 0) {
+          // audio 注册失败时降级为"无 audio"：把 audio track id 标 -1，
+          // 后续 AppendDemuxerToMuxer 不会再写 audio
+          muxerAudioTrack = -1;
+        }
+      } else {
+        // format 创建/复制失败也降级
+        muxerAudioTrack = -1;
+      }
+      SafeDestroyFormat(audioFmt);
+    } else {
+      muxerAudioTrack = -1;
+    }
+  }
+  // outAudioFmt 不管成功与否，最终在 Stop/Destroy 前都会被 free；现在保留指针
+  // 以便收尾路径统一释放
+
   if (OH_AVMuxer_Start(muxer) != AV_ERR_OK) {
+    SafeDestroyFormat(outAudioFmt);
     TearDownMuxer(muxer, outFd);
     unlink(outputPath.c_str());
     TearDownSource(firstSource, firstDemuxer, firstFd);
     return false;
   }
 
-  // 把第一个文件追加进去
+  // 把第一个文件追加进去。
+  // video / audio 各自维护单调游标，避免 audio 起点被 video 终点顶飞。
   int64_t timeOffsetUs = 0;
-  int64_t lastOutputTimeUs = -1;
-  if (!AppendDemuxerToMuxer(firstDemuxer, muxer, firstVideoTrack, muxerTrack,
-                             timeOffsetUs, lastOutputTimeUs)) {
+  int64_t lastVideoPtsUs = -1;
+  int64_t lastAudioPtsUs = -1;
+  if (!AppendDemuxerToMuxer(firstDemuxer, muxer, firstVideoTrack, muxerVideoTrack,
+                            firstAudioTrack, muxerAudioTrack, timeOffsetUs,
+                            lastVideoPtsUs, lastAudioPtsUs)) {
+    SafeDestroyFormat(outAudioFmt);
     TearDownMuxer(muxer, outFd);
     unlink(outputPath.c_str());
     TearDownSource(firstSource, firstDemuxer, firstFd);
     return false;
   }
-  // 累计偏移到下一段起点
-  timeOffsetUs = lastOutputTimeUs + 1;
+  // 下一段起点：取两轨里更靠后的那个，保证两轨都不会与下一段重叠
+  timeOffsetUs =
+      (lastVideoPtsUs > lastAudioPtsUs ? lastVideoPtsUs : lastAudioPtsUs) + 1;
 
   // 追加剩余文件
   for (size_t i = 1; i < inputPaths.size(); i++) {
@@ -353,26 +428,34 @@ bool ConcatMp4Files(const std::string &outputPath,
     OH_AVSource *src = nullptr;
     OH_AVDemuxer *dem = nullptr;
     int32_t vt = -1;
-    if (!OpenInput(inputPaths[i], fd, src, dem, vt)) {
+    int32_t at = -1;
+    if (!OpenInput(inputPaths[i], fd, src, dem, vt, at)) {
+      SafeDestroyFormat(outAudioFmt);
       TearDownMuxer(muxer, outFd);
       unlink(outputPath.c_str());
       TearDownSource(firstSource, firstDemuxer, firstFd);
       return false;
     }
-    if (!AppendDemuxerToMuxer(dem, muxer, vt, muxerTrack,
-                               timeOffsetUs, lastOutputTimeUs)) {
+    // 后续文件没 audio 时，只写 video；muxer 仍按 video 节奏拼
+    int32_t useSourceAudio = (muxerAudioTrack >= 0 && at >= 0) ? at : -1;
+    if (!AppendDemuxerToMuxer(dem, muxer, vt, muxerVideoTrack,
+                              useSourceAudio, muxerAudioTrack, timeOffsetUs,
+                              lastVideoPtsUs, lastAudioPtsUs)) {
       TearDownSource(src, dem, fd);
+      SafeDestroyFormat(outAudioFmt);
       TearDownMuxer(muxer, outFd);
       unlink(outputPath.c_str());
       TearDownSource(firstSource, firstDemuxer, firstFd);
       return false;
     }
-    timeOffsetUs = lastOutputTimeUs + 1;
+    timeOffsetUs =
+        (lastVideoPtsUs > lastAudioPtsUs ? lastVideoPtsUs : lastAudioPtsUs) + 1;
     TearDownSource(src, dem, fd);
   }
 
   // 收尾
   bool stopOk = (OH_AVMuxer_Stop(muxer) == AV_ERR_OK);
+  SafeDestroyFormat(outAudioFmt);
   TearDownMuxer(muxer, outFd);
   TearDownSource(firstSource, firstDemuxer, firstFd);
   if (!stopOk) {
