@@ -8,6 +8,7 @@
     "pages/StoryboardViewerPage",
     "pages/StoryboardImagePage",
     "pages/VideoViewerPage",
-    "pages/FinalVideoPage"
+    "pages/FinalVideoPage",
+    "pages/CharacterListPage"
   ]
 }

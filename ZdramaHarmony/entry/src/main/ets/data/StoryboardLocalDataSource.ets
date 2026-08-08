@@ -9,7 +9,7 @@ const TABLE = 'storyboards';
 const COLUMNS = [
   'id', 'project_id', 'episode_id', 'shot_number', 'scene',
   'action', 'dialogue', 'camera', 'image_prompt', 'video_prompt',
-  'duration_seconds', 'image_status', 'image_url', 'image_local_path',
+  'duration_seconds', 'character_ids', 'image_status', 'image_url', 'image_local_path',
   'image_error_message', 'video_status', 'video_task_id', 'video_url',
   'video_local_path', 'video_error_message', 'created_at', 'updated_at'
 ];
@@ -46,6 +46,7 @@ function mapRow(rs: relationalStore.ResultSet): StoryboardShot {
     imagePrompt: rs.getString(rs.getColumnIndex('image_prompt')),
     videoPrompt: rs.getString(rs.getColumnIndex('video_prompt')),
     durationSeconds: rs.getLong(rs.getColumnIndex('duration_seconds')),
+    characterIds: nullableString(rs, 'character_ids'),
     imageStatus: assetStatusFrom(rs.getString(rs.getColumnIndex('image_status'))),
     imageUrl: nullableString(rs, 'image_url'),
     imageLocalPath: nullableString(rs, 'image_local_path'),
@@ -84,6 +85,7 @@ export class StoryboardLocalDataSource {
         'image_prompt': shot.imagePrompt,
         'video_prompt': shot.videoPrompt,
         'duration_seconds': shot.durationSeconds,
+        'character_ids': shot.characterIds,
         'image_status': shot.imageStatus,
         'image_url': shot.imageUrl,
         'image_local_path': shot.imageLocalPath,

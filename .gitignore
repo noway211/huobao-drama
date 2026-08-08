@@ -56,3 +56,6 @@ captures/
 *.ap_
 *.aab
 *.iml
+.clang-tidy
+.clangd
+**/.claude

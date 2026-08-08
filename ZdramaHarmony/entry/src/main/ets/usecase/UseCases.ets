@@ -1,5 +1,6 @@
 import { DramaRepository } from '../data/DramaRepository';
 import { AgnesTextRepository, TextResult } from '../remote/AgnesTextRepository';
+import { ChatResponseTextExtractor, ChatResponse } from '../remote/ChatResponseTextExtractor';
 import { AgnesStoryboardRepository } from '../remote/AgnesStoryboardRepository';
 import { AgnesImageRepository } from '../remote/AgnesImageRepository';
 import { AgnesVideoRepository } from '../remote/AgnesVideoRepository';
@@ -13,6 +14,7 @@ import {
   CreateDramaInput,
   DramaProject,
   Episode,
+  Character,
   StoryboardShot,
   ProjectStatus,
   GenerationStage,
@@ -24,6 +26,12 @@ const DOMAIN = 0x0001;
 const TAG = 'UseCases';
 
 type GenerationProgressCallback = (current: number, total: number, shotNumber: number, phase: string) => void;
+
+// 角色参考信息（buildCharacterReferences 返回值）
+interface CharacterRefInfo {
+  referenceUrls: string[];
+  characterText: string;
+}
 
 /**
  * 移植 com.huobao.zdrama.domain.usecase.* 的 MVP 子集。
@@ -96,6 +104,11 @@ export class UseCases {
     return UseCases.repo.getStoryboards(projectId);
   }
 
+  // 获取项目的所有角色
+  static getCharacters(projectId: number): Promise<Character[]> {
+    return UseCases.repo.getCharacters(projectId);
+  }
+
   // 删除指定项目
   static deleteProject(projectId: number): Promise<boolean> {
     return UseCases.repo.deleteProject(projectId);
@@ -114,6 +127,11 @@ export class UseCases {
   /** 更新单个分镜的视频提示词。 */
   static async updateShotVideoPrompt(shotId: number, newPrompt: string): Promise<void> {
     return UseCases.repo.updateShotVideoPrompt(shotId, newPrompt);
+  }
+
+  /** 更新单个角色的外貌提示词（即图片生成 prompt）。 */
+  static async updateCharacterAppearance(characterId: number, appearance: string): Promise<void> {
+    return UseCases.repo.updateCharacterAppearance(characterId, appearance);
   }
 
   /** 自动替换触发内容审查的敏感词（临时修复）。对 imagePrompt 和 videoPrompt 均生效。 */
@@ -288,12 +306,23 @@ export class UseCases {
 
       hilog.info(DOMAIN, TAG, 'generate image for shot %{public}d: prompt=%{public}s', shot.shotNumber, shot.imagePrompt);
 
+      // 收集角色参考图并增强 prompt
+      const charRef: CharacterRefInfo = await UseCases.buildCharacterReferences(projectId, shot);
+      const enrichedPrompt = charRef.characterText.length > 0
+        ? `${charRef.characterText}${shot.imagePrompt}`
+        : shot.imagePrompt;
+
+      hilog.info(DOMAIN, TAG, 'generate image for shot %{public}d: prompt=%{public}s refs=%{public}d',
+        shot.shotNumber, enrichedPrompt, charRef.referenceUrls.length);
+
       // 标记为处理中
       await UseCases.repo.updateShotImage(
         shot.id, AssetStatus.PROCESSING, shot.imageUrl, shot.imageLocalPath, null);
 
       onProgress?.(current, shots.length, shot.shotNumber, '生成图片');
-      const imageResult = await UseCases.image.generateImage(settings, shot);
+      const imageResult = await UseCases.image.generateImage(
+        settings, enrichedPrompt,
+        charRef.referenceUrls.length > 0 ? charRef.referenceUrls : undefined);
       if (imageResult.ok) {
         hilog.info(DOMAIN, TAG, 'image API OK for shot %{public}d, url=%{public}s', shot.shotNumber, imageResult.value);
         const imageUrl = imageResult.value;
@@ -329,6 +358,10 @@ export class UseCases {
       projectId, finalStatus, GenerationStage.IMAGE, project.generatedScript,
       firstError.length > 0 ? firstError : null);
 
+    if (completed === shots.length) {
+      // 全部成功（含已存在跳过）即视为成功
+      return { ok: true, value: `${generated}`, error: '' };
+    }
     if (generated > 0) {
       return { ok: true, value: `${generated}`, error: '' };
     }
@@ -430,10 +463,407 @@ export class UseCases {
       projectId, finalStatus, GenerationStage.VIDEO, project.generatedScript,
       firstError.length > 0 ? firstError : null);
 
+    if (completed === shots.length) {
+      // 全部成功（含已存在跳过）即视为成功
+      return { ok: true, value: `${generated}`, error: '' };
+    }
     if (generated > 0) {
       return { ok: true, value: `${generated}`, error: '' };
     }
     return { ok: false, value: '', error: firstError.length > 0 ? firstError : '视频生成失败' };
+  }
+
+  /** ExtractCharactersUseCase：从剧本文本中提取角色信息。参照 Web 版 extractor agent 流程。 */
+  static async extractCharacters(projectId: number, settings: AgnesSettings): Promise<TextResult> {
+    const project = await UseCases.repo.getProject(projectId);
+    if (!project) {
+      return { ok: false, value: '', error: 'Project not found' };
+    }
+
+    const episode = await UseCases.repo.getEpisodeForProject(projectId);
+    const script = episode?.scriptContent ?? project.generatedScript;
+    if (!script || script.trim().length === 0) {
+      return { ok: false, value: '', error: '请先创作或改写脚本' };
+    }
+
+    // 读取已有角色，传给 LLM 做去重参考
+    const existingChars = await UseCases.repo.getCharacters(projectId);
+    let existingHint = '';
+    if (existingChars.length > 0) {
+      const names = existingChars.map(c => c.name).join('、');
+      existingHint = `\n\n项目中已存在角色：${names}。若剧本中同名角色已存在，请合并更新其信息（保留已有角色 id，用 existing_id 字段标记）；若为新角色则创建。`;
+    }
+
+    const systemPrompt = `你是制片助理，擅长从剧本中提取角色信息。
+
+提取规范：
+- 姓名：角色全名
+- 角色定位：主角/配角/龙套
+- 外貌描写：性别、年龄、体型、面部特征、发型、着装（50-100字）
+- 性格特点：核心性格标签
+- 角色描述：背景故事和关系
+
+提取要求：
+- 提取剧本中所有出场角色，不要遗漏任何有台词或重要动作的角色
+- 角色要包含完整的外貌特征描述
+- 只提取当前剧本真实出现的角色`;
+
+    const userPrompt = `请从以下剧本中提取所有角色信息，返回 JSON 数组。
+每个条目包含：name（角色名）、role（主角/配角/龙套）、description（角色描述）、appearance（外貌特征，用于生成角色立绘）、personality（性格特征）。
+${existingChars.length > 0 ? '若角色已存在（名字匹配），请在条目中加 existing_id 字段标记已有角色的 id。' : ''}
+只返回 JSON 数组。
+
+剧本：
+${script}${existingHint}`;
+
+    const raw = await UseCases.text.postChat(settings, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ], 0.3, 4000);
+    if (!raw.ok) {
+      return { ok: false, value: '', error: raw.error };
+    }
+
+    // 解析 ChatCompletion 响应，提取 content 文本
+    let parsed: ChatResponse;
+    try {
+      parsed = JSON.parse(raw.value) as ChatResponse;
+    } catch (e) {
+      return { ok: false, value: '', error: '无法解析响应 JSON' };
+    }
+    const contentText = ChatResponseTextExtractor.extractFinalContent(parsed);
+    if (contentText.trim().length === 0) {
+      return { ok: false, value: '', error: 'Agnes 未返回角色信息' };
+    }
+
+    // 解析 JSON 数组
+    let jsonStr = contentText.trim();
+    if (!jsonStr.startsWith('[')) {
+      const start = jsonStr.indexOf('[');
+      const end = jsonStr.lastIndexOf(']');
+      if (start >= 0 && end > start) {
+        jsonStr = jsonStr.substring(start, end + 1);
+      }
+    }
+    let items: Record<string, Object>[];
+    try {
+      items = JSON.parse(jsonStr) as Record<string, Object>[];
+      if (!Array.isArray(items)) {
+        return { ok: false, value: '', error: '角色提取结果格式错误' };
+      }
+    } catch (e) {
+      return { ok: false, value: '', error: '无法解析角色提取结果' };
+    }
+
+    const now = Date.now();
+    const characters: Character[] = [];
+
+    // 先构建已有角色名→ID 的映射，用于去重合并
+    const nameToExisting = new Map<string, Character>();
+    for (const ch of existingChars) {
+      nameToExisting.set(ch.name, ch);
+    }
+
+    for (const item of items) {
+      const name = (typeof item['name'] === 'string' ? item['name'] : '') || '';
+      if (name.length === 0) {
+        continue;
+      }
+      const role = (typeof item['role'] === 'string' ? item['role'] : '') || '';
+      const description = (typeof item['description'] === 'string' ? item['description'] : '') || '';
+      const appearance = (typeof item['appearance'] === 'string' ? item['appearance'] : '') || '';
+      const personality = (typeof item['personality'] === 'string' ? item['personality'] : '') || '';
+
+      // 去重合并：同名角色保留已有 image 信息，更新文字描述（新数据优先，已有数据兜底）
+      const existing = nameToExisting.get(name);
+      characters.push({
+        id: existing ? existing.id : 0,
+        projectId: projectId,
+        episodeId: episode?.id ?? null,
+        name: name,
+        role: role || (existing ? existing.role : ''),
+        description: description || (existing ? existing.description : ''),
+        appearance: appearance || (existing ? existing.appearance : ''),
+        personality: personality || (existing ? existing.personality : ''),
+        imageStatus: existing ? existing.imageStatus : AssetStatus.PENDING,
+        imageUrl: existing ? existing.imageUrl : null,
+        imageLocalPath: existing ? existing.imageLocalPath : null,
+        imageErrorMessage: existing ? existing.imageErrorMessage : null,
+        createdAt: existing ? existing.createdAt : now,
+        updatedAt: now
+      });
+    }
+    if (characters.length === 0) {
+      return { ok: false, value: '', error: '未从剧本中提取到角色' };
+    }
+
+    await UseCases.repo.replaceCharacters(projectId, characters);
+    hilog.info(DOMAIN, TAG, 'extractCharacters: project=%{public}d count=%{public}d', projectId, characters.length);
+    return { ok: true, value: `${characters.length}`, error: '' };
+  }
+
+  /** GenerateCharacterImagesUseCase：为每个角色生成立绘图片。 */
+  static async generateCharacterImages(
+    projectId: number,
+    settings: AgnesSettings,
+    onProgress?: GenerationProgressCallback
+  ): Promise<TextResult> {
+    const project = await UseCases.repo.getProject(projectId);
+    if (!project) {
+      return { ok: false, value: '', error: 'Project not found' };
+    }
+
+    const characters = await UseCases.repo.getCharacters(projectId);
+    if (characters.length === 0) {
+      return { ok: false, value: '', error: '请先提取角色' };
+    }
+
+    hilog.info(DOMAIN, TAG, 'generateCharacterImages start: project=%{public}d characters=%{public}d', projectId, characters.length);
+
+    let completed = 0;
+    let generated = 0;
+    let firstError = '';
+    let current = 0;
+
+    for (const ch of characters) {
+      current++;
+      onProgress?.(current, characters.length, current, '检查角色图');
+
+      if (ch.imageStatus === AssetStatus.COMPLETED && UseCases.hasNonEmptyLocalFile(ch.imageLocalPath)) {
+        hilog.info(DOMAIN, TAG, 'character %{public}s image already completed, skip', ch.name);
+        completed++;
+        continue;
+      }
+
+      await UseCases.repo.updateCharacterImage(
+        ch.id, AssetStatus.PROCESSING, ch.imageUrl, ch.imageLocalPath, null);
+
+      const prompt = `${ch.name}, ${ch.appearance || ch.description || '人物立绘'}, 高质量, 正面`;
+      onProgress?.(current, characters.length, current, '生成角色图');
+      const imageResult = await UseCases.image.generateImage(settings, prompt);
+      if (imageResult.ok) {
+        const charImageUrl = imageResult.value;
+        onProgress?.(current, characters.length, current, '下载角色图');
+        const downloadResult = await UseCases.mediaDownload.downloadCharImage(projectId, ch.id, charImageUrl);
+        if (downloadResult.ok) {
+          completed++;
+          generated++;
+          await UseCases.repo.updateCharacterImage(
+            ch.id, AssetStatus.COMPLETED, charImageUrl, downloadResult.value, null);
+        } else {
+          if (firstError.length === 0) firstError = downloadResult.error;
+          await UseCases.repo.updateCharacterImage(
+            ch.id, AssetStatus.FAILED, charImageUrl, ch.imageLocalPath, downloadResult.error);
+        }
+      } else {
+        if (firstError.length === 0) firstError = imageResult.error;
+        await UseCases.repo.updateCharacterImage(
+          ch.id, AssetStatus.FAILED, ch.imageUrl, ch.imageLocalPath, imageResult.error);
+      }
+    }
+
+    hilog.info(DOMAIN, TAG, 'generateCharacterImages done: ok=%{public}d/%{public}d', completed, characters.length);
+    if (completed === characters.length) {
+      // 全部成功（含已存在跳过）即视为成功
+      return { ok: true, value: `${generated}`, error: '' };
+    }
+    if (generated > 0) {
+      return { ok: true, value: `${generated}`, error: '' };
+    }
+    return { ok: false, value: '', error: firstError.length > 0 ? firstError : '角色图生成失败' };
+  }
+
+  /** 为单个角色生成图片。从 generateCharacterImages 循环体中提取复用逻辑。 */
+  static async generateSingleCharacterImage(
+    projectId: number,
+    characterId: number,
+    settings: AgnesSettings
+  ): Promise<TextResult> {
+    const characters = await UseCases.repo.getCharacters(projectId);
+    const ch = characters.find(c => c.id === characterId);
+    if (!ch) {
+      return { ok: false, value: '', error: '角色不存在' };
+    }
+
+    // 跳过已完成且有本地文件的
+    if (ch.imageStatus === AssetStatus.COMPLETED && UseCases.hasNonEmptyLocalFile(ch.imageLocalPath)) {
+      hilog.info(DOMAIN, TAG, 'character %{public}s image already completed, skip', ch.name);
+      return { ok: true, value: '已存在', error: '' };
+    }
+
+    await UseCases.repo.updateCharacterImage(
+      ch.id, AssetStatus.PROCESSING, ch.imageUrl, ch.imageLocalPath, null);
+
+    const prompt = `${ch.name}, ${ch.appearance || ch.description || '人物立绘'}, 高质量, 正面`;
+    const imageResult = await UseCases.image.generateImage(settings, prompt);
+    if (imageResult.ok) {
+      const charImageUrl = imageResult.value;
+      const downloadResult = await UseCases.mediaDownload.downloadCharImage(projectId, ch.id, charImageUrl);
+      if (downloadResult.ok) {
+        await UseCases.repo.updateCharacterImage(
+          ch.id, AssetStatus.COMPLETED, charImageUrl, downloadResult.value, null);
+        return { ok: true, value: downloadResult.value, error: '' };
+      } else {
+        await UseCases.repo.updateCharacterImage(
+          ch.id, AssetStatus.FAILED, charImageUrl, ch.imageLocalPath, downloadResult.error);
+        return { ok: false, value: '', error: downloadResult.error };
+      }
+    } else {
+      await UseCases.repo.updateCharacterImage(
+        ch.id, AssetStatus.FAILED, ch.imageUrl, ch.imageLocalPath, imageResult.error);
+      return { ok: false, value: '', error: imageResult.error };
+    }
+  }
+
+  /**
+   * 分镜图片生成时注入角色参考图。对于每个分镜，如果绑定了角色，则收集角色的已生成图片
+   * 作为参考图，并增强 prompt 追加角色外貌描述。
+   *
+   * characterIds 可能是数字 ID 数组（remap 后）也可能是角色名字符串数组（LLM 直接返回），
+   * 本方法对两种格式都做兼容处理。
+   */
+  private static async buildCharacterReferences(
+    projectId: number,
+    shot: StoryboardShot
+  ): Promise<CharacterRefInfo> {
+    const refs: string[] = [];
+    const charDescs: string[] = [];
+
+    // 尝试解析为数字 ID 数组
+    let ids = UseCases.parseCharacterIds(shot.characterIds);
+
+    // 如果解析出的全是数字，直接用 ID 匹配
+    const allCharacters = await UseCases.repo.getCharacters(projectId);
+    if (ids.length > 0 && allCharacters.length > 0) {
+      const charMap = new Map<number, Character>();
+      for (const ch of allCharacters) {
+        charMap.set(ch.id, ch);
+      }
+      for (const cid of ids) {
+        if (refs.length >= 3) break;
+        const ch = charMap.get(cid);
+        if (!ch) continue;
+        const refUrl = (ch.imageLocalPath && UseCases.hasNonEmptyLocalFile(ch.imageLocalPath))
+          ? ch.imageLocalPath : (ch.imageUrl ?? undefined);
+        if (refUrl && refUrl.trim().length > 0) {
+          refs.push(refUrl);
+        }
+        if (ch.appearance && ch.appearance.trim().length > 0) {
+          charDescs.push(`${ch.name}：${ch.appearance}`);
+        }
+      }
+      if (refs.length > 0) {
+        const charText = charDescs.length > 0 ? charDescs.join('。') + '。\n' : '';
+        const result: CharacterRefInfo = { referenceUrls: refs, characterText: charText };
+        return result;
+      }
+    }
+
+    // fallback：按角色名字符串匹配（LLM 返回的 character_names）
+    let names: string[] = [];
+    try {
+      const arr: Object = JSON.parse(shot.characterIds ?? '[]');
+      if (Array.isArray(arr)) {
+        const filtered: string[] = [];
+        for (let fi = 0; fi < arr.length; fi++) {
+          if (typeof arr[fi] === 'string') {
+            filtered.push(arr[fi] as string);
+          }
+        }
+        names = filtered;
+      }
+    } catch (_e) { /* ignore */ }
+
+    if (names.length > 0 && allCharacters.length > 0) {
+      const nameToChar = new Map<string, Character>();
+      for (const ch of allCharacters) {
+        nameToChar.set(ch.name, ch);
+      }
+      for (const name of names) {
+        if (refs.length >= 3) break;
+        const ch = nameToChar.get(name);
+        if (!ch) continue;
+        const refUrl = (ch.imageLocalPath && UseCases.hasNonEmptyLocalFile(ch.imageLocalPath))
+          ? ch.imageLocalPath : (ch.imageUrl ?? undefined);
+        if (refUrl && refUrl.trim().length > 0) {
+          refs.push(refUrl);
+        }
+        if (ch.appearance && ch.appearance.trim().length > 0) {
+          charDescs.push(`${ch.name}：${ch.appearance}`);
+        }
+      }
+    }
+
+    const charText = charDescs.length > 0 ? charDescs.join('。') + '。\n' : '';
+    const result: CharacterRefInfo = { referenceUrls: refs, characterText: charText };
+    return result;
+  }
+
+  // 将 characterIds JSON 字符串解析为 number 数组
+  private static parseCharacterIds(ids: string | null | undefined): number[] {
+    if (!ids || ids.trim().length === 0) {
+      return [];
+    }
+    try {
+      const arr: Object = JSON.parse(ids);
+      if (Array.isArray(arr)) {
+        // 兼容字符名数组（LLM 返回 character_names 字符串数组）和数字 ID 数组
+        const filtered: number[] = [];
+        for (let fi = 0; fi < arr.length; fi++) {
+          if (typeof arr[fi] === 'number') {
+            filtered.push(arr[fi] as number);
+          }
+        }
+        return filtered;
+      }
+      return [];
+    } catch (_e) {
+      return [];
+    }
+  }
+
+  /** 角色名字匹配到数据库 ID，供分镜生成后调用。 */
+  static async remapCharacterNamesToIds(projectId: number): Promise<void> {
+    const shots = await UseCases.repo.getStoryboards(projectId);
+    const characters = await UseCases.repo.getCharacters(projectId);
+    const nameToId = new Map<string, number>();
+    for (const ch of characters) {
+      nameToId.set(ch.name, ch.id);
+    }
+
+    for (const shot of shots) {
+      const ids = UseCases.parseCharacterIds(shot.characterIds);
+      if (ids.length > 0) {
+        continue; // already remapped
+      }
+      let raw: string[] = [];
+      try {
+        const arr: Object = JSON.parse(shot.characterIds ?? '[]');
+        if (Array.isArray(arr)) {
+          const filtered: string[] = [];
+          for (let fi = 0; fi < arr.length; fi++) {
+            if (typeof arr[fi] === 'string') {
+              filtered.push(arr[fi] as string);
+            }
+          }
+          raw = filtered;
+        }
+      } catch (_e) {
+        continue;
+      }
+      const mapped: number[] = [];
+      for (const name of raw) {
+        const cid = nameToId.get(name);
+        if (cid !== undefined) {
+          mapped.push(cid);
+        }
+      }
+      // 暂不更新数据库，仅记录日志；后续可在 refresh 时一并更新
+      if (mapped.length > 0) {
+        hilog.info(DOMAIN, TAG, 'remapped shot %{public}d character names to ids: %{public}s',
+          shot.shotNumber, JSON.stringify(mapped));
+      }
+    }
   }
 
   /** ComposeFinalVideoUseCase：将全部分镜视频合成为一个成片 MP4。 */

@@ -152,6 +152,116 @@ export class MediaDownloadRepository {
     }
   }
 
+  /**
+   * 下载角色图片到本地目录。
+   * 格式：{filesDir}/generated/{projectId}/char_{characterId}_image.{ext}
+   */
+  async downloadCharImage(
+    projectId: number,
+    characterId: number,
+    url: string
+  ): Promise<DownloadResult> {
+    if (url.trim().length === 0) {
+      return fail('下载 URL 为空');
+    }
+
+    let ext = 'jpg';
+    const extFromUrl = this.extensionFromUrl(url);
+    if (extFromUrl.length > 0) {
+      ext = extFromUrl;
+    }
+
+    const filesDir = AppContext.get().filesDir;
+    const targetDirStr = `${filesDir}/generated/${projectId}`;
+    const targetFileStr = `${targetDirStr}/char_${characterId}_image.${ext}`;
+
+    try {
+      fileIo.mkdirSync(targetDirStr, true);
+    } catch (_ignore) {
+      // 目录可能已存在，忽略
+    }
+
+    const request = http.createHttp();
+    const startedAt = Date.now();
+    try {
+      const response = await request.request(url, {
+        method: http.RequestMethod.GET,
+        expectDataType: http.HttpDataType.ARRAY_BUFFER
+      });
+
+      const responseCode = response.responseCode;
+      const logEntry: ApiLogEntry = {
+        timestamp: startedAt,
+        method: 'GET',
+        url: url,
+        statusCode: responseCode,
+        durationMs: Date.now() - startedAt,
+        requestBody: `download char image -> project=${projectId} char=${characterId}`,
+        responseBody: '',
+        errorMessage: null
+      };
+      ApiLogStore.add(logEntry);
+
+      if (responseCode < 200 || responseCode >= 300) {
+        return fail(`下载失败：HTTP ${responseCode}`);
+      }
+
+      if (!(response.result instanceof ArrayBuffer)) {
+        const msg = `下载响应不是二进制数据：${typeof response.result}`;
+        hilog.error(DOMAIN, TAG, '%{public}s', msg);
+        return fail(msg);
+      }
+
+      const bytes = new Uint8Array(response.result);
+      if (!this.looksLikeMedia(bytes, MediaType.IMAGE)) {
+        const msg = '下载文件格式异常：IMAGE';
+        hilog.error(DOMAIN, TAG, '%{public}s', msg);
+        return fail(msg);
+      }
+
+      let file: fileIo.File | null = null;
+      try {
+        file = fileIo.openSync(targetFileStr, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
+        const buf = response.result as ArrayBuffer;
+        fileIo.writeSync(file.fd, buf);
+      } catch (writeErr) {
+        const msg = `写入文件失败：${(writeErr as BusinessError).message}`;
+        hilog.error(DOMAIN, TAG, '%{public}s', msg);
+        return fail(msg);
+      } finally {
+        if (file) {
+          fileIo.closeSync(file);
+        }
+      }
+
+      const stat = fileIo.statSync(targetFileStr);
+      if (stat.size <= 0) {
+        const msg = `下载文件为空：${targetFileStr}`;
+        hilog.error(DOMAIN, TAG, '%{public}s', msg);
+        return fail(msg);
+      }
+      return ok(targetFileStr);
+    } catch (err) {
+      const bizErr = err as BusinessError;
+      const msg = `${bizErr.code}: ${bizErr.message}`;
+      hilog.error(DOMAIN, TAG, 'download failed: %{public}s', msg);
+      const logEntry: ApiLogEntry = {
+        timestamp: startedAt,
+        method: 'GET',
+        url: url,
+        statusCode: -1,
+        durationMs: Date.now() - startedAt,
+        requestBody: '',
+        responseBody: '',
+        errorMessage: msg
+      };
+      ApiLogStore.add(logEntry);
+      return fail(msg);
+    } finally {
+      request.destroy();
+    }
+  }
+
   // 基于文件头做轻量媒体格式校验，避免把空响应或 JSON/HTML 错误页保存为媒体文件。
   private looksLikeMedia(bytes: Uint8Array, mediaType: MediaType): boolean {
     if (bytes.length === 0) {

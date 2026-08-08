@@ -1,7 +1,7 @@
 import { router, promptAction } from '@kit.ArkUI';
 import { UseCases } from '../usecase/UseCases';
 import { SettingsStore } from '../data/SettingsStore';
-import { DramaProject, Episode, AssetStatus } from '../model/DramaModels';
+import { DramaProject, Episode, Character, AssetStatus } from '../model/DramaModels';
 import { Theme, statusLabel, stageLabel } from '../common/Theme';
 
 interface DetailParams {
@@ -17,6 +17,9 @@ struct ProjectDetailPage {
   @State busyLabel: string = '';
   @State promptExpanded: boolean = false;
   @State hasStoryboards: boolean = false;
+  @State characters: Character[] = [];
+  @State hasCharacters: boolean = false;
+  @State hasCharacterImages: boolean = false;
   @State hasImages: boolean = false;
   @State hasVideos: boolean = false;
   @State hasFinalVideo: boolean = false;
@@ -41,6 +44,9 @@ struct ProjectDetailPage {
     this.episode = await UseCases.getEpisode(this.projectId);
     const storyboards = await UseCases.getStoryboards(this.projectId);
     this.hasStoryboards = storyboards.length > 0;
+    this.characters = await UseCases.getCharacters(this.projectId);
+    this.hasCharacters = this.characters.length > 0;
+    this.hasCharacterImages = this.characters.some(c => c.imageStatus === AssetStatus.COMPLETED);
     this.hasImages = storyboards.some(s => s.imageStatus === AssetStatus.COMPLETED);
     this.hasVideos = storyboards.some(s => s.videoStatus === AssetStatus.COMPLETED);
     this.hasFinalVideo = this.project?.finalVideoStatus === AssetStatus.COMPLETED &&
@@ -170,7 +176,82 @@ struct ProjectDetailPage {
     await this.reload();
   }
 
-  // 点击”生成分镜”：校验 Key，有已有分镜时确认后生成
+  // 点击”查看脚本”：跳转到脚本查看页面
+  onViewScriptClick() {
+    if (!this.hasScript()) {
+      promptAction.showToast({ message: '暂无脚本' });
+      return;
+    }
+    router.pushUrl({ url: 'pages/ScriptViewerPage', params: { projectId: this.projectId } });
+  }
+
+  // 执行角色提取：从剧本中提取角色信息
+  async doExtractCharacters(): Promise<void> {
+    this.busy = true;
+    this.busyLabel = '提取角色中…';
+    const settings = await SettingsStore.load();
+    const result = await UseCases.extractCharacters(this.projectId, settings);
+    this.busy = false;
+    promptAction.showToast({ message: result.ok ? `已提取 ${result.value} 个角色` : `失败：${result.error}` });
+    await this.reload();
+  }
+
+  // 点击”提取角色”
+  onExtractCharactersClick() {
+    this.runWithGuard(async () => {
+      if (this.hasCharacters) {
+        const r = await promptAction.showDialog({
+          title: '重新提取？',
+          message: '当前已有角色，重新提取会覆盖现有内容。是否继续？',
+          buttons: [
+            { text: '取消', color: Theme.textSecondary },
+            { text: '继续提取', color: Theme.primary }
+          ]
+        });
+        if (r.index === 1) {
+          this.doExtractCharacters();
+        }
+      } else {
+        this.doExtractCharacters();
+      }
+    });
+  }
+
+  // 执行角色图生成
+  async doGenerateCharacterImages(): Promise<void> {
+    this.busy = true;
+    this.busyLabel = '生成角色图中…';
+    const settings = await SettingsStore.load();
+    const result = await UseCases.generateCharacterImages(this.projectId, settings, (current, total, shotNumber, phase) => {
+      this.busyLabel = `${phase} ${current}/${total}`;
+    });
+    this.busy = false;
+    promptAction.showToast({ message: result.ok ? '角色图已生成' : `失败：${result.error}` });
+    await this.reload();
+  }
+
+  // 点击”生成角色图”
+  onGenerateCharacterImagesClick() {
+    this.runWithGuard(async () => {
+      if (this.hasCharacterImages) {
+        const r = await promptAction.showDialog({
+          title: '重新生成？',
+          message: '当前已有角色图，重新生成会覆盖现有内容。是否继续？',
+          buttons: [
+            { text: '取消', color: Theme.textSecondary },
+            { text: '继续生成', color: Theme.primary }
+          ]
+        });
+        if (r.index === 1) {
+          this.doGenerateCharacterImages();
+        }
+      } else {
+        this.doGenerateCharacterImages();
+      }
+    });
+  }
+
+  // 点击“生成分镜”：校验 Key，有已有分镜时确认后生成
   onGenerateStoryboardClick() {
     this.runWithGuard(async () => {
       if (this.hasStoryboards) {
@@ -464,6 +545,55 @@ struct ProjectDetailPage {
               .opacity(this.hasScript() ? 1 : 0.5)
               .onClick(() => {
                 router.pushUrl({ url: 'pages/ScriptViewerPage', params: { projectId: this.projectId } });
+              })
+              .margin({ bottom: 10 })
+
+            // Character operation buttons（放在分镜前面）
+            Row() {
+              Button(this.busy ? this.busyLabel : '提取角色')
+                .layoutWeight(1)
+                .height(46)
+                .fontSize(14)
+                .fontColor(Color.White)
+                .backgroundColor(this.busy ? Theme.primaryDisabled : Theme.primary)
+                .borderRadius(10)
+                .enabled(!this.busy)
+                .onClick(() => this.onExtractCharactersClick())
+              Button('生成角色图')
+                .layoutWeight(1)
+                .height(46)
+                .fontSize(14)
+                .fontColor(Color.White)
+                .backgroundColor(this.busy ? Theme.primaryDisabled : Theme.primary)
+                .borderRadius(10)
+                .enabled(!this.busy && this.hasCharacters)
+                .margin({ left: 10 })
+                .onClick(() => this.onGenerateCharacterImagesClick())
+            }
+            .width('100%')
+            .margin({ bottom: 10 })
+
+            // Character count display
+            if (this.characters.length > 0) {
+              Text(`已提取 ${this.characters.length} 个角色`)
+                .fontSize(14)
+                .fontColor(Theme.textSecondary)
+                .width('100%')
+                .margin({ bottom: 10 })
+            }
+
+            // View Characters button
+            Button('查看角色')
+              .width('100%')
+              .height(46)
+              .fontSize(14)
+              .fontColor(Theme.textPrimary)
+              .backgroundColor(Theme.surfaceAlt)
+              .borderRadius(10)
+              .enabled(this.hasCharacters)
+              .opacity(this.hasCharacters ? 1 : 0.5)
+              .onClick(() => {
+                router.pushUrl({ url: 'pages/CharacterListPage', params: { projectId: this.projectId } });
               })
               .margin({ bottom: 10 })
 

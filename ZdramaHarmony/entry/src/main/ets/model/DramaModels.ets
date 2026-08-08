@@ -127,6 +127,24 @@ export interface Episode {
   updatedAt: number;
 }
 
+// 角色实体，对应 characters 表中的一条记录
+export interface Character {
+  id: number;
+  projectId: number;
+  episodeId: number | null;
+  name: string;
+  role: string;
+  description: string;
+  appearance: string;
+  personality: string;
+  imageStatus: AssetStatus;
+  imageUrl: string | null;
+  imageLocalPath: string | null;
+  imageErrorMessage: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
 // 分镜镜头实体，对应 storyboards 表中的一条记录
 export interface StoryboardShot {
   id: number;
@@ -140,6 +158,7 @@ export interface StoryboardShot {
   imagePrompt: string;
   videoPrompt: string;
   durationSeconds: number;
+  characterIds: string | null;
   imageStatus: AssetStatus;
   imageUrl: string | null;
   imageLocalPath: string | null;

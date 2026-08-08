@@ -1,6 +1,7 @@
 import { ProjectLocalDataSource } from './ProjectLocalDataSource';
 import { EpisodeLocalDataSource } from './EpisodeLocalDataSource';
 import { StoryboardLocalDataSource } from './StoryboardLocalDataSource';
+import { CharacterLocalDataSource } from './CharacterLocalDataSource';
 import {
   DramaProject,
   Episode,
@@ -8,6 +9,7 @@ import {
   ProjectStatus,
   GenerationStage,
   StoryboardShot,
+  Character,
   AssetStatus
 } from '../model/DramaModels';
 
@@ -19,6 +21,7 @@ export class DramaRepository {
   private projects = new ProjectLocalDataSource();
   private episodes = new EpisodeLocalDataSource();
   private storyboards = new StoryboardLocalDataSource();
+  private characters = new CharacterLocalDataSource();
 
   // 创建新项目，返回自增主键 id
   createProject(project: DramaProject): Promise<number> {
@@ -146,12 +149,41 @@ export class DramaRepository {
     return rows > 0;
   }
 
-  /** 级联删除：先删分镜和剧集，再删项目行。 */
+  /** 级联删除：先删分镜和剧集和角色，再删项目行。 */
   async deleteProject(projectId: number): Promise<boolean> {
     await this.storyboards.deleteStoryboardsForProject(projectId);
+    await this.characters.deleteCharactersForProject(projectId);
     await this.episodes.deleteEpisodesForProject(projectId);
     const rows = await this.projects.deleteProject(projectId);
     return rows > 0;
+  }
+
+  // ---------- 角色操作 ----------
+
+  // 全量替换项目的角色记录，先删后插
+  replaceCharacters(projectId: number, characters: Character[]): Promise<void> {
+    return this.characters.replaceCharacters(projectId, characters);
+  }
+
+  // 获取项目的所有角色
+  getCharacters(projectId: number): Promise<Character[]> {
+    return this.characters.getCharacters(projectId);
+  }
+
+  // 更新单个角色的图片生成结果
+  async updateCharacterImage(
+    characterId: number,
+    imageStatus: AssetStatus,
+    imageUrl: string | null,
+    imageLocalPath: string | null,
+    imageErrorMessage: string | null
+  ): Promise<void> {
+    return this.characters.updateCharacterImage(characterId, imageStatus, imageUrl, imageLocalPath, imageErrorMessage);
+  }
+
+  // 更新单个角色的外貌描述（图片生成提示词）
+  async updateCharacterAppearance(characterId: number, appearance: string): Promise<void> {
+    return this.characters.updateCharacterAppearance(characterId, appearance);
   }
 
   /**

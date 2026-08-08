@@ -2,7 +2,6 @@ import { http } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AgnesSettings } from '../model/AgnesSettings';
-import { StoryboardShot } from '../model/DramaModels';
 import { ApiLogStore, ApiLogEntry } from './ApiLogStore';
 import { TextResult } from './AgnesTextRepository';
 
@@ -12,6 +11,7 @@ const TAG = 'AgnesImageRepository';
 // 图片生成请求体
 interface ImageExtraBody {
   response_format: string;
+  image?: string[];
 }
 
 interface ImageGenerationRequest {
@@ -62,22 +62,34 @@ const IMAGE_SIZE = '1024x768';
  * 调用 POST v1/images/generations 为某个分镜生成图片并返回远程 URL。
  */
 export class AgnesImageRepository {
-  async generateImage(settings: AgnesSettings, shot: StoryboardShot): Promise<TextResult> {
+  /**
+   * 生成图片。参数从 shot: StoryboardShot 改为 prompt: string，以支持分镜图片生成和角色立绘生成。
+   * referenceImages 为可选的参考图 URL 列表，传入后走图生图流程（extra_body.image）。
+   */
+  async generateImage(
+    settings: AgnesSettings,
+    prompt: string,
+    referenceImages?: string[]
+  ): Promise<TextResult> {
     if (settings.apiKey.trim().length === 0) {
       return fail('Agnes API Key is required');
     }
     if (settings.imageModel.trim().length === 0) {
       return fail('Image model is required');
     }
-    if (shot.imagePrompt.trim().length === 0) {
+    if (prompt.trim().length === 0) {
       return fail('Image prompt is required');
     }
 
     const url = joinBaseUrl(settings.baseUrl, 'v1/images/generations');
     const extraBody: ImageExtraBody = { response_format: 'url' };
+    // 图生图：传入参考图 URLs
+    if (referenceImages && referenceImages.length > 0) {
+      extraBody.image = referenceImages;
+    }
     const reqBody: ImageGenerationRequest = {
       model: settings.imageModel,
-      prompt: shot.imagePrompt,
+      prompt: prompt,
       size: IMAGE_SIZE,
       n: 1,
       extra_body: extraBody

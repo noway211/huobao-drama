@@ -197,7 +197,7 @@ ${rawContent}`;
   }
 
   /** 底层 POST v1/chat/completions 请求。成功时 `value` 为原始响应体，并记录 API 日志。 */
-  private async postChat(
+  async postChat(
     settings: AgnesSettings,
     messages: ChatMessage[],
     temperature: number,

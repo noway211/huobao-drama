@@ -142,6 +142,17 @@ export class AgnesStoryboardRepository {
       const parsed: StoryboardRawItem[] = [];
       for (const item of result) {
         const raw = item as Record<string, Object>;
+        let characterNames: string[] | undefined;
+        const cn = raw['character_names'];
+        if (Array.isArray(cn)) {
+          const filtered: string[] = [];
+          for (let fi = 0; fi < cn.length; fi++) {
+            if (typeof cn[fi] === 'string') {
+              filtered.push(cn[fi] as string);
+            }
+          }
+          characterNames = filtered;
+        }
         parsed.push({
           shot_number: extractNumber(raw, 'shot_number'),
           scene: extractString(raw, 'scene'),
@@ -150,7 +161,8 @@ export class AgnesStoryboardRepository {
           camera: extractString(raw, 'camera'),
           image_prompt: extractString(raw, 'image_prompt'),
           video_prompt: extractString(raw, 'video_prompt'),
-          duration_seconds: extractNumber(raw, 'duration_seconds')
+          duration_seconds: extractNumber(raw, 'duration_seconds'),
+          character_names: characterNames
         });
       }
       return parsed;
@@ -177,6 +189,8 @@ export class AgnesStoryboardRepository {
         imagePrompt: item.image_prompt ?? '',
         videoPrompt: item.video_prompt ?? '',
         durationSeconds: item.duration_seconds ?? project.shotDurationSeconds,
+        characterIds: (item.character_names && item.character_names.length > 0)
+          ? JSON.stringify(item.character_names) : null,
         imageStatus: AssetStatus.PENDING,
         imageUrl: null,
         imageLocalPath: null,
@@ -286,7 +300,8 @@ ${script}
     }
   }
 
-  private static readonly SYSTEM_PROMPT = 'You convert short-drama scripts into production storyboard JSON for mobile vertical video. Return JSON only.';
+  private static readonly SYSTEM_PROMPT = `You convert short-drama scripts into production storyboard JSON for mobile vertical video.
+Return JSON array only. Each entry must include: shot_number, scene, action, dialogue, camera, image_prompt, video_prompt, duration_seconds, character_names (array of character names appearing in this shot).`;
 }
 
 // LLM 返回的原始 JSON 条目结构
@@ -299,4 +314,5 @@ interface StoryboardRawItem {
   image_prompt?: string;
   video_prompt?: string;
   duration_seconds?: number;
+  character_names?: string[];
 }
