@@ -1,10 +1,12 @@
 package com.huobao.zdrama.data.repository
 
 import android.content.Context
+import com.huobao.zdrama.data.local.CharacterLocalDataSource
 import com.huobao.zdrama.data.local.EpisodeLocalDataSource
 import com.huobao.zdrama.data.local.ProjectLocalDataSource
 import com.huobao.zdrama.data.local.StoryboardLocalDataSource
 import com.huobao.zdrama.domain.model.AssetStatus
+import com.huobao.zdrama.domain.model.Character
 import com.huobao.zdrama.domain.model.DramaProject
 import com.huobao.zdrama.domain.model.Episode
 import com.huobao.zdrama.domain.model.EpisodeStatus
@@ -18,6 +20,7 @@ class DramaRepository(context: Context) {
     private val projectLocalDataSource = ProjectLocalDataSource(context)
     private val storyboardLocalDataSource = StoryboardLocalDataSource(context)
     private val episodeLocalDataSource = EpisodeLocalDataSource(context)
+    private val characterLocalDataSource = CharacterLocalDataSource(context)
     private val mediaDownloadRepository = MediaDownloadRepository(context)
 
     suspend fun createProject(project: DramaProject): Long = withContext(Dispatchers.IO) {
@@ -153,9 +156,40 @@ class DramaRepository(context: Context) {
 
     suspend fun deleteProject(projectId: Long): Boolean = withContext(Dispatchers.IO) {
         storyboardLocalDataSource.deleteStoryboards(projectId)
+        characterLocalDataSource.deleteCharactersForProject(projectId)
         episodeLocalDataSource.deleteEpisodesForProject(projectId)
         val projectDeleted = projectLocalDataSource.deleteProject(projectId) > 0
         val mediaDeleted = mediaDownloadRepository.deleteGeneratedMedia(projectId)
         projectDeleted && mediaDeleted
+    }
+
+    // --- Character methods ---
+
+    suspend fun replaceCharacters(projectId: Long, characters: List<Character>) = withContext(Dispatchers.IO) {
+        characterLocalDataSource.replaceCharacters(projectId, characters)
+    }
+
+    suspend fun getCharacters(projectId: Long): List<Character> = withContext(Dispatchers.IO) {
+        characterLocalDataSource.getCharacters(projectId)
+    }
+
+    suspend fun updateCharacterImage(
+        characterId: Long,
+        imageStatus: AssetStatus,
+        imageUrl: String?,
+        imageLocalPath: String?,
+        imageErrorMessage: String?
+    ): Boolean = withContext(Dispatchers.IO) {
+        characterLocalDataSource.updateCharacterImage(
+            characterId = characterId,
+            imageStatus = imageStatus,
+            imageUrl = imageUrl,
+            imageLocalPath = imageLocalPath,
+            imageErrorMessage = imageErrorMessage
+        ) > 0
+    }
+
+    suspend fun updateCharacterAppearance(characterId: Long, appearance: String): Boolean = withContext(Dispatchers.IO) {
+        characterLocalDataSource.updateCharacterAppearance(characterId, appearance) > 0
     }
 }

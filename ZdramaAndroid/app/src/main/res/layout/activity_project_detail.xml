@@ -176,6 +176,36 @@
             android:orientation="horizontal">
 
             <Button
+                android:id="@+id/generateCharactersButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:text="@string/project_extract_characters" />
+
+            <Button
+                android:id="@+id/viewCharactersButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:text="@string/project_view_characters" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/generateCharacterImagesButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/project_generate_character_images" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <Button
                 android:id="@+id/generateImagesButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"

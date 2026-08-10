@@ -25,6 +25,8 @@ import com.huobao.zdrama.data.repository.MediaDownloadRepository
 import com.huobao.zdrama.data.settings.AgnesSettings
 import com.huobao.zdrama.data.settings.AgnesSettingsStore
 import com.huobao.zdrama.domain.usecase.ComposeFinalVideoUseCase
+import com.huobao.zdrama.domain.usecase.ExtractCharactersUseCase
+import com.huobao.zdrama.domain.usecase.GenerateCharacterImagesUseCase
 import com.huobao.zdrama.domain.usecase.GenerateProjectScriptUseCase
 import com.huobao.zdrama.domain.usecase.GenerateStoryboardImagesUseCase
 import com.huobao.zdrama.domain.usecase.GenerateStoryboardVideosUseCase
@@ -54,6 +56,8 @@ class GenerationWorker(
             STAGE_IMAGE -> runImages(projectId, settings, dramaRepository, mediaDownloadRepository)
             STAGE_VIDEO -> runVideos(projectId, settings, dramaRepository, mediaDownloadRepository)
             STAGE_FINAL_VIDEO -> runFinalVideo(projectId, dramaRepository)
+            STAGE_CHARACTER_EXTRACT -> runCharacterExtract(projectId, settings, dramaRepository)
+            STAGE_CHARACTER_IMAGE -> runCharacterImages(projectId, settings, dramaRepository, mediaDownloadRepository)
             STAGE_FULL -> runFullPipeline(projectId, settings, dramaRepository, mediaDownloadRepository)
             else -> return androidx.work.ListenableWorker.Result.failure()
         }
@@ -152,6 +156,30 @@ class GenerationWorker(
         ).execute(projectId).map { Unit }
     }
 
+    private suspend fun runCharacterExtract(
+        projectId: Long,
+        settings: AgnesSettings,
+        dramaRepository: DramaRepository
+    ): KotlinResult<Unit> {
+        return ExtractCharactersUseCase(
+            dramaRepository,
+            AgnesTextRepository()
+        ).execute(projectId, settings).map { Unit }
+    }
+
+    private suspend fun runCharacterImages(
+        projectId: Long,
+        settings: AgnesSettings,
+        dramaRepository: DramaRepository,
+        mediaDownloadRepository: MediaDownloadRepository
+    ): KotlinResult<Unit> {
+        return GenerateCharacterImagesUseCase(
+            dramaRepository,
+            AgnesImageRepository(),
+            mediaDownloadRepository
+        ).execute(projectId, settings).map { Unit }
+    }
+
     private fun createForegroundInfo(projectId: Long, stage: String): ForegroundInfo {
         ensureNotificationChannel()
         val contentIntent = createProjectDetailPendingIntent(projectId)
@@ -204,6 +232,8 @@ class GenerationWorker(
             STAGE_IMAGE -> R.string.generation_notification_image
             STAGE_VIDEO -> R.string.generation_notification_video
             STAGE_FINAL_VIDEO -> R.string.generation_notification_final_video
+            STAGE_CHARACTER_EXTRACT -> R.string.generation_notification_character_extract
+            STAGE_CHARACTER_IMAGE -> R.string.generation_notification_character_image
             STAGE_FULL -> R.string.generation_notification_full
             else -> R.string.generation_notification_title
         }
@@ -216,6 +246,8 @@ class GenerationWorker(
         const val STAGE_IMAGE = "image"
         const val STAGE_VIDEO = "video"
         const val STAGE_FINAL_VIDEO = "final_video"
+        const val STAGE_CHARACTER_EXTRACT = "character_extract"
+        const val STAGE_CHARACTER_IMAGE = "character_image"
         const val STAGE_FULL = "full"
 
         private const val KEY_PROJECT_ID = "project_id"
@@ -255,6 +287,8 @@ class GenerationWorker(
                 STAGE_IMAGE,
                 STAGE_VIDEO,
                 STAGE_FINAL_VIDEO,
+                STAGE_CHARACTER_EXTRACT,
+                STAGE_CHARACTER_IMAGE,
                 STAGE_FULL
             ).map { stage -> uniqueWorkName(projectId, stage) }
         }

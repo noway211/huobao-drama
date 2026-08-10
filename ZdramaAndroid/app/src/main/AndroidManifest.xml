@@ -26,6 +26,9 @@
             android:name=".ui.project.ImageGalleryActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.project.CharacterListActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.project.ApiLogActivity"
             android:exported="false" />
         <activity

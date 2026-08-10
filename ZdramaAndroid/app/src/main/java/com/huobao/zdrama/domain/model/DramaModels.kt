@@ -96,3 +96,20 @@ data class StoryboardShot(
     val createdAt: Long,
     val updatedAt: Long
 )
+
+data class Character(
+    val id: Long,
+    val projectId: Long,
+    val episodeId: Long?,
+    val name: String,
+    val role: String,
+    val description: String,
+    val appearance: String,
+    val personality: String,
+    val imageStatus: AssetStatus,
+    val imageUrl: String?,
+    val imageLocalPath: String?,
+    val imageErrorMessage: String?,
+    val createdAt: Long,
+    val updatedAt: Long
+)

@@ -18,6 +18,7 @@ import com.huobao.zdrama.domain.model.DramaProject
 import com.huobao.zdrama.domain.model.GenerationStage
 import com.huobao.zdrama.domain.model.ProjectStatus
 import com.huobao.zdrama.domain.model.StoryboardShot
+import com.huobao.zdrama.domain.usecase.GetCharactersUseCase
 import com.huobao.zdrama.domain.usecase.GetProjectDetailUseCase
 import com.huobao.zdrama.domain.usecase.GetStoryboardsUseCase
 import com.huobao.zdrama.worker.GenerationWorker
@@ -33,6 +34,7 @@ class ProjectDetailActivity : AppCompatActivity() {
     private lateinit var settingsStore: AgnesSettingsStore
     private lateinit var getProjectDetailUseCase: GetProjectDetailUseCase
     private lateinit var getStoryboardsUseCase: GetStoryboardsUseCase
+    private lateinit var getCharactersUseCase: GetCharactersUseCase
     private var projectId: Long = 0L
     private var hasGeneratedVideos = false
     private var hasFinalVideo = false
@@ -42,6 +44,7 @@ class ProjectDetailActivity : AppCompatActivity() {
     private val generationWorkInfosByName = mutableMapOf<String, List<WorkInfo>>()
     private var promptExpanded = false
     private var boundPrompt: String? = null
+    private var cachedCharacterCount: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,6 +55,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         settingsStore = AgnesSettingsStore(this)
         getProjectDetailUseCase = GetProjectDetailUseCase(dramaRepository)
         getStoryboardsUseCase = GetStoryboardsUseCase(dramaRepository)
+        getCharactersUseCase = GetCharactersUseCase(dramaRepository)
 
         projectId = intent.getLongExtra(EXTRA_PROJECT_ID, 0L)
         if (projectId <= 0L) {
@@ -83,6 +87,13 @@ class ProjectDetailActivity : AppCompatActivity() {
         binding.viewScriptButton.setOnClickListener { openScriptViewer() }
         binding.viewStoryboardButton.setOnClickListener { openStoryboardViewer() }
         binding.viewImagesButton.setOnClickListener { openImageGallery() }
+        binding.generateCharactersButton.setOnClickListener {
+            confirmGeneration(GenerationWorker.STAGE_CHARACTER_EXTRACT, R.string.project_characters_queued)
+        }
+        binding.viewCharactersButton.setOnClickListener { openCharacterList() }
+        binding.generateCharacterImagesButton.setOnClickListener {
+            confirmGeneration(GenerationWorker.STAGE_CHARACTER_IMAGE, R.string.project_character_image_queued)
+        }
         binding.viewApiLogButton.setOnClickListener { openApiLog() }
         binding.deleteProjectButton.setOnClickListener { confirmDeleteProject() }
         binding.promptToggle.setOnClickListener { togglePrompt() }
@@ -107,7 +118,9 @@ class ProjectDetailActivity : AppCompatActivity() {
                 showMissingProject()
             } else {
                 val storyboards = getStoryboardsUseCase.execute(projectId)
-                bindProject(project, storyboards)
+                val characters = getCharactersUseCase.execute(projectId)
+                cachedCharacterCount = characters.size
+                bindProject(project, storyboards, characters)
             }
         }
     }
@@ -171,6 +184,9 @@ class ProjectDetailActivity : AppCompatActivity() {
         binding.generateImagesButton.isEnabled = enabled
         binding.generateVideosButton.isEnabled = enabled
         binding.composeFinalVideoButton.isEnabled = enabled
+        binding.generateCharactersButton.isEnabled = enabled
+        binding.viewCharactersButton.isEnabled = enabled
+        binding.generateCharacterImagesButton.isEnabled = enabled
     }
 
     private fun confirmGeneration(stage: String, queuedMessageRes: Int) {
@@ -226,6 +242,12 @@ class ProjectDetailActivity : AppCompatActivity() {
             }
             GenerationWorker.STAGE_FULL -> {
                 if (hasAnyGeneratedContent(project, storyboards)) R.string.project_regenerate_full_message else null
+            }
+            GenerationWorker.STAGE_CHARACTER_EXTRACT -> {
+                if (cachedCharacterCount > 0) R.string.project_regenerate_characters_message else null
+            }
+            GenerationWorker.STAGE_CHARACTER_IMAGE -> {
+                if (cachedCharacterCount > 0) R.string.project_regenerate_character_images_message else null
             }
             else -> null
         }
@@ -310,6 +332,23 @@ class ProjectDetailActivity : AppCompatActivity() {
                     GenerationPreflight.Ready
                 }
             }
+            GenerationWorker.STAGE_CHARACTER_EXTRACT -> {
+                val episode = dramaRepository.getEpisodeForProject(projectId)
+                val hasScript = !episode?.scriptContent.isNullOrBlank() || !project.generatedScript.isNullOrBlank()
+                if (!hasScript) {
+                    GenerationPreflight.Blocked(R.string.project_generation_missing_script)
+                } else {
+                    GenerationPreflight.Ready
+                }
+            }
+            GenerationWorker.STAGE_CHARACTER_IMAGE -> {
+                val characters = getCharactersUseCase.execute(projectId)
+                if (characters.isEmpty()) {
+                    GenerationPreflight.Blocked(R.string.project_no_characters)
+                } else {
+                    GenerationPreflight.Ready
+                }
+            }
             else -> GenerationPreflight.Ready
         }
     }
@@ -376,6 +415,17 @@ class ProjectDetailActivity : AppCompatActivity() {
         startActivity(
             Intent(this, ImageGalleryActivity::class.java)
                 .putExtra(ImageGalleryActivity.EXTRA_PROJECT_ID, projectId)
+        )
+    }
+
+    private fun openCharacterList() {
+        if (cachedCharacterCount <= 0) {
+            Toast.makeText(this, R.string.project_no_characters, Toast.LENGTH_SHORT).show()
+            return
+        }
+        startActivity(
+            Intent(this, CharacterListActivity::class.java)
+                .putExtra(CharacterListActivity.EXTRA_PROJECT_ID, projectId)
         )
     }
 
@@ -467,7 +517,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun bindProject(project: DramaProject, storyboards: List<StoryboardShot>) {
+    private fun bindProject(project: DramaProject, storyboards: List<StoryboardShot>, characters: List<com.huobao.zdrama.domain.model.Character> = emptyList()) {
         hasGeneratedVideos = storyboards.any { it.hasPlayableVideo() }
         finalVideoLocalPath = project.finalVideoLocalPath
         hasFinalVideo = project.finalVideoStatus == AssetStatus.COMPLETED && isExistingFile(project.finalVideoLocalPath)
@@ -478,7 +528,8 @@ class ProjectDetailActivity : AppCompatActivity() {
         binding.viewImagesButton.isEnabled = storyboards.any {
             isExistingFile(it.imageLocalPath) || !it.imageUrl.isNullOrBlank()
         }
-        bindGenerationButtonTexts(project, storyboards)
+        binding.viewCharactersButton.isEnabled = characters.isNotEmpty()
+        bindGenerationButtonTexts(project, storyboards, characters)
         binding.titleText.text = project.title
         binding.statusText.text = getString(R.string.project_status_label) + "：${project.status.toDisplayText()}\n" +
             getString(R.string.project_stage_label) + "：${project.currentStage.toDisplayText()}"
@@ -551,7 +602,11 @@ class ProjectDetailActivity : AppCompatActivity() {
         return !path.isNullOrBlank() && File(path).exists()
     }
 
-    private fun bindGenerationButtonTexts(project: DramaProject, storyboards: List<StoryboardShot>) {
+    private fun bindGenerationButtonTexts(
+        project: DramaProject,
+        storyboards: List<StoryboardShot>,
+        characters: List<com.huobao.zdrama.domain.model.Character> = emptyList()
+    ) {
         binding.generateFullButton.setText(
             if (hasAnyGeneratedContent(project, storyboards)) R.string.project_regenerate_full else R.string.project_generate_full
         )
@@ -580,6 +635,16 @@ class ProjectDetailActivity : AppCompatActivity() {
                 R.string.project_recompose_final_video
             } else {
                 R.string.project_compose_final_video
+            }
+        )
+        binding.generateCharactersButton.setText(
+            if (characters.isNotEmpty()) R.string.project_regenerate_characters else R.string.project_extract_characters
+        )
+        binding.generateCharacterImagesButton.setText(
+            if (characters.any { isExistingFile(it.imageLocalPath) }) {
+                R.string.project_regenerate_character_images
+            } else {
+                R.string.project_generate_character_images
             }
         )
     }

@@ -14,6 +14,8 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
         db.execSQL(SQL_CREATE_PROJECTS)
         db.execSQL(SQL_CREATE_STORYBOARDS)
         db.execSQL(SQL_CREATE_EPISODES)
+        db.execSQL(SQL_CREATE_CHARACTERS)
+        db.execSQL(SQL_CREATE_INDEX_CHARACTERS_PROJECT_ID)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -63,11 +65,15 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
                 )
             """)
         }
+        if (oldVersion < 9) {
+            db.execSQL(SQL_CREATE_CHARACTERS)
+            db.execSQL(SQL_CREATE_INDEX_CHARACTERS_PROJECT_ID)
+        }
     }
 
     companion object {
         private const val DATABASE_NAME = "zdrama.db"
-        private const val DATABASE_VERSION = 8
+        private const val DATABASE_VERSION = 9
 
         const val TABLE_PROJECTS = "projects"
         const val COL_ID = "id"
@@ -115,6 +121,19 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
         const val COL_EPISODE_CONTENT = "content"
         const val COL_EPISODE_SCRIPT_CONTENT = "script_content"
         const val COL_EPISODE_STATUS = "episode_status"
+
+        const val TABLE_CHARACTERS = "characters"
+        const val COL_CHARACTER_PROJECT_ID = "project_id"
+        const val COL_CHARACTER_EPISODE_ID = "episode_id"
+        const val COL_CHARACTER_NAME = "name"
+        const val COL_CHARACTER_ROLE = "role"
+        const val COL_CHARACTER_DESCRIPTION = "description"
+        const val COL_CHARACTER_APPEARANCE = "appearance"
+        const val COL_CHARACTER_PERSONALITY = "personality"
+        const val COL_CHARACTER_IMAGE_STATUS = "image_status"
+        const val COL_CHARACTER_IMAGE_URL = "image_url"
+        const val COL_CHARACTER_IMAGE_LOCAL_PATH = "image_local_path"
+        const val COL_CHARACTER_IMAGE_ERROR_MESSAGE = "image_error_message"
 
         private const val SQL_CREATE_PROJECTS = """
             CREATE TABLE IF NOT EXISTS $TABLE_PROJECTS (
@@ -176,6 +195,29 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
                 $COL_CREATED_AT INTEGER NOT NULL,
                 $COL_UPDATED_AT INTEGER NOT NULL
             )
+        """
+
+        private const val SQL_CREATE_CHARACTERS = """
+            CREATE TABLE IF NOT EXISTS $TABLE_CHARACTERS (
+                $COL_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COL_CHARACTER_PROJECT_ID INTEGER NOT NULL,
+                $COL_CHARACTER_EPISODE_ID INTEGER,
+                $COL_CHARACTER_NAME TEXT NOT NULL,
+                $COL_CHARACTER_ROLE TEXT NOT NULL DEFAULT '',
+                $COL_CHARACTER_DESCRIPTION TEXT NOT NULL DEFAULT '',
+                $COL_CHARACTER_APPEARANCE TEXT NOT NULL DEFAULT '',
+                $COL_CHARACTER_PERSONALITY TEXT NOT NULL DEFAULT '',
+                $COL_CHARACTER_IMAGE_STATUS TEXT NOT NULL DEFAULT 'PENDING',
+                $COL_CHARACTER_IMAGE_URL TEXT,
+                $COL_CHARACTER_IMAGE_LOCAL_PATH TEXT,
+                $COL_CHARACTER_IMAGE_ERROR_MESSAGE TEXT,
+                $COL_CREATED_AT INTEGER NOT NULL,
+                $COL_UPDATED_AT INTEGER NOT NULL
+            )
+        """
+
+        private const val SQL_CREATE_INDEX_CHARACTERS_PROJECT_ID = """
+            CREATE INDEX IF NOT EXISTS idx_characters_project_id ON $TABLE_CHARACTERS($COL_CHARACTER_PROJECT_ID)
         """
     }
 }

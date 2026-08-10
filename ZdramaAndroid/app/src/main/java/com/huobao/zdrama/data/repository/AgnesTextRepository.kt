@@ -87,6 +87,38 @@ class AgnesTextRepository(
 $rawContent"""
     }
 
+    /**
+     * 通用 chat/completions 调用。返回原始 JSON 响应字符串，由调用方自行用
+     * ChatResponseTextExtractor 提取 content 文本。这样能保留对 reasoning_content、
+     * output_text 等多种返回格式的兼容性。
+     */
+    suspend fun postChat(
+        settings: AgnesSettings,
+        messages: List<ChatMessage>,
+        temperature: Double,
+        maxTokens: Int
+    ): Result<String> {
+        if (settings.apiKey.isBlank()) {
+            return Result.failure(IllegalArgumentException("Agnes API Key is required"))
+        }
+        if (settings.textModel.isBlank()) {
+            return Result.failure(IllegalArgumentException("Text model is required"))
+        }
+        return runCatching {
+            val service = clientFactory.create(settings)
+            val response = service.createChatCompletion(
+                ChatCompletionRequest(
+                    model = settings.textModel,
+                    messages = messages,
+                    temperature = temperature,
+                    max_tokens = maxTokens
+                )
+            )
+            Log.d(TAG, "postChat response structure: ${ChatResponseTextExtractor.describe(response)}")
+            response.toString()
+        }
+    }
+
     companion object {
         private const val TAG = "AgnesTextRepository"
         private const val SYSTEM_PROMPT = """你是一位专业的短剧编剧。请根据用户提供的项目信息创作格式化短剧剧本。
