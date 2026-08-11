@@ -271,118 +271,123 @@ export class UseCases {
     settings: AgnesSettings,
     onProgress?: GenerationProgressCallback
   ): Promise<TextResult> {
-    const project = await UseCases.repo.getProject(projectId);
-    if (!project) {
-      return { ok: false, value: '', error: 'Project not found' };
-    }
-
-    const shots = await UseCases.repo.getStoryboards(projectId);
-    if (shots.length === 0) {
-      return { ok: false, value: '', error: '请先生成分镜' };
-    }
-
-    // 自动修复触发内容审查的提示词
-    await UseCases.patchSensitivePrompts(projectId);
-
-    hilog.info(DOMAIN, TAG, 'generateStoryboardImages start: project=%{public}d shots=%{public}d', projectId, shots.length);
-
-    await UseCases.repo.updateProjectTextResult(
-      projectId, ProjectStatus.PROCESSING, GenerationStage.IMAGE, project.generatedScript, null);
-
-    let completed = 0;
-    let generated = 0;
-    let firstError = '';
-    let current = 0;
-
-    for (const shot of shots) {
-      current++;
-      onProgress?.(current, shots.length, shot.shotNumber, '检查图片');
-
-      // 跳过已完成且本地文件非空的
-      if (shot.imageStatus === AssetStatus.COMPLETED && UseCases.hasNonEmptyLocalFile(shot.imageLocalPath)) {
-        hilog.info(DOMAIN, TAG, 'shot %{public}d image already completed, skip', shot.shotNumber);
-        completed++;
-        continue;
+    UseCases.markGenerating(projectId);
+    try {
+      const project = await UseCases.repo.getProject(projectId);
+      if (!project) {
+        return { ok: false, value: '', error: 'Project not found' };
       }
 
-      if (shot.imageStatus === AssetStatus.COMPLETED && shot.imageUrl && shot.imageUrl.trim().length > 0) {
-        hilog.info(DOMAIN, TAG, 'repair image for shot %{public}d from existing url', shot.shotNumber);
-        await UseCases.repo.updateShotImage(
-          shot.id, AssetStatus.PROCESSING, shot.imageUrl, shot.imageLocalPath, null);
-        onProgress?.(current, shots.length, shot.shotNumber, '下载图片');
-        const redownload = await UseCases.mediaDownload.downloadToGeneratedMedia(
-          projectId, shot.id, shot.imageUrl, MediaType.IMAGE);
-        if (redownload.ok) {
+      const shots = await UseCases.repo.getStoryboards(projectId);
+      if (shots.length === 0) {
+        return { ok: false, value: '', error: '请先生成分镜' };
+      }
+
+      // 自动修复触发内容审查的提示词
+      await UseCases.patchSensitivePrompts(projectId);
+
+      hilog.info(DOMAIN, TAG, 'generateStoryboardImages start: project=%{public}d shots=%{public}d', projectId, shots.length);
+
+      await UseCases.repo.updateProjectTextResult(
+        projectId, ProjectStatus.PROCESSING, GenerationStage.IMAGE, project.generatedScript, null);
+
+      let completed = 0;
+      let generated = 0;
+      let firstError = '';
+      let current = 0;
+
+      for (const shot of shots) {
+        current++;
+        onProgress?.(current, shots.length, shot.shotNumber, '检查图片');
+
+        // 跳过已完成且本地文件非空的
+        if (shot.imageStatus === AssetStatus.COMPLETED && UseCases.hasNonEmptyLocalFile(shot.imageLocalPath)) {
+          hilog.info(DOMAIN, TAG, 'shot %{public}d image already completed, skip', shot.shotNumber);
           completed++;
-          generated++;
-          await UseCases.repo.updateShotImage(
-            shot.id, AssetStatus.COMPLETED, shot.imageUrl, redownload.value, null);
           continue;
         }
-      }
 
-      hilog.info(DOMAIN, TAG, 'generate image for shot %{public}d: prompt=%{public}s', shot.shotNumber, shot.imagePrompt);
-
-      // 收集角色参考图并增强 prompt
-      const charRef: CharacterRefInfo = await UseCases.buildCharacterReferences(projectId, shot);
-      const enrichedPrompt = charRef.characterText.length > 0
-        ? `${charRef.characterText}${shot.imagePrompt}`
-        : shot.imagePrompt;
-
-      hilog.info(DOMAIN, TAG, 'generate image for shot %{public}d: prompt=%{public}s refs=%{public}d',
-        shot.shotNumber, enrichedPrompt, charRef.referenceUrls.length);
-
-      // 标记为处理中
-      await UseCases.repo.updateShotImage(
-        shot.id, AssetStatus.PROCESSING, shot.imageUrl, shot.imageLocalPath, null);
-
-      onProgress?.(current, shots.length, shot.shotNumber, '生成图片');
-      const imageResult = await UseCases.image.generateImage(
-        settings, enrichedPrompt,
-        charRef.referenceUrls.length > 0 ? charRef.referenceUrls : undefined);
-      if (imageResult.ok) {
-        hilog.info(DOMAIN, TAG, 'image API OK for shot %{public}d, url=%{public}s', shot.shotNumber, imageResult.value);
-        const imageUrl = imageResult.value;
-        onProgress?.(current, shots.length, shot.shotNumber, '下载图片');
-        const downloadResult = await UseCases.mediaDownload.downloadToGeneratedMedia(
-          projectId, shot.id, imageUrl, MediaType.IMAGE);
-
-        if (downloadResult.ok) {
-          hilog.info(DOMAIN, TAG, 'download OK for shot #%{public}d -> %{public}s', shot.shotNumber, downloadResult.value);
-          completed++;
-          generated++;
+        if (shot.imageStatus === AssetStatus.COMPLETED && shot.imageUrl && shot.imageUrl.trim().length > 0) {
+          hilog.info(DOMAIN, TAG, 'repair image for shot %{public}d from existing url', shot.shotNumber);
           await UseCases.repo.updateShotImage(
-            shot.id, AssetStatus.COMPLETED, imageUrl, downloadResult.value, null);
-        } else {
-          hilog.error(DOMAIN, TAG, 'download FAILED for shot #%{public}d: %{public}s', shot.shotNumber, downloadResult.error);
-          if (firstError.length === 0) firstError = downloadResult.error;
-          await UseCases.repo.updateShotImage(
-            shot.id, AssetStatus.FAILED, imageUrl, shot.imageLocalPath, downloadResult.error);
+            shot.id, AssetStatus.PROCESSING, shot.imageUrl, shot.imageLocalPath, null);
+          onProgress?.(current, shots.length, shot.shotNumber, '下载图片');
+          const redownload = await UseCases.mediaDownload.downloadToGeneratedMedia(
+            projectId, shot.id, shot.imageUrl, MediaType.IMAGE);
+          if (redownload.ok) {
+            completed++;
+            generated++;
+            await UseCases.repo.updateShotImage(
+              shot.id, AssetStatus.COMPLETED, shot.imageUrl, redownload.value, null);
+            continue;
+          }
         }
-      } else {
-        hilog.error(DOMAIN, TAG, 'image generation FAILED for shot #%{public}d: %{public}s', shot.shotNumber, imageResult.error);
-        if (firstError.length === 0) firstError = imageResult.error;
+
+        hilog.info(DOMAIN, TAG, 'generate image for shot %{public}d: prompt=%{public}s', shot.shotNumber, shot.imagePrompt);
+
+        // 收集角色参考图并增强 prompt
+        const charRef: CharacterRefInfo = await UseCases.buildCharacterReferences(projectId, shot);
+        const enrichedPrompt = charRef.characterText.length > 0
+          ? `${charRef.characterText}${shot.imagePrompt}`
+          : shot.imagePrompt;
+
+        hilog.info(DOMAIN, TAG, 'generate image for shot %{public}d: prompt=%{public}s refs=%{public}d',
+          shot.shotNumber, enrichedPrompt, charRef.referenceUrls.length);
+
+        // 标记为处理中
         await UseCases.repo.updateShotImage(
-          shot.id, AssetStatus.FAILED, shot.imageUrl, shot.imageLocalPath, imageResult.error);
+          shot.id, AssetStatus.PROCESSING, shot.imageUrl, shot.imageLocalPath, null);
+
+        onProgress?.(current, shots.length, shot.shotNumber, '生成图片');
+        const imageResult = await UseCases.image.generateImage(
+          settings, enrichedPrompt,
+          charRef.referenceUrls.length > 0 ? charRef.referenceUrls : undefined);
+        if (imageResult.ok) {
+          hilog.info(DOMAIN, TAG, 'image API OK for shot %{public}d, url=%{public}s', shot.shotNumber, imageResult.value);
+          const imageUrl = imageResult.value;
+          onProgress?.(current, shots.length, shot.shotNumber, '下载图片');
+          const downloadResult = await UseCases.mediaDownload.downloadToGeneratedMedia(
+            projectId, shot.id, imageUrl, MediaType.IMAGE);
+
+          if (downloadResult.ok) {
+            hilog.info(DOMAIN, TAG, 'download OK for shot #%{public}d -> %{public}s', shot.shotNumber, downloadResult.value);
+            completed++;
+            generated++;
+            await UseCases.repo.updateShotImage(
+              shot.id, AssetStatus.COMPLETED, imageUrl, downloadResult.value, null);
+          } else {
+            hilog.error(DOMAIN, TAG, 'download FAILED for shot #%{public}d: %{public}s', shot.shotNumber, downloadResult.error);
+            if (firstError.length === 0) firstError = downloadResult.error;
+            await UseCases.repo.updateShotImage(
+              shot.id, AssetStatus.FAILED, imageUrl, shot.imageLocalPath, downloadResult.error);
+          }
+        } else {
+          hilog.error(DOMAIN, TAG, 'image generation FAILED for shot #%{public}d: %{public}s', shot.shotNumber, imageResult.error);
+          if (firstError.length === 0) firstError = imageResult.error;
+          await UseCases.repo.updateShotImage(
+            shot.id, AssetStatus.FAILED, shot.imageUrl, shot.imageLocalPath, imageResult.error);
+        }
       }
-    }
 
-    const finalStatus = completed === shots.length ? ProjectStatus.COMPLETED : ProjectStatus.FAILED;
-    hilog.info(DOMAIN, TAG, 'generateStoryboardImages done: ok=%{public}d/%{public}d generated=%{public}d finalStatus=%{public}s',
-      completed, shots.length, generated, finalStatus);
+      const finalStatus = completed === shots.length ? ProjectStatus.COMPLETED : ProjectStatus.FAILED;
+      hilog.info(DOMAIN, TAG, 'generateStoryboardImages done: ok=%{public}d/%{public}d generated=%{public}d finalStatus=%{public}s',
+        completed, shots.length, generated, finalStatus);
 
-    await UseCases.repo.updateProjectTextResult(
-      projectId, finalStatus, GenerationStage.IMAGE, project.generatedScript,
-      firstError.length > 0 ? firstError : null);
+      await UseCases.repo.updateProjectTextResult(
+        projectId, finalStatus, GenerationStage.IMAGE, project.generatedScript,
+        firstError.length > 0 ? firstError : null);
 
-    if (completed === shots.length) {
-      // 全部成功（含已存在跳过）即视为成功
-      return { ok: true, value: `${generated}`, error: '' };
+      if (completed === shots.length) {
+        // 全部成功（含已存在跳过）即视为成功
+        return { ok: true, value: `${generated}`, error: '' };
+      }
+      if (generated > 0) {
+        return { ok: true, value: `${generated}`, error: '' };
+      }
+      return { ok: false, value: '', error: firstError.length > 0 ? firstError : '图片生成失败' };
+    } finally {
+      UseCases.unmarkGenerating(projectId);
     }
-    if (generated > 0) {
-      return { ok: true, value: `${generated}`, error: '' };
-    }
-    return { ok: false, value: '', error: firstError.length > 0 ? firstError : '图片生成失败' };
   }
 
   /** GenerateStoryboardVideosUseCase：为每个分镜的 videoPrompt 生成视频并下载到本地。 */
