@@ -396,7 +396,9 @@ export class UseCases {
     settings: AgnesSettings,
     onProgress?: GenerationProgressCallback
   ): Promise<TextResult> {
-    const project = await UseCases.repo.getProject(projectId);
+    UseCases.markGenerating(projectId);
+    try {
+      const project = await UseCases.repo.getProject(projectId);
     if (!project) {
       return { ok: false, value: '', error: 'Project not found' };
     }
@@ -493,6 +495,9 @@ export class UseCases {
       return { ok: true, value: `${generated}`, error: '' };
     }
     return { ok: false, value: '', error: firstError.length > 0 ? firstError : '视频生成失败' };
+  } finally {
+    UseCases.unmarkGenerating(projectId);
+  }
   }
 
   /** ExtractCharactersUseCase：从剧本文本中提取角色信息。参照 Web 版 extractor agent 流程。 */
