@@ -46,6 +46,23 @@ export class UseCases {
   private static mediaDownload = new MediaDownloadRepository();
   private static mp4Composer = new LocalMp4Composer();
 
+  // 当前正在生成图片/视频的项目 ID 集合。
+  // EntryAbility.onBackground 据此判断是否需要申请长时任务。
+  private static activeGeneratingProjects: Set<number> = new Set();
+
+  /** 是否存在正在生成图片/视频的项目（用于 EntryAbility 决定是否申请长时任务） */
+  static hasActiveGenerating(): boolean {
+    return UseCases.activeGeneratingProjects.size > 0;
+  }
+
+  private static markGenerating(projectId: number): void {
+    UseCases.activeGeneratingProjects.add(projectId);
+  }
+
+  private static unmarkGenerating(projectId: number): void {
+    UseCases.activeGeneratingProjects.delete(projectId);
+  }
+
   private static hasNonEmptyLocalFile(path: string | null): boolean {
     if (!path || path.trim().length === 0) {
       return false;
