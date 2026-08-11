@@ -3,6 +3,7 @@ import { window } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppContext } from '../common/AppContext';
 import { UseCases } from '../usecase/UseCases';
+import { BackgroundTaskCoordinator } from '../common/BackgroundTaskCoordinator';
 
 const DOMAIN = 0x0001;
 const TAG = 'EntryAbility';
@@ -48,9 +49,13 @@ export default class EntryAbility extends UIAbility {
 
   // 应用切换到前台时回调
   onForeground(): void {
+    BackgroundTaskCoordinator.release(this.context);
   }
 
   // 应用切换到后台时回调
   onBackground(): void {
+    if (UseCases.hasActiveGenerating()) {
+      BackgroundTaskCoordinator.acquire(this.context);
+    }
   }
 }
