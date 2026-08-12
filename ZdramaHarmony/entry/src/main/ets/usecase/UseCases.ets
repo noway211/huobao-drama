@@ -146,6 +146,18 @@ export class UseCases {
     return UseCases.repo.updateShotVideoPrompt(shotId, newPrompt);
   }
 
+  /**
+   * 写回分镜的角色绑定(规范化为 number[] JSON 字符串)。
+   * 空数组写空字符串(数据库列允许,parseCharacterIds 视作无绑定)。
+   */
+  static async updateShotCharacterIds(
+    shotId: number,
+    characterIds: number[]
+  ): Promise<void> {
+    const json = characterIds.length > 0 ? JSON.stringify(characterIds) : '';
+    await UseCases.repo.updateStoryboardCharacterIds(shotId, json);
+  }
+
   /** 更新单个角色的外貌提示词（即图片生成 prompt）。 */
   static async updateCharacterAppearance(characterId: number, appearance: string): Promise<void> {
     return UseCases.repo.updateCharacterAppearance(characterId, appearance);

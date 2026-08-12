@@ -143,6 +143,24 @@ export class StoryboardLocalDataSource {
   }
 
   /**
+   * 更新单个分镜的角色绑定（character_ids 列，存 number[] JSON 字符串）。
+   * 参照 updateShotImagePrompt 的查询模式。
+   */
+  async updateStoryboardCharacterIds(
+    shotId: number,
+    characterIdsJson: string
+  ): Promise<void> {
+    const store = await DramaDatabase.getStore();
+    const values: relationalStore.ValuesBucket = {
+      'character_ids': characterIdsJson,
+      'updated_at': Date.now()
+    };
+    const predicates = new relationalStore.RdbPredicates(TABLE);
+    predicates.equalTo('id', shotId);
+    await store.update(values, predicates);
+  }
+
+  /**
    * 更新单个分镜的图片生成结果（image/URL、本地路径、错误信息），
    * 对应 Android StoryboardLocalDataSource.updateShotImageAndUpdatedAt()。
    */

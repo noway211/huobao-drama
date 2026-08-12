@@ -87,6 +87,14 @@ export class DramaRepository {
     return this.storyboards.updateShotImagePrompt(shotId, newPrompt);
   }
 
+  // 更新单个分镜的角色绑定（存 number[] JSON 字符串）
+  async updateStoryboardCharacterIds(
+    shotId: number,
+    characterIdsJson: string
+  ): Promise<void> {
+    return this.storyboards.updateStoryboardCharacterIds(shotId, characterIdsJson);
+  }
+
   // 更新单个分镜的视频提示词
   async updateShotVideoPrompt(shotId: number, newPrompt: string): Promise<void> {
     return this.storyboards.updateShotVideoPrompt(shotId, newPrompt);
