@@ -1,8 +1,8 @@
 # 鸿蒙长时后台任务 — 端到端验证报告
 
 > 计划文件: [docs/superpowers/plans/2026-08-11-harmony-background-long-task.md](../plans/2026-08-11-harmony-background-long-task.md)
-> 范围: Task 1 (module.json5) → Task 6 (EntryAbility 接入),共 6 个 commit
-> 状态: **静态检查全部通过;真机 4 场景待用户手测**
+> 范围: Task 1 (module.json5) → Task 6 (EntryAbility 接入),共 6 个 commit,外加 1 个本地编译修复
+> 状态: **本地 hvigorw 编译通过;真机 4 场景待用户手测**
 
 ## 1. 静态检查 (已完成)
 
@@ -14,13 +14,16 @@
 - [x] `backgroundModes: ["dataTransfer"]` 已加入 EntryAbility (lines 24-26)
 - [x] `JSON.parse` 通过 → JSON5 结构合法
 
-### 1.2 BackgroundTaskCoordinator (Task 2, commit ceb5cdf,fix round 1)
+### 1.2 BackgroundTaskCoordinator (Task 2, commit ceb5cdf,本地编译修复 759f4db)
 
-- [x] `acquire` 在已激活时直接 return (line 29-32) → 重复 acquire no-op
-- [x] `release` 在未激活时直接 return (line 63-65) → 重复 release no-op
-- [x] `NotificationRequest.wantAgent` 位于顶层 (line 85),**不在** `content.normal` 内 (line 88-91 只有 title/text)
-- [x] 申请/释放失败仅 `hilog.warn` (line 56/69),不抛错
-- [x] 异常路径会清空 `activeContext` / `wantAgentInstance` (line 57-58),避免状态污染
+- [x] `acquire` 在已激活时直接 return (line 24-27) → 重复 acquire no-op
+- [x] `release` 在未激活时直接 return (line 55-57) → 重复 release no-op
+- [x] 命名导入 `{ common, wantAgent } from '@kit.AbilityKit'`、`{ backgroundTaskManager } from '@kit.BackgroundTasksKit'`(行 1-2) — 匹配本机 OpenHarmony SDK
+- [x] `wantAgent.OperationType.START_ABILITY` / `wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG`(行 35 / 37) — 通过 wantAgent 命名空间,而非顶级
+- [x] `backgroundTaskManager.BackgroundMode.DATA_TRANSFER`(行 43) — 通过命名空间
+- [x] **持久通知由系统自动生成**:`startBackgroundRunning` 传入 wantAgentObj,系统生成带"点击回到应用"行为的通知;实现内不调 `notificationManager.publish`/`cancelNotification`
+- [x] 申请/释放失败仅 `hilog.warn` (line 49/61),不抛错
+- [x] 异常路径清空 `activeContext` (line 50),避免状态污染
 
 ### 1.3 UseCases 状态跟踪 (Task 3, commit dd69007)
 
@@ -46,12 +49,19 @@
 
 ```
 2060076  Task 1: module.json5 加权限与后台模式
-ceb5cdf  Task 2: 新增 BackgroundTaskCoordinator 管理长时任务与通知 (含 fix round 1)
+ceb5cdf  Task 2: 新增 BackgroundTaskCoordinator 管理长时任务与通知
 dd69007  Task 3: UseCases 跟踪正在生成的项目 ID
 7c6da20  Task 4: generateStoryboardImages 入口维护 activeGenerating
-23bed86  Task 5: generateStoryboardVideos 入口维护 activeGenerating (含 fix round 1)
+23bed86  Task 5: generateStoryboardVideos 入口维护 activeGenerating
 633ed91  Task 6: onBackground 申请长时任务,onForeground 释放
+759f4db  本地编译修复: 修正 BackgroundTaskCoordinator 的 SDK API 用法(去掉自定义通知改用系统自动生成)
 ```
+
+### 1.7 本地编译 (hvigorw)
+
+- [x] 在 `ZdramaHarmony/` 执行 `hvigorw assembleHap` → **BUILD SUCCESSFUL**
+- [x] 产出 `entry/build/default/outputs/default/entry-default-signed.hap` 与 `entry-default-unsigned.hap`
+- [x] 编译期 ArkTS 类型检查通过 — 修复前 16 个错误全部清零(命名导入 / wantAgent 命名空间 / BackgroundMode 命名空间 / 去掉手动通知)
 
 ## 2. 真机验证场景 (待人工执行)
 
@@ -82,16 +92,16 @@ DevEco Studio + 真机/远程模拟器为唯一可执行环境。预期总耗时
 |---|---|---|
 | 1 | 启动应用,进入一个视频生成未完成的项目(分镜 >= 2) | 项目页正常打开 |
 | 2 | 点 "生成视频" | 立即按 Home 切到后台 |
-| 3 | 下拉通知中心 | 出现通知: 标题 "正在生成分镜", 文本 "点击返回应用查看进度" |
+| 3 | 下拉通知中心 | 出现系统自动生成的后台运行通知(标题/文案由系统决定),点击可回到应用 |
 | 4 | 等候 1 分钟 | 通知持续存在,不消失 |
 | 5 | 切回前台 | 视频应继续生成(继续到下一个分镜)或已完成 |
-| 6 | 切前台后下拉通知中心 | 通知消失(因为 `onForeground` 触发了 `release` → `cancelNotification`) |
+| 6 | 切前台后下拉通知中心 | 通知消失(因为 `onForeground` 触发了 `release` → `stopBackgroundRunning`,系统自动撤销通知) |
 
 **关键日志关键词**:
 - `background task acquired`(切后台后立即出现)
 - `video API OK for shot #...`(持续出现,证明后台在跑)
 - `background task released`(切回前台时出现)
-- 通知 id = 1001
+- 通知: 系统自动生成,携带 WantAgent(点击回到 EntryAbility)
 
 ### 场景 3: 反复前后台切换(幂等性)
 
@@ -131,7 +141,7 @@ DevEco Studio + 真机/远程模拟器为唯一可执行环境。预期总耗时
 - **DATA_TRANSFER 低速检测挂起**: 视频轮询 10s 一次可能触发系统挂起(API 9+);挂起期间 HTTP 已断,UI 主线程 Promise 链在 await 处抛错,按 FAILED 流程处理;冷启动 `resetOrphanProcessingProjects` 兜底
 - **长时任务超时(API 9 ~10 分钟)**: UI 主线程 Promise 链收到异常后标 FAILED;用户可重试
 - **权限被拒**: `BackgroundTaskCoordinator.acquire` 失败仅 hilog warn,不影响前台生成
-- **回退策略**: `git revert 633ed91 23bed86 7c6da20 dd69007 ceb5cdf 2060076` 即可完整回退
+- **回退策略**: `git revert 759f4db 633ed91 23bed86 7c6da20 dd69007 ceb5cdf 2060076` 即可完整回退
 
 ## 4. 执行结果
 
