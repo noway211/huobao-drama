@@ -135,13 +135,8 @@ struct StoryboardViewerPage {
       }
     }
     if (hasNumber) {
-      const validIds = new Set<number>(this.allCharacters.map(c => c.id));
-      const filtered: number[] = [];
-      for (const id of result) {
-        if (validIds.has(id)) {
-          filtered.push(id);
-        }
-      }
+      // number 分支:复用 parseBindingIds 的过滤结果(保证 F2 修复后,预选与显示一致)
+      const filtered = StoryboardViewerPage.parseBindingIds(shot, this.allCharacters);
       return new Set<number>(filtered);
     }
     // fallback：按 name 匹配
@@ -206,6 +201,30 @@ struct StoryboardViewerPage {
     this.bindingSelectedIds = new Set();
   }
 
+  // 把 Shot.characterIds 解析成"当前项目里实际存在且可显示"的 number[]。
+  // 单一真相源:computeBindingDisplay、bindingSummary、resolvePreselectedIds 都走它。
+  // 输入: null | '' | '[]' | '[1,3,5]' | '["Alice","Bob"]' | 单值 | 无效 JSON
+  // 输出: 已过滤(number 且 ID 存在于 allCharacters)的 number[],空集对应"无绑定"
+  private static parseBindingIds(shot: StoryboardShot, allCharacters: Character[]): number[] {
+    if (!shot.characterIds || shot.characterIds.trim().length === 0) {
+      return [];
+    }
+    const validIds = new Set<number>(allCharacters.map(c => c.id));
+    const result = new Set<number>();
+    try {
+      const arr = JSON.parse(shot.characterIds) as Object;
+      if (Array.isArray(arr)) {
+        for (let i = 0; i < arr.length; i++) {
+          if (typeof arr[i] === 'number' && validIds.has(arr[i] as number)) {
+            result.add(arr[i] as number);
+          }
+        }
+      }
+    } catch (_e) { /* ignore malformed JSON */ }
+    // 用 sorted 数组保持稳定顺序(便于 bindingSummary 长度与渲染一致)
+    return Array.from(result).sort((a, b) => a - b);
+  }
+
   // 计算单个角色头像的 file:// 源（空字符串表示用首字母占位）
   private avatarSrc(ch: Character): string {
     if (ch.imageLocalPath && ch.imageLocalPath.length > 0) {
@@ -219,23 +238,11 @@ struct StoryboardViewerPage {
     if (shot.characterIds === null || shot.characterIds.trim().length === 0) {
       return { noBinding: true, allInvalid: false, displayChars: [], overflow: 0 };
     }
-    let ids: number[] = [];
-    try {
-      const arr = JSON.parse(shot.characterIds) as Object;
-      if (Array.isArray(arr)) {
-        for (let i = 0; i < arr.length; i++) {
-          if (typeof arr[i] === 'number') {
-            ids.push(arr[i] as number);
-          }
-        }
-      }
-    } catch (_e) { /* ignore */ }
-
+    const validIds = StoryboardViewerPage.parseBindingIds(shot, allCharacters);
     const idToChar = new Map<number, Character>();
     for (const ch of allCharacters) {
       idToChar.set(ch.id, ch);
     }
-    const validIds = ids.filter(id => idToChar.has(id));
     const displayChars: Character[] = [];
     const shownIds = validIds.slice(0, 3);
     for (const id of shownIds) {
@@ -265,16 +272,7 @@ struct StoryboardViewerPage {
 
   // 顶部"角色"行的副标题："0 个" / "3 个" 等
   private bindingSummary(shot: StoryboardShot): string {
-    if (!shot.characterIds || shot.characterIds.trim().length === 0) {
-      return '0 个';
-    }
-    let count = 0;
-    try {
-      const arr = JSON.parse(shot.characterIds) as Object;
-      if (Array.isArray(arr)) {
-        count = arr.length;
-      }
-    } catch (_e) { /* ignore */ }
+    const count = StoryboardViewerPage.parseBindingIds(shot, this.allCharacters).length;
     return `${count} 个`;
   }
 
