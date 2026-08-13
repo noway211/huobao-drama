@@ -1,7 +1,9 @@
 import { router, promptAction } from '@kit.ArkUI';
+import { fileIo } from '@kit.CoreFileKit';
 import { UseCases } from '../usecase/UseCases';
 import { StoryboardShot, AssetStatus } from '../model/DramaModels';
 import { Theme } from '../common/Theme';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 
 interface VideoPageParams {
   projectId: number;
@@ -83,6 +85,39 @@ struct VideoViewerPage {
       text += '\n错误：' + shot.videoErrorMessage;
     }
     return text;
+  }
+
+  // 二次确认 → 软删除(状态置 PENDING、清字段,含 videoTaskId) + 容错删本地文件 + 重新 load
+  private async onDeleteVideoClick(shot: StoryboardShot): Promise<void> {
+    promptAction.showDialog({
+      title: '删除视频？',
+      message: '删除后需要重新生成。可在分镜列表重新生成视频。',
+      buttons: [
+        { text: '取消', color: Theme.textSecondary },
+        { text: '删除', color: Theme.primary }
+      ]
+    }).then(async (r) => {
+      if (r.index !== 1) {
+        return;
+      }
+      try {
+        await UseCases.updateShotVideo(
+          shot.id, AssetStatus.PENDING, null, null, null, null
+        );
+      } catch (e) {
+        promptAction.showToast({ message: '删除失败:' + ((e as Error).message ?? String(e)) });
+        return;
+      }
+      if (shot.videoLocalPath) {
+        try {
+          fileIo.unlinkSync(shot.videoLocalPath);
+        } catch (e) {
+          hilog.warn(1, "DeleteVideo", "unlink failed: %{public}s", (e as Error).message);
+        }
+      }
+      promptAction.showToast({ message: '已删除' });
+      await this.onPageShow();
+    });
   }
 
   build(): void {
@@ -183,6 +218,20 @@ struct VideoViewerPage {
                   .fontColor(Theme.textSecondary)
                   .width('100%')
                   .margin({ top: 4 })
+
+                // 删除按钮(右下角)
+                Row() {
+                  Blank().layoutWeight(1)
+                  Button('删除')
+                    .fontSize(13)
+                    .backgroundColor(Theme.surfaceAlt)
+                    .fontColor(Theme.textPrimary)
+                    .height(32)
+                    .padding({ left: 12, right: 12 })
+                    .onClick((): void => { this.onDeleteVideoClick(shot) })
+                }
+                .width('100%')
+                .margin({ top: 8 })
               }
               .padding(12)
               .width('100%')
