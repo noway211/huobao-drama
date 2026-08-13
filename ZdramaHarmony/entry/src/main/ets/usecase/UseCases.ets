@@ -146,6 +146,45 @@ export class UseCases {
     return UseCases.repo.updateShotVideoPrompt(shotId, newPrompt);
   }
 
+  /** 更新单个分镜的图片资产（用于软删除：传 PENDING + nulls）。 */
+  static async updateShotImage(
+    shotId: number,
+    imageStatus: AssetStatus,
+    imageUrl: string | null,
+    imageLocalPath: string | null,
+    imageErrorMessage: string | null
+  ): Promise<void> {
+    return UseCases.repo.updateShotImage(shotId, imageStatus, imageUrl, imageLocalPath, imageErrorMessage);
+  }
+
+  /** 更新单个分镜的视频资产（用于软删除：传 PENDING + nulls）。 */
+  static async updateShotVideo(
+    shotId: number,
+    videoStatus: AssetStatus,
+    videoTaskId: string | null,
+    videoUrl: string | null,
+    videoLocalPath: string | null,
+    videoErrorMessage: string | null
+  ): Promise<void> {
+    return UseCases.repo.updateShotVideo(
+      shotId, videoStatus, videoTaskId, videoUrl, videoLocalPath, videoErrorMessage);
+  }
+
+  /** 更新项目的成片资产（用于软删除：传 PENDING + nulls,保留项目 status / currentStage）。 */
+  static async updateProjectFinalVideo(
+    projectId: number,
+    status: ProjectStatus,
+    currentStage: GenerationStage,
+    finalVideoStatus: AssetStatus,
+    finalVideoLocalPath: string | null,
+    finalVideoErrorMessage: string | null,
+    errorMessage: string | null
+  ): Promise<boolean> {
+    return UseCases.repo.updateProjectFinalVideo(
+      projectId, status, currentStage, finalVideoStatus,
+      finalVideoLocalPath, finalVideoErrorMessage, errorMessage);
+  }
+
   /**
    * 写回分镜的角色绑定(规范化为 number[] JSON 字符串)。
    * 空数组写空字符串(数据库列允许,parseCharacterIds 视作无绑定)。
