@@ -96,36 +96,48 @@ export async function resolveImageReference(
 
   // 下一步：解码 + 编码
   // 3) 解码 → PixelMap（desiredSize + INSIDE + ignoreAlpha + EXIF 旋转）
-  let pixelMap: image.PixelMap;
+  //    sentinel 模式 + finally 安全网：
+  //    - createPixelMap 抛错 → catch 走 return null；finally 兜底 release imageSource
+  //    - imageSource.release() 自身抛错 → finally 再次尝试 release（吞掉异常）
+  //    - catch 不会拿到 pixelMap（可能未赋值），所以 release 逻辑只在 finally
+  let imageSource: image.ImageSource | null = null;
+  let pixelMap: image.PixelMap | null = null;
   try {
-    const imageSource = image.createImageSource(buffer);
+    imageSource = image.createImageSource(buffer);
     pixelMap = await imageSource.createPixelMap({
       desiredSize: { width: MAX_WIDTH, height: MAX_HEIGHT },
       fit: 'INSIDE',
       ignoreAlpha: true,
     });
     imageSource.release();
+    imageSource = null;
   } catch (err) {
     hilog.warn(DOMAIN, TAG, 'reference resolve failed | path=%{public}s stage=createPixelMap error=%{public}s',
       trimmed, (err as BusinessError).message);
     return null;
+  } finally {
+    if (imageSource) {
+      try { imageSource.release(); } catch (_ignore) {}
+    }
   }
+  // 类型收窄：try 块成功完成后 pixelMap 必非空
+  const pm: image.PixelMap = pixelMap!;
 
   // 4) JPEG 编码
   let jpegBuffer: ArrayBuffer;
   try {
     jpegBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-      imagePackerApi(pixelMap)
+      imagePackerApi(pm)
         .then(resolve)
         .catch(reject);
     });
   } catch (err) {
     hilog.warn(DOMAIN, TAG, 'reference resolve failed | path=%{public}s stage=imagePacker error=%{public}s',
       trimmed, (err as BusinessError).message);
-    pixelMap.release();
+    pm.release();
     return null;
   }
-  pixelMap.release();
+  pm.release();
 
   if (!jpegBuffer || jpegBuffer.byteLength <= 0) {
     hilog.warn(DOMAIN, TAG, 'reference resolve failed | path=%{public}s stage=imagePacker error=empty output',
