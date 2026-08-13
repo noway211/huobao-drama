@@ -13,13 +13,20 @@
 - **仅前端改动**：不碰后端 `backend/`、不碰 Hono 路由、不动数据库 schema、不动模型 enum。表结构、列、`AssetStatus` / `ProjectStatus` / `GenerationStage` 都不动。
 - **复用已有 API**：软删除走 `UseCases.repo.updateShotImage(...)` / `updateShotVideo(...)` / `updateProjectFinalVideo(...)` 三个已有方法。**不**新增 `deleteShotImage` / `deleteShotVideo` 之类的方法。
 - **状态值约定**：用户口语中说的 "IDLE" 在鸿蒙 enum 里对应 `AssetStatus.PENDING`（"未开始 / 可重新生成"）。DB 列存的是 enum 字符串 `.name`，存 `PENDING` 跟 Android 端持久化兼容（Android 侧也没有 IDLE 概念，初始态就是 PENDING）。
-- **必须同时清字段**：`imageUrl` / `imageLocalPath` / `imageErrorMessage`（视频类同，加 `videoTaskId`）一律置 `null`。成片：清 `finalVideoLocalPath` / `finalVideoErrorMessage` / `errorMessage`，`status` / `currentStage` 保留为当前值（不要因为删成片把整个项目状态重置）。
+- **必须同时清字段**:`imageUrl` / `imageLocalPath` / `imageErrorMessage`（视频类同，加 `videoTaskId`）一律置 `null`。成片：清 `finalVideoLocalPath` / `finalVideoErrorMessage` / `errorMessage`，`status` / `currentStage` 保留为当前值（不要因为删成片把整个项目状态重置）。
+- **需要新增 3 个 public static 包装**：`UseCases.repo` 是 `private static`（`UseCases.ets:41`），UI 页面不能直接 `UseCases.repo.updateShotImage(...)`。按现有 `UseCases.updateShotPrompt(...)`（`UseCases.ets:140`）/ `UseCases.updateShotVideoPrompt(...)`（`UseCases.ets:144`）的薄包装模式，新增 3 个 public static 方法：
+  - `UseCases.updateShotImage(shotId, imageStatus, imageUrl, imageLocalPath, imageErrorMessage)`
+  - `UseCases.updateShotVideo(shotId, videoStatus, videoTaskId, videoUrl, videoLocalPath, videoErrorMessage)`
+  - `UseCases.updateProjectFinalVideo(projectId, status, currentStage, finalVideoStatus, finalVideoLocalPath, finalVideoErrorMessage, errorMessage)`
+  - 全部 1 行透传到 `UseCases.repo.*`，**不**做语义转换
+- **UI 调用形式**：UI 页面用 `UseCases.updateShotImage(...)` / `UseCases.updateShotVideo(...)` / `UseCases.updateProjectFinalVideo(...)`，**不**用 `UseCases.repo.*` 形式（避免 private 访问错误）
 - **删本地文件失败不能阻塞 DB 软删除**：`fileIo.unlinkSync` 抛错时只 `hilog.warn` 记录 + `promptAction.showToast` 提示"本地文件已不存在"，不 throw。
 - **二次确认弹层用 `promptAction.showDialog`**：与 `Index.ets` 删除项目 / `ProjectDetailPage.ets` confirmIfScriptExists 同一套 API。buttons 顺序 `[{text: '取消'}, {text: '删除', color: Theme.primary}]`，删除按钮走 `Theme.primary` 警示色（不引红色，保持全站一致）。
 - **不破坏现有 ForEach key**：`StoryboardImagePage.ets:188` / `VideoViewerPage.ets:193` 的 ForEach key 仍用 `shot.id.toString()`。删除素材是「行消失」操作，ForEach 用稳定 key 即可正确处理，**不**复刻 `StoryboardViewerPage.ets` 的 refreshTick 修复（那里的 bug 是"行不变、值变了"，本次是"行直接没了"）。
 - **统一错误反馈**：`promptAction.showToast({ message })` 报错；删除成功用 toast "已删除"。
 - **不要新建删除 API / 工具类的 UseCase 公共方法**：本次不新增 `UseCases.deleteShotImage(...)` 之类的方法。UI 直接调 `UseCases.repo.updateShotImage(...)` + 内联 `fileIo.unlinkSync` 即可，避免新增无意义的 wrapper 抽象层。
 - **不能影响成片合成流程的"按 completed 预检"**：`composeFinalVideo`（`UseCases.ets:920`）会查 `s.videoStatus === AssetStatus.COMPLETED`；本次不改 shot.videoStatus 的判断，删除后 shot.videoStatus 变 PENDING，自动从合成预检里排除，行为正确。
+- **构建命令**:`ZdramaHarmony/` 下没有 `hvigorw` 脚本（项目用 `build-profile.json5` 配 hvigor），实际命令是用 DevEco Studio 自带的 wrapper：`/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap`，从 `ZdramaHarmony/` 目录内执行。如果 `hvigorw` 在 PATH 上，也可直接 `hvigorw assembleHap`。
 - **不删 `shot_N_image.{ext}` 之外的旁路文件**（如 `shot_N_image.json` / 下载过程临时文件）—— 那些是 `MediaDownloadRepository` 自己的内部事务，本次不触碰。
 
 ## 现状回顾（来自读码）

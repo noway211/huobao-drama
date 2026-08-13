@@ -10,8 +10,9 @@
 
 ## Global Constraints
 
-- 鸿蒙数据库 schema 不变,enum 不变,不动 `backend/` / `data/` / `model/DramaModels.ets` / `usecase/UseCases.ets` / `common/Theme.ets`
-- 软删除走 `UseCases.repo.updateShotImage(...)` / `updateShotVideo(...)` / `updateProjectFinalVideo(...)` 三个已有方法,**不**新增 `deleteImage` / `deleteVideo` 之类的 wrapper
+- 鸿蒙数据库 schema 不变,enum 不变,不动 `backend/` / `data/` / `model/DramaModels.ets` / `common/Theme.ets`
+- **`UseCases.repo` 是 `private static`,UI 不能直接调**:按现有 `UseCases.updateShotPrompt(...)`（`UseCases.ets:140`）/ `UseCases.updateShotVideoPrompt(...)`（`UseCases.ets:144`）的薄包装模式,新增 3 个 public static 方法 `UseCases.updateShotImage(...)` / `UseCases.updateShotVideo(...)` / `UseCases.updateProjectFinalVideo(...)`,UI 调用 `UseCases.updateShotImage(...)` 形式,**不**用 `UseCases.repo.*` 形式
+- 软删除走新增的 3 个 public wrapper,**不**新增 `deleteImage` / `deleteVideo` 之类的语义 API
 - 删除后 status = `AssetStatus.PENDING`(语义:"未开始,可重新生成"),不是 IDLE(Harmony enum 没有 IDLE,PENDING 是最近似值,与 Android 端持久化字符串保持一致)
 - 删除必须清字段:图片类清 `imageUrl` / `imageLocalPath` / `imageErrorMessage` 三个为 null;视频类多清 `videoTaskId`;成片清 `finalVideoLocalPath` / `finalVideoErrorMessage` / `errorMessage` 三个为 null,**保留** `project.status` / `project.currentStage`(成片是子资产,删完不影响项目整体状态)
 - 本地文件删除用 `fileIo.unlinkSync(path)`,CoreFileKit 同步 API(同源系列已有 `openSync` / `writeSync` / `statSync` / `rmdirSync` 在用);失败必须容错(hilog.warn + 不 throw)
@@ -27,6 +28,94 @@
 
 ---
 
+### Task 0: UseCases 新增 3 个 public static wrapper(数据层透传)
+
+**Files:**
+- Modify: `ZdramaHarmony/entry/src/main/ets/usecase/UseCases.ets`(在 `updateShotVideoPrompt` 方法 line 144-147 之后插入 3 个新方法)
+
+**Interfaces:**
+- Consumes: 现有 `UseCases.repo` (private static) 上的 `updateShotImage` / `updateShotVideo` / `updateProjectFinalVideo`
+- Produces:
+  - `UseCases.updateShotImage(shotId, imageStatus, imageUrl, imageLocalPath, imageErrorMessage): Promise<void>`
+  - `UseCases.updateShotVideo(shotId, videoStatus, videoTaskId, videoUrl, videoLocalPath, videoErrorMessage): Promise<void>`
+  - `UseCases.updateProjectFinalVideo(projectId, status, currentStage, finalVideoStatus, finalVideoLocalPath, finalVideoErrorMessage, errorMessage): Promise<void>`
+
+> 这是必要的中间层 — `UseCases.repo` 是 `private static`(`UseCases.ets:41`),UI 页面无法直接调。完全按现有 `updateShotPrompt` / `updateShotVideoPrompt`(`UseCases.ets:140-147`)的 1 行透传模式做。
+
+- [ ] **Step 1: 在 `UseCases.ets` 插入 3 个新 public static 方法**
+
+定位 `updateShotVideoPrompt` 方法(line 144-147),在它之后插入:
+
+```ts
+/** 更新单个分镜的图片资产（用于软删除：传 PENDING + nulls）。 */
+static async updateShotImage(
+  shotId: number,
+  imageStatus: AssetStatus,
+  imageUrl: string | null,
+  imageLocalPath: string | null,
+  imageErrorMessage: string | null
+): Promise<void> {
+  return UseCases.repo.updateShotImage(shotId, imageStatus, imageUrl, imageLocalPath, imageErrorMessage);
+}
+
+/** 更新单个分镜的视频资产（用于软删除：传 PENDING + nulls）。 */
+static async updateShotVideo(
+  shotId: number,
+  videoStatus: AssetStatus,
+  videoTaskId: string | null,
+  videoUrl: string | null,
+  videoLocalPath: string | null,
+  videoErrorMessage: string | null
+): Promise<void> {
+  return UseCases.repo.updateShotVideo(
+    shotId, videoStatus, videoTaskId, videoUrl, videoLocalPath, videoErrorMessage);
+}
+
+/** 更新项目的成片资产（用于软删除：传 PENDING + nulls,保留项目 status / currentStage）。 */
+static async updateProjectFinalVideo(
+  projectId: number,
+  status: ProjectStatus,
+  currentStage: GenerationStage,
+  finalVideoStatus: AssetStatus,
+  finalVideoLocalPath: string | null,
+  finalVideoErrorMessage: string | null,
+  errorMessage: string | null
+): Promise<boolean> {
+  return UseCases.repo.updateProjectFinalVideo(
+    projectId, status, currentStage, finalVideoStatus,
+    finalVideoLocalPath, finalVideoErrorMessage, errorMessage);
+}
+```
+
+> import 不用改 — `AssetStatus` / `ProjectStatus` / `GenerationStage` 已经在文件顶部 import 了(`UseCases.ets:1-15` 区域)。`StoryboardShot` / `DramaProject` 也都已 import。
+> `updateProjectFinalVideo` 返回 `Promise<boolean>`(与 `repo.updateProjectFinalVideo` 透传一致,`DramaRepository.ets:67` 那一层把 `rows > 0` 转成 boolean),前两个返回 `Promise<void>`(与 `repo.updateShotImage` / `repo.updateShotVideo` 一致)。
+
+- [ ] **Step 2: 编译验证**
+
+```bash
+cd /Users/peterzhu/workspace/AndroidStudioProjects/ai_work/huobao-drama/ZdramaHarmony
+/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap
+```
+
+期望:`> hvigorw BUILD SUCCESSFUL`。只改了 UseCases.ets,Task 1-3 还没做,只验证新增 3 个方法编译通过。
+
+> 备注:项目根目录的 `ZdramaHarmony/` 下没有 `hvigorw` 脚本(项目用 `build-profile.json5` + `hvigorfile.ts` 配 hvigor),构建器来自 DevEco Studio 的安装目录。如果 `hvigorw` 已经在 PATH 上,也可直接 `hvigorw assembleHap`。
+
+- [ ] **Step 3: 提交**
+
+```bash
+cd /Users/peterzhu/workspace/AndroidStudioProjects/ai_work/huobao-drama
+git add ZdramaHarmony/entry/src/main/ets/usecase/UseCases.ets
+git commit -m "feat(harmony): UseCases 暴露 updateShotImage/updateShotVideo/updateProjectFinalVideo 三个 public 包装"
+```
+
+提交信息体写明:
+- 3 个 1 行透传,完全照搬 `updateShotPrompt` / `updateShotVideoPrompt` 的现有模式
+- 不动 data layer,不改任何业务逻辑
+- UI 删除功能需要这 3 个方法才能调(后续 Task 1-3 消费)
+
+---
+
 ### Task 1: `StoryboardImagePage` 删除图片功能
 
 **Files:**
@@ -35,7 +124,7 @@
 **Interfaces:**
 - Consumes:
   - 现有 `StoryboardShot` / `AssetStatus`(已在 import)
-  - 现有 `UseCases.repo.updateShotImage(shotId, status, url, localPath, errorMessage)`(已存在)
+  - **Task 0 新增** `UseCases.updateShotImage(shotId, status, url, localPath, errorMessage)`(public 包装)
   - 现有 `UseCases.getStoryboards(projectId)`(用于重新 load 列表)
   - 现有 `Theme.surfaceAlt` / `Theme.primary` / `Theme.textSecondary`(已存在)
   - `fileIo.unlinkSync(path)` from `@kit.CoreFileKit`
@@ -43,6 +132,8 @@
 - Produces:
   - `onDeleteImageClick(shot: StoryboardShot): void` 私有方法
   - 每张图片卡片右下角「删除」按钮
+
+> 关键:UI 调 `UseCases.updateShotImage(...)`(**不**用 `UseCases.repo.updateShotImage(...)`,后者是 private 不可见)。
 
 - [ ] **Step 1: 修改文件顶部 import**
 
@@ -88,7 +179,7 @@ private async onDeleteImageClick(shot: StoryboardShot): Promise<void> {
       return;
     }
     try {
-      await UseCases.repo.updateShotImage(
+      await UseCases.updateShotImage(
         shot.id, AssetStatus.PENDING, null, null, null
       );
     } catch (e) {
@@ -134,10 +225,10 @@ Row() {
 
 ```bash
 cd /Users/peterzhu/workspace/AndroidStudioProjects/ai_work/huobao-drama/ZdramaHarmony
-./hvigorw assembleHap
+/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap
 ```
 
-期望:`> hvigorw BUILD SUCCESSFUL`。只改了 StoryboardImagePage,Task 2/3 还没做,只验证 Task 1 的修改能编译。
+期望:`> hvigorw BUILD SUCCESSFUL`。Task 0 已经提交,Task 2/3 还没做,验证 Task 0+1 同时编译通过。
 
 - [ ] **Step 5: 提交**
 
@@ -165,13 +256,15 @@ git commit -m "feat(harmony): StoryboardImagePage 删除图片功能"
 **Interfaces:**
 - Consumes:
   - 现有 `StoryboardShot` / `AssetStatus`(已在 import)
-  - 现有 `UseCases.repo.updateShotVideo(shotId, status, taskId, url, localPath, errorMessage)`(已存在,注意 6 参签名)
+  - **Task 0 新增** `UseCases.updateShotVideo(shotId, status, taskId, url, localPath, errorMessage)`(public 包装,6 参签名)
   - 现有 `Theme.*`(已存在)
   - `fileIo.unlinkSync(path)` from `@kit.CoreFileKit`
   - `promptAction.showDialog` / `promptAction.showToast`(已 import)
 - Produces:
   - `onDeleteVideoClick(shot: StoryboardShot): void` 私有方法
   - 每段视频卡片右下角「删除」按钮
+
+> 关键:UI 调 `UseCases.updateShotVideo(...)`(**不**用 `UseCases.repo.updateShotVideo(...)`,后者是 private 不可见)。
 
 - [ ] **Step 1: 修改文件顶部 import**
 
@@ -216,7 +309,7 @@ private async onDeleteVideoClick(shot: StoryboardShot): Promise<void> {
       return;
     }
     try {
-      await UseCases.repo.updateShotVideo(
+      await UseCases.updateShotVideo(
         shot.id, AssetStatus.PENDING, null, null, null, null
       );
     } catch (e) {
@@ -262,10 +355,10 @@ Row() {
 
 ```bash
 cd /Users/peterzhu/workspace/AndroidStudioProjects/ai_work/huobao-drama/ZdramaHarmony
-./hvigorw assembleHap
+/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap
 ```
 
-期望:`> hvigorw BUILD SUCCESSFUL`。Task 1+2 同时编译通过。
+期望:`> hvigorw BUILD SUCCESSFUL`。Task 0+1+2 同时编译通过。
 
 - [ ] **Step 5: 提交**
 
@@ -288,7 +381,7 @@ git commit -m "feat(harmony): VideoViewerPage 删除视频功能"
 
 **Interfaces:**
 - Consumes:
-  - 现有 `UseCases.repo.updateProjectFinalVideo(projectId, status, currentStage, finalVideoStatus, finalVideoLocalPath, finalVideoErrorMessage, errorMessage)`(7 参)
+  - **Task 0 新增** `UseCases.updateProjectFinalVideo(projectId, status, currentStage, finalVideoStatus, finalVideoLocalPath, finalVideoErrorMessage, errorMessage)`(public 包装,7 参)
   - 现有 `UseCases.getProject(projectId)`(用于读取 project.status / project.currentStage 保留现状)
   - 现有 `Theme.*`(已存在)
   - `fileIo.unlinkSync(path)` from `@kit.CoreFileKit`
@@ -296,6 +389,8 @@ git commit -m "feat(harmony): VideoViewerPage 删除视频功能"
 - Produces:
   - `onDeleteFinalVideoClick(): void` 私有方法
   - 播放器下方「删除成片」按钮
+
+> 关键:UI 调 `UseCases.updateProjectFinalVideo(...)`(**不**用 `UseCases.repo.updateProjectFinalVideo(...)`,后者是 private 不可见)。
 
 - [ ] **Step 1: 修改文件顶部 import**
 
@@ -348,7 +443,7 @@ private async onDeleteFinalVideoClick(): Promise<void> {
     }
     try {
       // 保留项目 status / currentStage,仅把 finalVideoStatus 置 PENDING,清 finalVideoLocalPath / finalVideoErrorMessage / errorMessage
-      await UseCases.repo.updateProjectFinalVideo(
+      await UseCases.updateProjectFinalVideo(
         this.projectId,
         project.status,
         project.currentStage,
@@ -398,10 +493,10 @@ Row() {
 
 ```bash
 cd /Users/peterzhu/workspace/AndroidStudioProjects/ai_work/huobao-drama/ZdramaHarmony
-./hvigorw assembleHap
+/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap
 ```
 
-期望:`> hvigorw BUILD SUCCESSFUL`。Task 1+2+3 同时编译通过。
+期望:`> hvigorw BUILD SUCCESSFUL`。Task 0+1+2+3 同时编译通过。
 
 - [ ] **Step 5: 提交**
 
@@ -425,7 +520,7 @@ git commit -m "feat(harmony): FinalVideoPage 删除成片功能"
 ### 编译
 ```bash
 cd /Users/peterzhu/workspace/AndroidStudioProjects/ai_work/huobao-drama/ZdramaHarmony
-./hvigorw assembleHap
+/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap
 ```
 期望:`> hvigorw BUILD SUCCESSFUL`。
 
