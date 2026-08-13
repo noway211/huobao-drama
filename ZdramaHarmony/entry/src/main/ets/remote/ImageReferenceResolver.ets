@@ -1,7 +1,7 @@
 // ZdramaHarmony/entry/src/main/ets/remote/ImageReferenceResolver.ets
 import { fileIo } from '@kit.CoreFileKit';
 import { image } from '@kit.ImageKit';
-import { Base64Helper } from '@ohos.util';
+import util from '@ohos.util';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 
@@ -77,7 +77,8 @@ export async function resolveImageReference(
   let file: fileIo.File | null = null;
   try {
     file = fileIo.openSync(trimmed, fileIo.OpenMode.READ_ONLY);
-    buffer = fileIo.readSync(file.fd, stat.size);
+    buffer = new ArrayBuffer(stat.size);
+    fileIo.readSync(file.fd, buffer, { offset: 0, length: stat.size });
   } catch (err) {
     hilog.warn(DOMAIN, TAG, 'reference resolve failed | path=%{public}s stage=readSync error=%{public}s',
       trimmed, (err as BusinessError).message);
@@ -109,18 +110,18 @@ export async function resolveImageReference(
   try {
     imageSource = image.createImageSource(buffer);
     stage = 'createPixelMap';
-    pixelMap = await imageSource.createPixelMap({
+    const options: image.DecodingOptions = {
       desiredSize: { width: MAX_WIDTH, height: MAX_HEIGHT },
-      fit: 'INSIDE',
-      ignoreAlpha: true,
-    });
+    };
+    const pm: image.PixelMap = await imageSource.createPixelMap(options);
+    pixelMap = pm;
     stage = 'createPixelMap.release';
     imageSource.release();
     imageSource = null;
     stage = 'imagePacker.packing';
-    jpegBuffer = await imagePackerApi(pixelMap);
+    jpegBuffer = await imagePackerApi(pm);
     stage = 'pixelMap.release';
-    pixelMap.release();
+    pm.release();
     pixelMap = null;
   } catch (err) {
     hilog.warn(DOMAIN, TAG, 'reference resolve failed | path=%{public}s stage=%{public}s error=%{public}s',
@@ -144,7 +145,7 @@ export async function resolveImageReference(
   // 5) base64 编码
   let base64: string;
   try {
-    base64 = Base64Helper.encodeToStr(new Uint8Array(jpegBuffer));
+    base64 = new util.Base64Helper().encodeToStringSync(new Uint8Array(jpegBuffer));
   } catch (err) {
     hilog.warn(DOMAIN, TAG, 'reference resolve failed | path=%{public}s stage=Base64Helper error=%{public}s',
       trimmed, (err as BusinessError).message);

@@ -4,6 +4,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AgnesSettings } from '../model/AgnesSettings';
 import { ApiLogStore, ApiLogEntry } from './ApiLogStore';
 import { TextResult } from './AgnesTextRepository';
+import { resolveImageReference } from './ImageReferenceResolver';
 
 const DOMAIN = 0x0001;
 const TAG = 'AgnesImageRepository';
@@ -83,9 +84,24 @@ export class AgnesImageRepository {
 
     const url = joinBaseUrl(settings.baseUrl, 'v1/images/generations');
     const extraBody: ImageExtraBody = { response_format: 'url' };
-    // 图生图：传入参考图 URLs
+    // 图生图：传入参考图 URLs（先转 base64 data URI / 透传 URL）
     if (referenceImages && referenceImages.length > 0) {
-      extraBody.image = referenceImages;
+      const resolved = await Promise.all(
+        referenceImages.map(item => resolveImageReference(item))
+      );
+      const valid: string[] = [];
+      for (const v of resolved) {
+        if (v !== null) {
+          valid.push(v);
+        }
+      }
+      if (valid.length > 0) {
+        extraBody.image = valid;
+      } else {
+        hilog.warn(DOMAIN, TAG,
+          'all %{public}d reference images failed to resolve, fall back to text-to-image',
+          referenceImages.length);
+      }
     }
     const reqBody: ImageGenerationRequest = {
       model: settings.imageModel,
