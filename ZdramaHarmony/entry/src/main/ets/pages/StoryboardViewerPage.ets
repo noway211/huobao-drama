@@ -35,6 +35,10 @@ struct StoryboardViewerPage {
   @State editingShotForBinding: StoryboardShot | null = null;
   @State bindingSelectedIds: Set<number> = new Set();
   @State bindingDisplayMap: Record<number, BindingDisplay> = {};
+  // 数据刷新计数器：每次 shots/allCharacters 变更后 +1,塞进 ForEach key
+  // 强制 ListItem 重建(否则 ArkUI 见 shot.id 相同会复用旧节点,导致
+  // bindingSummary/BindingAvatarsRow 不重算,显示陈旧数据)
+  @State refreshTick: number = 0;
   private projectId: number = 0;
 
   // 组件即将出现：从路由参数中读取项目 ID
@@ -60,6 +64,7 @@ struct StoryboardViewerPage {
     this.shotCountText = `共 ${storyboards.length} 个分镜`;
     this.allCharacters = await UseCases.getCharacters(this.projectId);
     this.rebuildBindingDisplayMap();
+    this.refreshTick++;
     this.loading = false;
   }
 
@@ -193,6 +198,7 @@ struct StoryboardViewerPage {
     }
     this.shots = await UseCases.getStoryboards(this.projectId);
     this.rebuildBindingDisplayMap();
+    this.refreshTick++;
   }
 
   // 取消绑定编辑
@@ -512,7 +518,7 @@ struct StoryboardViewerPage {
               .backgroundColor(Theme.surface)
               .borderRadius(10)
             }
-          }, (shot: StoryboardShot) => shot.id > 0 ? shot.id.toString() : shot.shotNumber.toString())
+          }, (shot: StoryboardShot) => `${shot.id}_${this.refreshTick}`)
         }
         .layoutWeight(1)
         .width('100%')
