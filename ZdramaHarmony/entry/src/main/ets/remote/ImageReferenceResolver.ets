@@ -119,6 +119,9 @@ export async function resolveImageReference(
     if (imageSource) {
       try { imageSource.release(); } catch (_ignore) {}
     }
+    if (pixelMap) {
+      try { pixelMap.release(); } catch (_ignore) {}
+    }
   }
   // 类型收窄：try 块成功完成后 pixelMap 必非空
   const pm: image.PixelMap = pixelMap!;
