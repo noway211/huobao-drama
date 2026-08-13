@@ -794,87 +794,43 @@ ${script}${existingHint}`;
   }
 
   /**
-   * 分镜图片生成时注入角色参考图。对于每个分镜，如果绑定了角色，则收集角色的已生成图片
-   * 作为参考图，并增强 prompt 追加角色外貌描述。
-   *
-   * characterIds 可能是数字 ID 数组（remap 后）也可能是角色名字符串数组（LLM 直接返回），
-   * 本方法对两种格式都做兼容处理。
+   * 收集分镜关联角色的参考图，并为每张参考图生成"reference image N"绑定前缀。
+   * characterText 中每条形如 "The person in reference image N is <Name> (<Appearance>)."
+   * 与 referenceUrls[N-1] 一一对应，弥补 extra_body.image 不支持 per-image 标签的 API 限制。
+   * characterIds 兼容数字 ID 数组与角色名字符串数组两种格式。
    */
   private static async buildCharacterReferences(
     projectId: number,
     shot: StoryboardShot
   ): Promise<CharacterRefInfo> {
     const refs: string[] = [];
-    const charDescs: string[] = [];
+    const descLines: string[] = [];
 
-    // 尝试解析为数字 ID 数组
-    let ids = UseCases.parseCharacterIds(shot.characterIds);
-
-    // 如果解析出的全是数字，直接用 ID 匹配
     const allCharacters = await UseCases.repo.getCharacters(projectId);
-    if (ids.length > 0 && allCharacters.length > 0) {
-      const charMap = new Map<number, Character>();
-      for (const ch of allCharacters) {
-        charMap.set(ch.id, ch);
-      }
-      for (const cid of ids) {
-        if (refs.length >= 3) break;
-        const ch = charMap.get(cid);
-        if (!ch) continue;
-        const refUrl = (ch.imageLocalPath && UseCases.hasNonEmptyLocalFile(ch.imageLocalPath))
-          ? ch.imageLocalPath : (ch.imageUrl ?? undefined);
-        if (refUrl && refUrl.trim().length > 0) {
-          refs.push(refUrl);
-        }
-        if (ch.appearance && ch.appearance.trim().length > 0) {
-          charDescs.push(`${ch.name}：${ch.appearance}`);
-        }
-      }
-      if (refs.length > 0) {
-        const charText = charDescs.length > 0 ? charDescs.join('。') + '。\n' : '';
-        const result: CharacterRefInfo = { referenceUrls: refs, characterText: charText };
-        return result;
-      }
+    if (allCharacters.length === 0) {
+      return { referenceUrls: [], characterText: '' };
     }
 
-    // fallback：按角色名字符串匹配（LLM 返回的 character_names）
-    let names: string[] = [];
-    try {
-      const arr: Object = JSON.parse(shot.characterIds ?? '[]');
-      if (Array.isArray(arr)) {
-        const filtered: string[] = [];
-        for (let fi = 0; fi < arr.length; fi++) {
-          if (typeof arr[fi] === 'string') {
-            filtered.push(arr[fi] as string);
-          }
-        }
-        names = filtered;
-      }
-    } catch (_e) { /* ignore */ }
+    // 统一 ID/Name 两条路径：优先按数字 ID 查表，回退到字符串名查表
+    const resolved: Character[] = UseCases.resolveCharacters(shot.characterIds, allCharacters);
 
-    if (names.length > 0 && allCharacters.length > 0) {
-      const nameToChar = new Map<string, Character>();
-      for (const ch of allCharacters) {
-        nameToChar.set(ch.name, ch);
-      }
-      for (const name of names) {
-        if (refs.length >= 3) break;
-        const ch = nameToChar.get(name);
-        if (!ch) continue;
-        const refUrl = (ch.imageLocalPath && UseCases.hasNonEmptyLocalFile(ch.imageLocalPath))
-          ? ch.imageLocalPath : (ch.imageUrl ?? undefined);
-        if (refUrl && refUrl.trim().length > 0) {
-          refs.push(refUrl);
-        }
-        if (ch.appearance && ch.appearance.trim().length > 0) {
-          charDescs.push(`${ch.name}：${ch.appearance}`);
-        }
-      }
+    for (const ch of resolved) {
+      if (refs.length >= 3) break;
+
+      const refUrl = (ch.imageLocalPath && UseCases.hasNonEmptyLocalFile(ch.imageLocalPath))
+        ? ch.imageLocalPath
+        : (ch.imageUrl ?? undefined);
+
+      // Atomic push：refUrl 与 appearance 缺一就跳过该角色，避免数组错位
+      if (!refUrl || refUrl.trim().length === 0) continue;
+      if (!ch.appearance || ch.appearance.trim().length === 0) continue;
+
+      refs.push(refUrl);
+      descLines.push(`The person in reference image ${refs.length} is ${ch.name} (${ch.appearance}).`);
     }
 
-    const charText = charDescs.length > 0 ? charDescs.join('。') + '。\n' : '';
-    const result: CharacterRefInfo = { referenceUrls: refs, characterText: charText };
-    return result;
+    const characterText = descLines.length > 0 ? descLines.join(' ') + '\n' : '';
+    return { referenceUrls: refs, characterText };
   }
 
   // 将 characterIds JSON 字符串解析为 number 数组
@@ -898,6 +854,54 @@ ${script}${existingHint}`;
     } catch (_e) {
       return [];
     }
+  }
+
+  /**
+   * 将 shot.characterIds 解析为 Character[]。优先按数字 ID 查表，回退到字符串名查表。
+   * 未匹配的 ID/name 静默跳过。空输入返回 []。
+   */
+  private static resolveCharacters(
+    ids: string | null | undefined,
+    allCharacters: Character[]
+  ): Character[] {
+    if (allCharacters.length === 0) return [];
+
+    // 路径 1：按数字 ID 查表
+    const numericIds = UseCases.parseCharacterIds(ids);
+    if (numericIds.length > 0) {
+      const charMap = new Map<number, Character>();
+      for (const ch of allCharacters) charMap.set(ch.id, ch);
+      const out: Character[] = [];
+      for (const id of numericIds) {
+        const ch = charMap.get(id);
+        if (ch) out.push(ch);
+      }
+      if (out.length > 0) return out;
+    }
+
+    // 路径 2：按字符串名查表（fallback）
+    let names: string[] = [];
+    try {
+      const arr: Object = JSON.parse(ids ?? '[]');
+      if (Array.isArray(arr)) {
+        for (let i = 0; i < arr.length; i++) {
+          if (typeof arr[i] === 'string') {
+            names.push(arr[i] as string);
+          }
+        }
+      }
+    } catch (_e) { /* ignore */ }
+
+    if (names.length === 0) return [];
+
+    const nameMap = new Map<string, Character>();
+    for (const ch of allCharacters) nameMap.set(ch.name, ch);
+    const out: Character[] = [];
+    for (const name of names) {
+      const ch = nameMap.get(name);
+      if (ch) out.push(ch);
+    }
+    return out;
   }
 
   /** 角色名字匹配到数据库 ID，供分镜生成后调用。 */
