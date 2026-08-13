@@ -20,7 +20,7 @@
   - `UseCases.updateProjectFinalVideo(projectId, status, currentStage, finalVideoStatus, finalVideoLocalPath, finalVideoErrorMessage, errorMessage)`
   - 全部 1 行透传到 `UseCases.repo.*`，**不**做语义转换
 - **UI 调用形式**：UI 页面用 `UseCases.updateShotImage(...)` / `UseCases.updateShotVideo(...)` / `UseCases.updateProjectFinalVideo(...)`，**不**用 `UseCases.repo.*` 形式（避免 private 访问错误）
-- **删本地文件失败不能阻塞 DB 软删除**：`fileIo.unlinkSync` 抛错时只 `hilog.warn` 记录 + `promptAction.showToast` 提示"本地文件已不存在"，不 throw。
+- **删本地文件失败不能阻塞 DB 软删除**：`fileIo.unlinkSync` 抛错时只 `hilog.warn` 记录，不 throw、不 toast（本地文件残留不影响 DB 软删除已成功的状态，用户下次重新生成会覆盖）。
 - **二次确认弹层用 `promptAction.showDialog`**：与 `Index.ets` 删除项目 / `ProjectDetailPage.ets` confirmIfScriptExists 同一套 API。buttons 顺序 `[{text: '取消'}, {text: '删除', color: Theme.primary}]`，删除按钮走 `Theme.primary` 警示色（不引红色，保持全站一致）。
 - **不破坏现有 ForEach key**：`StoryboardImagePage.ets:188` / `VideoViewerPage.ets:193` 的 ForEach key 仍用 `shot.id.toString()`。删除素材是「行消失」操作，ForEach 用稳定 key 即可正确处理，**不**复刻 `StoryboardViewerPage.ets` 的 refreshTick 修复（那里的 bug 是"行不变、值变了"，本次是"行直接没了"）。
 - **统一错误反馈**：`promptAction.showToast({ message })` 报错；删除成功用 toast "已删除"。
