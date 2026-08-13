@@ -141,6 +141,7 @@ export async function resolveImageReference(
     return null;
   }
   pm.release();
+  pixelMap = null;  // 闸门：让 outer finally 跳过 pixelMap 分支，避免提前 release
 
   if (!jpegBuffer || jpegBuffer.byteLength <= 0) {
     hilog.warn(DOMAIN, TAG, 'reference resolve failed | path=%{public}s stage=imagePacker error=empty output',
