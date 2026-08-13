@@ -115,6 +115,40 @@ struct CharacterListPage {
     await this.reloadCharacters();
   }
 
+  // 删除角色图片（软删除：DB status → PENDING + 清字段 + 删本地文件）
+  private async onDeleteCharacterImageClick(ch: Character): Promise<void> {
+    promptAction.showDialog({
+      title: '删除角色图片？',
+      message: '删除后需要重新生成。可在角色列表重新生成图片。',
+      buttons: [
+        { text: '取消', color: Theme.textSecondary },
+        { text: '删除图片', color: Theme.primary }
+      ]
+    }).then(async (r) => {
+      if (r.index !== 1) {
+        return;
+      }
+      try {
+        await UseCases.updateCharacterImage(
+          ch.id, AssetStatus.PENDING, null, null, null
+        );
+      } catch (e) {
+        promptAction.showToast({ message: '删除失败：' + ((e as Error).message ?? String(e)) });
+        return;
+      }
+      // 容错删本地文件
+      if (ch.imageLocalPath && ch.imageLocalPath.length > 0) {
+        try {
+          fileIo.unlinkSync(ch.imageLocalPath);
+        } catch (e) {
+          hilog.warn(DOMAIN, TAG, 'unlink character image failed: %{public}s', (e as Error).message);
+        }
+      }
+      promptAction.showToast({ message: '已删除' });
+      await this.reloadCharacters();
+    });
+  }
+
   // 角色图片源：优先本地文件(必须带 file:// 前缀,Image 组件才能识别)
   private imgSrc(ch: Character): string {
     if (ch.imageLocalPath && ch.imageLocalPath.length > 0) {
@@ -253,6 +287,22 @@ struct CharacterListPage {
                     .onClick(() => this.onGenerateImage(ch))
                 }
                 .width('100%')
+
+                // ── 删除按钮行（仅当有图片时显示） ──
+                if (ch.imageStatus === AssetStatus.COMPLETED) {
+                  Row() {
+                    Blank().layoutWeight(1)
+                    Button('删除图片')
+                      .fontSize(13)
+                      .backgroundColor(Theme.surfaceAlt)
+                      .fontColor(Theme.textPrimary)
+                      .height(32)
+                      .padding({ left: 12, right: 12 })
+                      .onClick((): void => { this.onDeleteCharacterImageClick(ch) })
+                  }
+                  .width('100%')
+                  .margin({ top: 8 })
+                }
               }
               .padding(16)
               .width('100%')
