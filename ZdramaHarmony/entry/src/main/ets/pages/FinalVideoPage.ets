@@ -1,5 +1,8 @@
 import { router, promptAction } from '@kit.ArkUI';
+import { fileIo } from '@kit.CoreFileKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { UseCases } from '../usecase/UseCases';
+import { AssetStatus, DramaProject } from '../model/DramaModels';
 import { Theme } from '../common/Theme';
 
 interface FinalVideoPageParams {
@@ -53,6 +56,58 @@ struct FinalVideoPage {
     } finally {
       this.loading = false;
     }
+  }
+
+  // 二次确认 → 软删除(状态置 PENDING、清字段) + 容错删本地文件 + 重新 load
+  private async onDeleteFinalVideoClick(): Promise<void> {
+    promptAction.showDialog({
+      title: '删除成片？',
+      message: '删除后需要重新合成。可在项目详情重新合成成片。',
+      buttons: [
+        { text: '取消', color: Theme.textSecondary },
+        { text: '删除', color: Theme.primary }
+      ]
+    }).then(async (r) => {
+      if (r.index !== 1) {
+        return;
+      }
+      // 重新读取项目以拿到当前 status / currentStage / finalVideoLocalPath
+      let project: DramaProject | null = null;
+      try {
+        project = await UseCases.getProject(this.projectId);
+      } catch (e) {
+        promptAction.showToast({ message: '删除失败:' + ((e as Error).message ?? String(e)) });
+        return;
+      }
+      if (!project) {
+        promptAction.showToast({ message: '删除失败: 项目不存在' });
+        return;
+      }
+      const localPath = project.finalVideoLocalPath ?? '';
+      let ok: boolean = false;
+      try {
+        ok = await UseCases.updateProjectFinalVideo(
+          this.projectId, project.status, project.currentStage,
+          AssetStatus.PENDING, null, null, null
+        );
+      } catch (e) {
+        promptAction.showToast({ message: '删除失败:' + ((e as Error).message ?? String(e)) });
+        return;
+      }
+      if (!ok) {
+        promptAction.showToast({ message: '删除失败: 数据库更新未生效' });
+        return;
+      }
+      if (localPath) {
+        try {
+          fileIo.unlinkSync(localPath);
+        } catch (e) {
+          hilog.warn(1, "DeleteFinalVideo", "unlink failed: %{public}s", (e as Error).message);
+        }
+      }
+      promptAction.showToast({ message: '已删除' });
+      await this.loadFinalVideo();
+    });
   }
 
   onBackPress(): boolean {
@@ -142,6 +197,20 @@ struct FinalVideoPage {
               .margin({ top: 8 })
               .width('100%')
               .textAlign(TextAlign.Center)
+
+            // 删除按钮(右下角)
+            Row() {
+              Blank().layoutWeight(1)
+              Button('删除')
+                .fontSize(13)
+                .backgroundColor(Theme.surfaceAlt)
+                .fontColor(Theme.textPrimary)
+                .height(32)
+                .padding({ left: 12, right: 12 })
+                .onClick((): void => { this.onDeleteFinalVideoClick() })
+            }
+            .width('100%')
+            .margin({ top: 8 })
           }
           .padding(16)
           .width('100%')
