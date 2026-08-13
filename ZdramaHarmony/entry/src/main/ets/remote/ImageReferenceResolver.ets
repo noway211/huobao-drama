@@ -96,7 +96,8 @@ export async function resolveImageReference(
   }
 
   // 下一步：解码 + 编码
-  // 3) 解码 → PixelMap（desiredSize + INSIDE + ignoreAlpha + EXIF 旋转）
+  // 3) 解码 → PixelMap（desiredSize 768x768；EXIF 旋转由 SDK 默认应用；
+  //    Harmony DecodingOptions 不支持 fit / ignoreAlpha 字段，详见 spec §Harmony 平台差异）
   // 4) JPEG 编码
   //    sentinel 模式 + finally 安全网：try 块覆盖 createPixelMap + imagePacker 两步，
   //    happy path 末尾显式 release 两个 native handle 并置 null；finally 仅在异常路径兜底。

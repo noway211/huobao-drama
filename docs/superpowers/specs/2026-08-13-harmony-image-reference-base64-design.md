@@ -174,6 +174,36 @@ hdc shell hilog -t 2000 2>&1 | grep -E "AgnesImageRepository|image generation|re
 4. **`util.Base64Helper` API 兼容性** — Harmony NEXT 必须确认 `util.Base64Helper.encodeToStr` 可用。如果不可用，回退到 `util.TextDecoder` + 手写 base64 编码（最后手段）。
 5. **不在范围**：不改 `buildCharacterReferences` 的 3 张上限；不改角色图本身生成的逻辑（走 `AgnesImageRepository.generateImage(settings, prompt)` 无 referenceImages，不受影响）。
 
+## Harmony 平台差异（实现期间确认的 SDK 行为）
+
+> **本节为 spec 的"实际参数"节**，区别于前面"设计目标"里写的"理论参数"——下面记录的是 Harmony NEXT ArkTS 实际可用的 API 与真实行为，所有 spec 偏离都以本节为权威解释。
+
+| spec 设计参数 | Harmony 实际可用 | 实际行为 | 影响 |
+|---|---|---|---|
+| `fit: 'INSIDE'`（等价后端 `fit: 'inside', withoutEnlargement: true`） | **不支持**——`image.DecodingOptions` 无 `fit` 字段 | 仅传 `desiredSize: { width: 768, height: 768 }`，依赖 SDK 默认 fit 行为（高度近似 INSIDE） | 真机回归时专项验证 768×768 缩放：小图不放大 / 大图保持比例 |
+| `ignoreAlpha: true`（等价后端 `flatten({ background: '#ffffff' })`） | **不支持**——`image.DecodingOptions` 无 `ignoreAlpha` 字段 | 依赖 JPEG 编码天然丢 alpha（PNG 透明区域在 JPEG 编码时变黑，非白底） | 与后端"白底"偏离；角色立绘通常无大面积透明，影响有限；未来若要白底，需在 `packing` 前用 `pixelMap` operations 填白 |
+| EXIF 旋转 | `createPixelMap` 默认应用 | 依赖 SDK 默认行为，无需显式 `rotate()` | 不可配置，但默认行为已满足"竖屏手机拍摄不横置"需求 |
+| `fileIo.readSync(fd, size)`（返回 ArrayBuffer 直读） | **签名不同**——`(fd, length) => number` 返回已读字节数 | 必须预分配 `new ArrayBuffer(stat.size)` 再用 `(fd, buffer, { offset, length })` 重载 | 短读风险：readSync 可能返回小于 stat.size 的字节数；当前实现未校验返回的 `bytesRead`，依赖 stat.size 准确（小概率理论 bug） |
+| `Base64Helper.encodeToStr(jpegBuffer)` | **方法名错**——`util.Base64Helper` 提供的是 `encodeToStringSync(src: Uint8Array): string` | 输入参数是 `Uint8Array`（不是 ArrayBuffer） | 实现层已适配：`new Uint8Array(jpegBuffer)` 再调 `encodeToStringSync` |
+| `image.createImagePacker().packing(...)` | 可用 | callback 风格，包装成 Promise | ImagePacker 实例未显式 `release()`，依赖 GC（Minor resource 泄漏；详见 final-review.md M-1） |
+
+### 实际最终参数
+
+```ts
+// 实际可用的 DecodingOptions
+const pixelMap = await imageSource.createPixelMap({
+  desiredSize: { width: MAX_WIDTH, height: MAX_HEIGHT },
+  // fit: 'INSIDE'  ← 删除，SDK 不支持
+  // ignoreAlpha: true  ← 删除，SDK 不支持
+});
+
+// 实际可用的 imagePacker
+image.createImagePacker().packing(pixelMap, {
+  format: 'image/jpeg',
+  quality: JPEG_QUALITY,
+}, (err, data) => { ... });
+```
+
 ## 关联文件参考
 
 | 角色 | 路径 |
