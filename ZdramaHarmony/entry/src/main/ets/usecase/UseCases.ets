@@ -202,6 +202,17 @@ export class UseCases {
     return UseCases.repo.updateCharacterAppearance(characterId, appearance);
   }
 
+  /** 更新单个角色的图片生成结果（imageStatus / url / localPath / errorMessage）。 */
+  static async updateCharacterImage(
+    characterId: number,
+    imageStatus: AssetStatus,
+    imageUrl: string | null,
+    imageLocalPath: string | null,
+    imageErrorMessage: string | null
+  ): Promise<void> {
+    await UseCases.repo.updateCharacterImage(characterId, imageStatus, imageUrl, imageLocalPath, imageErrorMessage);
+  }
+
   /** 自动替换触发内容审查的敏感词（临时修复）。对 imagePrompt 和 videoPrompt 均生效。 */
   static async patchSensitivePrompts(projectId: number): Promise<void> {
     const shots = await UseCases.repo.getStoryboards(projectId);
