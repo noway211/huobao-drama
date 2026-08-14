@@ -243,7 +243,6 @@ struct FinalVideoPage {
                 .fontColor(Color.White)
                 .height(32)
                 .padding({ left: 12, right: 12 })
-                .enabled(!this.saving)
                 .onClick(async (_event: ClickEvent, result: SaveButtonOnClickResult) => {
                   if (result === SaveButtonOnClickResult.SUCCESS) {
                     await this.onSaveToAlbumSaveClick();
