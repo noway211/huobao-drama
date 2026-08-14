@@ -8,6 +8,7 @@ import { MediaDownloadRepository, MediaType } from '../data/MediaDownloadReposit
 import { LocalMp4Composer } from '../data/media/LocalMp4Composer';
 import { AppContext } from '../common/AppContext';
 import { AgnesSettings } from '../model/AgnesSettings';
+import { CHARACTER_EXTRACT_PROMPT } from '../model/PromptDefaults';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { fileIo } from '@kit.CoreFileKit';
 import {
@@ -583,19 +584,8 @@ export class UseCases {
       existingHint = `\n\n项目中已存在角色：${names}。若剧本中同名角色已存在，请合并更新其信息（保留已有角色 id，用 existing_id 字段标记）；若为新角色则创建。`;
     }
 
-    const systemPrompt = `你是制片助理，擅长从剧本中提取角色信息。
-
-提取规范：
-- 姓名：角色全名
-- 角色定位：主角/配角/龙套
-- 外貌描写：性别、年龄、体型、面部特征、发型、着装（50-100字）
-- 性格特点：核心性格标签
-- 角色描述：背景故事和关系
-
-提取要求：
-- 提取剧本中所有出场角色，不要遗漏任何有台词或重要动作的角色
-- 角色要包含完整的外貌特征描述
-- 只提取当前剧本真实出现的角色`;
+    // 系统提示词：用户自定义优先（settings.customCharacterExtractPrompt），空则走默认
+    const systemPrompt = (settings.customCharacterExtractPrompt ?? '').trim() || CHARACTER_EXTRACT_PROMPT;
 
     const userPrompt = `请从以下剧本中提取所有角色信息，返回 JSON 数组。
 每个条目包含：name（角色名）、role（主角/配角/龙套）、description（角色描述）、appearance（外貌特征，用于生成角色立绘）、personality（性格特征）。

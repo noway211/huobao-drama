@@ -2,6 +2,7 @@ import { http } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AgnesSettings } from '../model/AgnesSettings';
+import { SCRIPT_CREATE_PROMPT, SCRIPT_REWRITE_PROMPT } from '../model/PromptDefaults';
 import { DramaProject } from '../model/DramaModels';
 import { ChatResponseTextExtractor, ChatResponse } from './ChatResponseTextExtractor';
 import { ApiLogStore } from './ApiLogStore';
@@ -9,38 +10,9 @@ import { ApiLogStore } from './ApiLogStore';
 const DOMAIN = 0x0001;
 const TAG = 'AgnesTextRepository';
 
-// 创作剧本时使用的系统提示词（prompt 文本，请勿改动内容）
-const SYSTEM_PROMPT = `你是一位专业的短剧编剧。请根据用户提供的项目信息创作格式化短剧剧本。
-
-格式规范：
-- 场景头：## S编号 | 内景/外景 · 地点 | 时间段
-- 动作描写：自然段落，增强画面感，不包含镜头语言
-- 对白格式：角色名：（状态/表情）台词内容
-- 每个场景控制在 30-60 秒内容
-- 场景编号连续递增（S01, S02, S03...）
-
-创作原则：
-- 根据标题和故事提示词展开完整剧本
-- 设计有吸引力的开场钩子
-- 用对白推动情节，减少旁白
-- 心理描写转化为角色表情/动作`;
-
-// 改写剧本时使用的系统提示词（prompt 文本，请勿改动内容）
-const REWRITE_SYSTEM_PROMPT = `你是一位专业的短剧编剧。请将用户提供的原始内容改写为格式化短剧剧本。
-
-格式规范：
-- 场景头：## S编号 | 内景/外景 · 地点 | 时间段
-- 动作描写：自然段落，增强画面感，不包含镜头语言
-- 对白格式：角色名：（状态/表情）台词内容
-- 每个场景控制在 30-60 秒内容
-- 场景编号连续递增（S01, S02, S03...）
-
-改写原则：
-- 保留核心情节，不改变主线故事和角色关系
-- 将叙述性文字转化为可视化的场景描写
-- 用对白推动情节，减少旁白
-- 心理描写转化为角色表情/动作
-- 长段叙述拆分为多个短场景`;
+// 系统提示词默认值已迁出到 model/PromptDefaults.ets；
+// 这里只负责取 effective prompt (settings.custom* || default)。
+// 调用侧 (UseCases) 在拿到 settings 后注入 effective prompt，避免 repo 耦合持久化。
 
 // 单条聊天消息：角色（system/user/assistant）与内容文本
 interface ChatMessage {
@@ -101,8 +73,9 @@ export class AgnesTextRepository {
     if (settings.textModel.trim().length === 0) {
       return fail('Text model is required');
     }
+    const systemPrompt = (settings.customScriptCreatePrompt ?? '').trim() || SCRIPT_CREATE_PROMPT;
     const messages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: this.buildUserPrompt(project) }
     ];
     return this.chatCompletion(settings, messages, 0.7, 4000, '未返回脚本文本');
@@ -119,8 +92,9 @@ export class AgnesTextRepository {
     if (rawContent.trim().length === 0) {
       return fail('Raw content is empty');
     }
+    const systemPrompt = (settings.customScriptRewritePrompt ?? '').trim() || SCRIPT_REWRITE_PROMPT;
     const messages: ChatMessage[] = [
-      { role: 'system', content: REWRITE_SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: this.buildRewriteUserPrompt(rawContent) }
     ];
     return this.chatCompletion(settings, messages, 0.7, 6000, '未返回改写内容');

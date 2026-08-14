@@ -1,5 +1,10 @@
 /**
  * Agnes AI 服务配置项，移植自 com.huobao.zdrama.data.settings.AgnesSettings。
+ *
+ * custom* 字段：用户在设置页"提示词管理"里编辑后的自定义系统提示词。
+ *   - 默认 undefined (用户从未编辑过)
+ *   - 编辑后保存为字符串（含空串 "" = 用户主动清空 → 调用时 fallback 到默认）
+ *   - 调用侧必须 `customPrompt?.trim() || DEFAULT_xxx_PROMPT`
  */
 export interface AgnesSettings {
   apiKey: string;
@@ -8,6 +13,10 @@ export interface AgnesSettings {
   imageModel: string;
   videoModel: string;
   requestTimeoutSeconds: number;
+  customScriptCreatePrompt?: string;
+  customScriptRewritePrompt?: string;
+  customCharacterExtractPrompt?: string;
+  customStoryboardPrompt?: string;
 }
 
 export const DEFAULT_BASE_URL = 'https://apihub.agnes-ai.com/';

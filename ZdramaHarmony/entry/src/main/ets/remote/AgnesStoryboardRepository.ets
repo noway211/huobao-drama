@@ -2,6 +2,7 @@ import { http } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AgnesSettings } from '../model/AgnesSettings';
+import { STORYBOARD_PROMPT } from '../model/PromptDefaults';
 import { DramaProject, StoryboardShot, AssetStatus } from '../model/DramaModels';
 import { ChatResponseTextExtractor, ChatResponse } from './ChatResponseTextExtractor';
 import { TextResult } from './AgnesTextRepository';
@@ -81,8 +82,9 @@ export class AgnesStoryboardRepository {
       return fail('Generate script before storyboard');
     }
 
+    const systemPrompt = (settings.customStoryboardPrompt ?? '').trim() || STORYBOARD_PROMPT;
     const messages: ChatMessage[] = [
-      { role: 'system', content: AgnesStoryboardRepository.SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: this.buildUserPrompt(project, script) }
     ];
     const raw = await this.postChat(settings, messages, 0.3, 6000);
@@ -300,10 +302,8 @@ ${script}
     }
   }
 
-  private static readonly SYSTEM_PROMPT = `你是资深短剧分镜师，擅长将中文剧本拆解为分镜 JSON。
-剧本是中文，因此以下字段必须用中文：scene（场景）、action（动作）、dialogue（对白）、camera（景别/机位，如"近景/平视"）、character_names（角色名）。
-以下字段必须用英文（用于图片/视频生成模型）：image_prompt、video_prompt。
-只返回 JSON 数组。每个条目必须包含：shot_number, scene, action, dialogue, camera, image_prompt, video_prompt, duration_seconds, character_names (array of character names appearing in this shot)。`;
+  // system prompt 默认值已迁出到 model/PromptDefaults.ets (STORYBOARD_PROMPT)
+  // 调用侧 (UseCases) 已在 settings 上注入 effective prompt，repo 只负责读 settings.customStoryboardPrompt。
 }
 
 // LLM 返回的原始 JSON 条目结构

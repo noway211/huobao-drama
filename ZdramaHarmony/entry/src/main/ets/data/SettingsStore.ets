@@ -30,6 +30,11 @@ const KEY_TEXT_MODEL = 'text_model';
 const KEY_IMAGE_MODEL = 'image_model';
 const KEY_VIDEO_MODEL = 'video_model';
 const KEY_TIMEOUT = 'timeout_seconds';
+// 4 个 LLM 流程的自定义系统提示词（与 PromptDefaults 对应；空串 = 用户主动清空 → fallback 默认）
+const KEY_PROMPT_SCRIPT_CREATE = 'prompt_script_create';
+const KEY_PROMPT_SCRIPT_REWRITE = 'prompt_script_rewrite';
+const KEY_PROMPT_CHARACTER_EXTRACT = 'prompt_character_extract';
+const KEY_PROMPT_STORYBOARD = 'prompt_storyboard';
 
 // 规范化 baseUrl：去除首尾空格，空则用默认值，并确保以 '/' 结尾
 function normalizeBaseUrl(raw: string): string {
@@ -72,6 +77,11 @@ export class SettingsStore {
     const imageModel = plain.getSync(KEY_IMAGE_MODEL, defaults.imageModel) as string;
     const videoModel = plain.getSync(KEY_VIDEO_MODEL, defaults.videoModel) as string;
     const timeout = plain.getSync(KEY_TIMEOUT, defaults.requestTimeoutSeconds) as number;
+    // 自定义提示词：未保存的 key 返回 undefined（与"用户编辑为空串"语义区分）
+    const scriptCreatePrompt = plain.getSync(KEY_PROMPT_SCRIPT_CREATE, '') as string;
+    const scriptRewritePrompt = plain.getSync(KEY_PROMPT_SCRIPT_REWRITE, '') as string;
+    const characterExtractPrompt = plain.getSync(KEY_PROMPT_CHARACTER_EXTRACT, '') as string;
+    const storyboardPrompt = plain.getSync(KEY_PROMPT_STORYBOARD, '') as string;
 
     return {
       apiKey: apiKey,
@@ -79,7 +89,11 @@ export class SettingsStore {
       textModel: textModel,
       imageModel: imageModel.length > 0 ? imageModel : DEFAULT_IMAGE_MODEL,
       videoModel: videoModel.length > 0 ? videoModel : DEFAULT_VIDEO_MODEL,
-      requestTimeoutSeconds: timeout > 0 ? timeout : DEFAULT_TIMEOUT_SECONDS
+      requestTimeoutSeconds: timeout > 0 ? timeout : DEFAULT_TIMEOUT_SECONDS,
+      customScriptCreatePrompt: scriptCreatePrompt.length > 0 ? scriptCreatePrompt : undefined,
+      customScriptRewritePrompt: scriptRewritePrompt.length > 0 ? scriptRewritePrompt : undefined,
+      customCharacterExtractPrompt: characterExtractPrompt.length > 0 ? characterExtractPrompt : undefined,
+      customStoryboardPrompt: storyboardPrompt.length > 0 ? storyboardPrompt : undefined
     };
   }
 
@@ -94,9 +108,27 @@ export class SettingsStore {
     await plain.put(KEY_IMAGE_MODEL, settings.imageModel.trim());
     await plain.put(KEY_VIDEO_MODEL, settings.videoModel.trim());
     await plain.put(KEY_TIMEOUT, settings.requestTimeoutSeconds);
+    // 4 个自定义提示词：trim 后写回；undefined 视为"未设置" → 删 key 避免污染
+    await SettingsStore.putPromptOrDelete(plain, KEY_PROMPT_SCRIPT_CREATE, settings.customScriptCreatePrompt);
+    await SettingsStore.putPromptOrDelete(plain, KEY_PROMPT_SCRIPT_REWRITE, settings.customScriptRewritePrompt);
+    await SettingsStore.putPromptOrDelete(plain, KEY_PROMPT_CHARACTER_EXTRACT, settings.customCharacterExtractPrompt);
+    await SettingsStore.putPromptOrDelete(plain, KEY_PROMPT_STORYBOARD, settings.customStoryboardPrompt);
 
     await secure.flush();
     await plain.flush();
+  }
+
+  // 写自定义提示词：undefined/空 → 删 key 保持 store 干净；非空 → trim 后写回
+  private static async putPromptOrDelete(
+    store: preferences.Preferences,
+    key: string,
+    value: string | undefined
+  ): Promise<void> {
+    if (value === undefined || value.trim().length === 0) {
+      await store.delete(key);
+    } else {
+      await store.put(key, value.trim());
+    }
   }
 
   // 判断是否已配置非空 API Key
