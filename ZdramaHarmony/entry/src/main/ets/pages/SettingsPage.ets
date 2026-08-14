@@ -230,6 +230,25 @@ struct SettingsPage {
     .width('100%')
   }
 
+  // 自定义 Tab 标题：active 用 primary 红色 + Bold，inactive 用 textSecondary 灰；下方 2px 红色下划线标识 active
+  @Builder
+  PromptTabBar(title: string, targetIndex: number) {
+    Column() {
+      Text(title)
+        .fontSize(15)
+        .fontWeight(this.activePromptTab === targetIndex ? FontWeight.Bold : FontWeight.Normal)
+        .fontColor(this.activePromptTab === targetIndex ? Theme.primary : Theme.textSecondary)
+        .margin({ bottom: 4 })
+      Row()
+        .width(28)
+        .height(2)
+        .backgroundColor(this.activePromptTab === targetIndex ? Theme.primary : Color.Transparent)
+        .borderRadius(1)
+    }
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+  }
+
   // Modal 内容：顶部关闭栏 + Tabs (脚本/角色提取/分镜)
   @Builder
   PromptModal() {
@@ -282,7 +301,7 @@ struct SettingsPage {
           .layoutWeight(1)
           .width('100%')
         }
-        .tabBar('脚本')
+        .tabBar(this.PromptTabBar('脚本', 0))
 
         // Tab 2: 角色提取
         TabContent() {
@@ -305,7 +324,7 @@ struct SettingsPage {
           .layoutWeight(1)
           .width('100%')
         }
-        .tabBar('角色提取')
+        .tabBar(this.PromptTabBar('角色提取', 1))
 
         // Tab 3: 分镜
         TabContent() {
@@ -328,11 +347,12 @@ struct SettingsPage {
           .layoutWeight(1)
           .width('100%')
         }
-        .tabBar('分镜')
+        .tabBar(this.PromptTabBar('分镜', 2))
       }
       .layoutWeight(1)
       .width('100%')
       .barMode(BarMode.Fixed)
+      .barHeight(48)
     }
     .width('100%')
     .height('100%')
