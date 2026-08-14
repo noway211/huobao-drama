@@ -4,6 +4,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { UseCases } from '../usecase/UseCases';
 import { AssetStatus, DramaProject } from '../model/DramaModels';
 import { Theme } from '../common/Theme';
+import { AlbumSaver } from '../service/AlbumSaver';
 
 interface FinalVideoPageParams {
   projectId: number;
@@ -21,6 +22,13 @@ struct FinalVideoPage {
   @State loading: boolean = true;
   @State errorText: string = '';
   @State fullScreen: boolean = false;
+  @State saving: boolean = false;
+  // SaveButton 安全控件配置：系统自动校验真实用户点击后才下发写权限
+  private saveButtonOptions: SaveButtonOptions = {
+    icon: SaveIconStyle.FULL_FILLED,
+    text: SaveDescription.SAVE_FILE,
+    buttonType: ButtonType.Capsule
+  };
 
   private projectId: number = 0;
 
@@ -108,6 +116,34 @@ struct FinalVideoPage {
       promptAction.showToast({ message: '已删除' });
       await this.loadFinalVideo();
     });
+  }
+
+  // SaveButton 安全控件回调：系统已校验用户真实点击，自动授予写权限
+  private async onSaveToAlbumSaveClick(): Promise<void> {
+    if (this.saving) {
+      return;
+    }
+    // 取沙盒内绝对路径（去 file:// 前缀）
+    const localPath: string = this.videoSrc.startsWith('file://')
+      ? this.videoSrc.substring('file://'.length)
+      : this.videoSrc;
+    if (localPath.length === 0) {
+      promptAction.showToast({ message: '保存失败：成片路径为空' });
+      return;
+    }
+    this.saving = true;
+    try {
+      const result = await AlbumSaver.saveVideo(localPath, this.title);
+      if (result.ok) {
+        promptAction.showToast({ message: '已保存到相册' });
+        hilog.info(1, "SaveToAlbum", "save ok uri=%{public}s", result.uri);
+      } else {
+        promptAction.showToast({ message: `保存失败：${result.error}` });
+        hilog.error(1, "SaveToAlbum", "save failed: %{public}s", result.error);
+      }
+    } finally {
+      this.saving = false;
+    }
   }
 
   onBackPress(): boolean {
@@ -198,8 +234,24 @@ struct FinalVideoPage {
               .width('100%')
               .textAlign(TextAlign.Center)
 
-            // 删除按钮(右下角)
+            // 操作按钮行（左：保存到相册 / 右：删除）
             Row() {
+              // 保存到相册 — SaveButton 安全控件（系统自动校验真实点击后下发写权限）
+              SaveButton(this.saveButtonOptions)
+                .fontSize(13)
+                .backgroundColor(Theme.primary)
+                .fontColor(Color.White)
+                .height(32)
+                .padding({ left: 12, right: 12 })
+                .enabled(!this.saving)
+                .onClick(async (_event: ClickEvent, result: SaveButtonOnClickResult) => {
+                  if (result === SaveButtonOnClickResult.SUCCESS) {
+                    await this.onSaveToAlbumSaveClick();
+                  } else {
+                    hilog.warn(1, "SaveToAlbum", "SaveButton result not SUCCESS: %{public}d", result);
+                    promptAction.showToast({ message: '设置权限失败' });
+                  }
+                })
               Blank().layoutWeight(1)
               Button('删除')
                 .fontSize(13)
