@@ -375,7 +375,7 @@ export class UseCases {
             shot.id, AssetStatus.PROCESSING, shot.imageUrl, shot.imageLocalPath, null);
           onProgress?.(current, shots.length, shot.shotNumber, '下载图片');
           const redownload = await UseCases.mediaDownload.downloadToGeneratedMedia(
-            projectId, shot.id, shot.imageUrl, MediaType.IMAGE);
+            projectId, shot.id, shot.imageUrl, MediaType.IMAGE, settings.requestTimeoutSeconds * 1000);
           if (redownload.ok) {
             completed++;
             generated++;
@@ -409,7 +409,7 @@ export class UseCases {
           const imageUrl = imageResult.value;
           onProgress?.(current, shots.length, shot.shotNumber, '下载图片');
           const downloadResult = await UseCases.mediaDownload.downloadToGeneratedMedia(
-            projectId, shot.id, imageUrl, MediaType.IMAGE);
+            projectId, shot.id, imageUrl, MediaType.IMAGE, settings.requestTimeoutSeconds * 1000);
 
           if (downloadResult.ok) {
             hilog.info(DOMAIN, TAG, 'download OK for shot #%{public}d -> %{public}s', shot.shotNumber, downloadResult.value);
@@ -497,7 +497,7 @@ export class UseCases {
           shot.id, AssetStatus.PROCESSING, shot.videoTaskId, shot.videoUrl, shot.videoLocalPath, null);
         onProgress?.(current, shots.length, shot.shotNumber, '下载视频');
         const redownload = await UseCases.mediaDownload.downloadToGeneratedMedia(
-          projectId, shot.id, shot.videoUrl, MediaType.VIDEO);
+          projectId, shot.id, shot.videoUrl, MediaType.VIDEO, settings.requestTimeoutSeconds * 1000);
         if (redownload.ok) {
           completed++;
           generated++;
@@ -519,7 +519,7 @@ export class UseCases {
         hilog.info(DOMAIN, TAG, 'video API OK for shot %{public}d, url=%{public}s', shot.shotNumber, videoResult.value);
         const videoUrl = videoResult.value;
         const downloadResult = await UseCases.mediaDownload.downloadToGeneratedMedia(
-          projectId, shot.id, videoUrl, MediaType.VIDEO);
+          projectId, shot.id, videoUrl, MediaType.VIDEO, settings.requestTimeoutSeconds * 1000);
 
         if (downloadResult.ok) {
           hilog.info(DOMAIN, TAG, 'download OK for shot #%{public}d -> %{public}s', shot.shotNumber, downloadResult.value);
@@ -733,7 +733,7 @@ ${script}${existingHint}`;
       if (imageResult.ok) {
         const charImageUrl = imageResult.value;
         onProgress?.(current, characters.length, current, '下载角色图');
-        const downloadResult = await UseCases.mediaDownload.downloadCharImage(projectId, ch.id, charImageUrl);
+        const downloadResult = await UseCases.mediaDownload.downloadCharImage(projectId, ch.id, charImageUrl, settings.requestTimeoutSeconds * 1000);
         if (downloadResult.ok) {
           completed++;
           generated++;
@@ -787,7 +787,7 @@ ${script}${existingHint}`;
     const imageResult = await UseCases.image.generateImage(settings, prompt);
     if (imageResult.ok) {
       const charImageUrl = imageResult.value;
-      const downloadResult = await UseCases.mediaDownload.downloadCharImage(projectId, ch.id, charImageUrl);
+      const downloadResult = await UseCases.mediaDownload.downloadCharImage(projectId, ch.id, charImageUrl, settings.requestTimeoutSeconds * 1000);
       if (downloadResult.ok) {
         await UseCases.repo.updateCharacterImage(
           ch.id, AssetStatus.COMPLETED, charImageUrl, downloadResult.value, null);

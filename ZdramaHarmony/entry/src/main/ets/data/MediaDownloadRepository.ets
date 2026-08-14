@@ -42,7 +42,8 @@ export class MediaDownloadRepository {
     projectId: number,
     shotId: number,
     url: string,
-    mediaType: MediaType
+    mediaType: MediaType,
+    timeoutMs: number
   ): Promise<DownloadResult> {
     if (url.trim().length === 0) {
       return fail('下载 URL 为空');
@@ -74,7 +75,9 @@ export class MediaDownloadRepository {
     try {
       const response = await request.request(url, {
         method: http.RequestMethod.GET,
-        expectDataType: http.HttpDataType.ARRAY_BUFFER
+        expectDataType: http.HttpDataType.ARRAY_BUFFER,
+        connectTimeout: timeoutMs,
+        readTimeout: timeoutMs
       });
 
       const responseCode = response.responseCode;
@@ -159,7 +162,8 @@ export class MediaDownloadRepository {
   async downloadCharImage(
     projectId: number,
     characterId: number,
-    url: string
+    url: string,
+    timeoutMs: number
   ): Promise<DownloadResult> {
     if (url.trim().length === 0) {
       return fail('下载 URL 为空');
@@ -186,7 +190,9 @@ export class MediaDownloadRepository {
     try {
       const response = await request.request(url, {
         method: http.RequestMethod.GET,
-        expectDataType: http.HttpDataType.ARRAY_BUFFER
+        expectDataType: http.HttpDataType.ARRAY_BUFFER,
+        connectTimeout: timeoutMs,
+        readTimeout: timeoutMs
       });
 
       const responseCode = response.responseCode;
