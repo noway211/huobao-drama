@@ -7,10 +7,6 @@
     {
       "name": "EntryAbility_desc",
       "value": "视频短剧入口"
-    },
-    {
-      "name": "permission_write_imagevideo_reason",
-      "value": "用于将合成后的成片视频保存到系统相册，方便用户在本地查看和分享。"
     }
   ]
 }
