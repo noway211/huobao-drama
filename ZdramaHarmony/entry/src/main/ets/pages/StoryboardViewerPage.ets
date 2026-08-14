@@ -107,6 +107,7 @@ struct StoryboardViewerPage {
     }
     // 刷新分镜数据
     this.shots = await UseCases.getStoryboards(this.projectId);
+    this.refreshTick++;
   }
 
   // 取消编辑

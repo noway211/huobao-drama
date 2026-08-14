@@ -23,6 +23,10 @@ struct CharacterListPage {
   @State editingChar: Character | null = null;
   @State editText: string = '';
   @State previewImageUrl: string = '';
+  // 数据刷新计数器：每次 characters 变更后 +1,塞进 ForEach key
+  // 强制 ListItem 重建(否则 ArkUI 见 ch.id 相同会复用旧节点,导致
+  // Text(ch.appearance) 等不重算,显示陈旧数据)
+  @State refreshTick: number = 0;
   private projectId: number = 0;
 
   aboutToAppear(): void {
@@ -42,6 +46,7 @@ struct CharacterListPage {
 
   private async reloadCharacters(): Promise<void> {
     this.characters = await UseCases.getCharacters(this.projectId);
+    this.refreshTick++;
     hilog.info(DOMAIN, TAG, 'reloadCharacters: project=%{public}d count=%{public}d',
       this.projectId, this.characters.length);
     for (const ch of this.characters) {
@@ -309,7 +314,7 @@ struct CharacterListPage {
               .backgroundColor(Theme.surface)
               .borderRadius(10)
             }
-          }, (ch: Character, index: number) => ch.id > 0 ? ch.id.toString() : `${index}`)
+          }, (ch: Character, index: number) => `${ch.id}_${this.refreshTick}`)
         }
         .layoutWeight(1)
         .width('100%')
