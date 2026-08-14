@@ -4,6 +4,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { UseCases } from '../usecase/UseCases';
 import { AssetStatus, DramaProject } from '../model/DramaModels';
 import { Theme } from '../common/Theme';
+import { AlbumSaver, buildVideoFileName } from '../service/AlbumSaver';
 
 interface FinalVideoPageParams {
   projectId: number;
@@ -21,6 +22,7 @@ struct FinalVideoPage {
   @State loading: boolean = true;
   @State errorText: string = '';
   @State fullScreen: boolean = false;
+  @State saving: boolean = false;
 
   private projectId: number = 0;
 
@@ -108,6 +110,44 @@ struct FinalVideoPage {
       promptAction.showToast({ message: '已删除' });
       await this.loadFinalVideo();
     });
+  }
+
+  // 保存到系统视频相册：调用 AlbumSaver；saving 防双击
+  private async onSaveToAlbumClick(): Promise<void> {
+    if (this.saving) {
+      return;
+    }
+    // 重新从 DB 拿最新 localPath（避免页面打开后路径变化）
+    let localPath: string = '';
+    try {
+      const project = await UseCases.getProject(this.projectId);
+      if (!project) {
+        promptAction.showToast({ message: '项目不存在' });
+        return;
+      }
+      localPath = project.finalVideoLocalPath ?? '';
+    } catch (e) {
+      promptAction.showToast({ message: '读取项目失败：' + ((e as Error).message ?? String(e)) });
+      return;
+    }
+    if (localPath.length === 0) {
+      promptAction.showToast({ message: '成片视频不存在' });
+      return;
+    }
+
+    this.saving = true;
+    const fileName = buildVideoFileName(this.title, this.projectId, Date.now());
+    hilog.info(1, "SaveToAlbum", "saving: project=%{public}d name=%{public}s",
+      this.projectId, fileName);
+
+    const result = await AlbumSaver.saveVideo(localPath, fileName);
+    this.saving = false;
+
+    if (result.ok) {
+      promptAction.showToast({ message: '已保存到相册' });
+    } else {
+      promptAction.showToast({ message: `保存失败：${result.error}` });
+    }
   }
 
   onBackPress(): boolean {
@@ -198,8 +238,16 @@ struct FinalVideoPage {
               .width('100%')
               .textAlign(TextAlign.Center)
 
-            // 删除按钮(右下角)
+            // 底部动作行：保存到相册 + 删除
             Row() {
+              Button(this.saving ? '保存中…' : '保存到相册')
+                .fontSize(13)
+                .fontColor(Color.White)
+                .backgroundColor(this.saving ? Theme.primaryDisabled : Theme.primary)
+                .height(32)
+                .padding({ left: 12, right: 12 })
+                .enabled(!this.saving)
+                .onClick((): void => { this.onSaveToAlbumClick() })
               Blank().layoutWeight(1)
               Button('删除')
                 .fontSize(13)
