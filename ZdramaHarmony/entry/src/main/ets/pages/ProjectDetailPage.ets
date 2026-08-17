@@ -15,6 +15,11 @@ struct ProjectDetailPage {
   @State episode: Episode | null = null;
   @State busy: boolean = false;
   @State busyLabel: string = '';
+  // 阶段进度：阶段名 + 当前/总数 + 正在处理的对象（仅分镜图/视频/角色图三类有 callback）
+  @State stageLabel: string = '';
+  @State progressCurrent: number = 0;
+  @State progressTotal: number = 0;
+  @State progressEntity: string = '';
   @State promptExpanded: boolean = false;
   @State hasStoryboards: boolean = false;
   @State characters: Character[] = [];
@@ -125,9 +130,11 @@ struct ProjectDetailPage {
   async doGenerate(): Promise<void> {
     this.busy = true;
     this.busyLabel = '创作脚本中…';
+    this.stageLabel = '创作脚本';
     const settings = await SettingsStore.load();
     const result = await UseCases.generateScript(this.projectId, settings);
     this.busy = false;
+    this.clearProgress();
     promptAction.showToast({ message: result.ok ? '脚本已生成' : `失败：${result.error}` });
     await this.reload();
   }
@@ -140,9 +147,11 @@ struct ProjectDetailPage {
     }
     this.busy = true;
     this.busyLabel = '改写脚本中…';
+    this.stageLabel = '改写脚本';
     const settings = await SettingsStore.load();
     const result = await UseCases.rewriteScript(this.projectId, settings);
     this.busy = false;
+    this.clearProgress();
     promptAction.showToast({ message: result.ok ? '脚本已改写' : `失败：${result.error}` });
     await this.reload();
   }
@@ -169,9 +178,11 @@ struct ProjectDetailPage {
   async doGenerateStoryboards(): Promise<void> {
     this.busy = true;
     this.busyLabel = '生成分镜中…';
+    this.stageLabel = '生成分镜';
     const settings = await SettingsStore.load();
     const result = await UseCases.generateStoryboards(this.projectId, settings);
     this.busy = false;
+    this.clearProgress();
     promptAction.showToast({ message: result.ok ? '分镜已生成' : `失败：${result.error}` });
     await this.reload();
   }
@@ -189,9 +200,11 @@ struct ProjectDetailPage {
   async doExtractCharacters(): Promise<void> {
     this.busy = true;
     this.busyLabel = '提取角色中…';
+    this.stageLabel = '提取角色';
     const settings = await SettingsStore.load();
     const result = await UseCases.extractCharacters(this.projectId, settings);
     this.busy = false;
+    this.clearProgress();
     promptAction.showToast({ message: result.ok ? `已提取 ${result.value} 个角色` : `失败：${result.error}` });
     await this.reload();
   }
@@ -221,11 +234,16 @@ struct ProjectDetailPage {
   async doGenerateCharacterImages(): Promise<void> {
     this.busy = true;
     this.busyLabel = '生成角色图中…';
+    this.stageLabel = '生成角色图';
     const settings = await SettingsStore.load();
     const result = await UseCases.generateCharacterImages(this.projectId, settings, (current, total, shotNumber, phase) => {
       this.busyLabel = `${phase} ${current}/${total}`;
+      this.progressCurrent = current;
+      this.progressTotal = total;
+      this.progressEntity = `角色 #${shotNumber}`;
     });
     this.busy = false;
+    this.clearProgress();
     promptAction.showToast({ message: result.ok ? '角色图已生成' : `失败：${result.error}` });
     await this.reload();
   }
@@ -285,11 +303,16 @@ struct ProjectDetailPage {
   async doGenerateImages(): Promise<void> {
     this.busy = true;
     this.busyLabel = '生成图片中…';
+    this.stageLabel = '生成图片';
     const settings = await SettingsStore.load();
     const result = await UseCases.generateStoryboardImages(this.projectId, settings, (current, total, shotNumber, phase) => {
       this.busyLabel = `${phase} ${current}/${total}（分镜 ${shotNumber}）`;
+      this.progressCurrent = current;
+      this.progressTotal = total;
+      this.progressEntity = `分镜 #${shotNumber}`;
     });
     this.busy = false;
+    this.clearProgress();
     promptAction.showToast({ message: result.ok ? '图片已生成' : `失败：${result.error}` });
     await this.reload();
   }
@@ -319,11 +342,16 @@ struct ProjectDetailPage {
   async doGenerateVideos(): Promise<void> {
     this.busy = true;
     this.busyLabel = '生成视频中…';
+    this.stageLabel = '生成视频';
     const settings = await SettingsStore.load();
     const result = await UseCases.generateStoryboardVideos(this.projectId, settings, (current, total, shotNumber, phase) => {
       this.busyLabel = `${phase} ${current}/${total}（分镜 ${shotNumber}）`;
+      this.progressCurrent = current;
+      this.progressTotal = total;
+      this.progressEntity = `分镜 #${shotNumber}`;
     });
     this.busy = false;
+    this.clearProgress();
     promptAction.showToast({ message: result.ok ? '视频已生成' : `失败：${result.error}` });
     await this.reload();
   }
@@ -353,9 +381,11 @@ struct ProjectDetailPage {
   async doComposeFinalVideo(): Promise<void> {
     this.busy = true;
     this.busyLabel = '合成成片中…';
+    this.stageLabel = '合成成片';
     const settings = await SettingsStore.load();
     const result = await UseCases.composeFinalVideo(this.projectId, settings);
     this.busy = false;
+    this.clearProgress();
     promptAction.showToast({ message: result.ok ? '成片已生成' : `合成失败：${result.error}` });
     await this.reload();
   }
@@ -416,6 +446,81 @@ struct ProjectDetailPage {
     .width('100%')
     .alignItems(VerticalAlign.Top)
     .margin({ bottom: 10 })
+  }
+
+  // 清空阶段进度相关 state（在每次 do* 结束 / 异常路径上调用）
+  private clearProgress(): void {
+    this.stageLabel = '';
+    this.progressCurrent = 0;
+    this.progressTotal = 0;
+    this.progressEntity = '';
+  }
+
+  // 阶段进度卡片：busy 时显示在项目信息下方。
+  // 有 current/total 时显示「阶段 + 第 N/M 张 + 正在处理 X」；否则只显示阶段。
+  @Builder
+  ProgressCard() {
+    Column() {
+      Row() {
+        // 阶段小圆点 + 阶段名
+        Column() {
+          Text('●')
+            .fontSize(12)
+            .fontColor(Theme.primary)
+            .width(16)
+            .textAlign(TextAlign.Center)
+        }
+        Text(this.stageLabel)
+          .fontSize(15)
+          .fontColor(Theme.textPrimary)
+          .fontWeight(FontWeight.Bold)
+        Blank().layoutWeight(1)
+        // 当前/总数（仅在有进度时显示）
+        if (this.progressTotal > 0) {
+          Text(`第 ${this.progressCurrent}/${this.progressTotal} 张`)
+            .fontSize(14)
+            .fontColor(Theme.primary)
+            .fontWeight(FontWeight.Bold)
+        }
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      // 进度条（仅在有进度时显示）
+      if (this.progressTotal > 0) {
+        Progress({
+          value: this.progressCurrent,
+          total: this.progressTotal
+        })
+          .width('100%')
+          .height(4)
+          .color(Theme.primary)
+          .backgroundColor(Theme.surfaceAlt)
+          .margin({ top: 8 })
+      }
+
+      // 正在处理对象 + busy 详细标签
+      if (this.progressEntity.length > 0) {
+        Text(`正在处理：${this.progressEntity}`)
+          .fontSize(13)
+          .fontColor(Theme.textSecondary)
+          .width('100%')
+          .margin({ top: 8 })
+      } else {
+        Text(this.busyLabel)
+          .fontSize(13)
+          .fontColor(Theme.textSecondary)
+          .width('100%')
+          .margin({ top: 8 })
+      }
+    }
+    .alignItems(HorizontalAlign.Start)
+    .padding(16)
+    .width('100%')
+    .backgroundColor(Theme.surface)
+    .borderRadius(12)
+    .border({ width: 1, color: Theme.primary })
+    .margin({ bottom: 16 })
   }
 
   // 页面整体布局：顶部返回/删除栏 + 项目信息、原始内容、脚本操作按钮的可滚动内容
@@ -480,6 +585,11 @@ struct ProjectDetailPage {
             .backgroundColor(Theme.surface)
             .borderRadius(12)
             .margin({ bottom: 16 })
+
+            // 阶段进度卡片：仅在忙碌时显示
+            if (this.busy && this.stageLabel.length > 0) {
+              this.ProgressCard()
+            }
 
             // Prompt / raw content
             Column() {
