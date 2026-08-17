@@ -227,11 +227,16 @@
     <string name="manage_prompts_status_default">使用默认值</string>
     <string name="manage_prompts_status_unsaved">未保存修改</string>
     <string name="manage_prompts_discard_title">放弃修改？</string>
-    <string name="manage_prompts_discard_message">当前 prompt 还有未保存的修改，切换 prompt 会丢失。是否继续？</string>
+    <string name="manage_prompts_discard_message">当前 prompt 还有未保存的修改，切换 tab 会丢失。是否继续？</string>
     <string name="manage_prompts_discard_confirm">放弃</string>
     <string name="manage_prompts_discard_cancel">继续编辑</string>
-    <string name="manage_prompts_tab_script_create">脚本创作</string>
-    <string name="manage_prompts_tab_script_rewrite">脚本改写</string>
-    <string name="manage_prompts_tab_character_extract">角色提取</string>
-    <string name="manage_prompts_tab_storyboard">分镜拆解</string>
+    <string name="manage_prompts_tab_script">脚本</string>
+    <string name="manage_prompts_tab_character">角色提取</string>
+    <string name="manage_prompts_tab_storyboard">分镜</string>
+    <string name="manage_prompts_field_script_create_label">创作剧本（用于"生成剧本"流程）</string>
+    <string name="manage_prompts_field_script_rewrite_label">改写剧本（用于"改写剧本"流程）</string>
+    <string name="manage_prompts_field_character_extract_label">角色提取（从剧本抽取 name/role/description/appearance/personality）</string>
+    <string name="manage_prompts_field_storyboard_label">分镜（拆解剧本为分镜 JSON，文字字段中文，image/video prompt 英文）</string>
+    <string name="manage_prompts_field_default_length">默认 %1$d 字</string>
+    <string name="manage_prompts_placeholder">在此输入自定义提示词…清空则使用默认值</string>
 </resources>

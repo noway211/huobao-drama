@@ -44,26 +44,209 @@
         android:layout_marginTop="16dp"
         android:background="@color/zdrama_surface" />
 
-    <com.google.android.material.textfield.TextInputLayout
+    <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
         android:layout_marginTop="12dp"
-        android:hint="@string/manage_prompts_content_hint"
-        app:boxBackgroundColor="@color/zdrama_surface"
-        app:boxStrokeColor="@color/zdrama_primary">
+        android:layout_weight="1"
+        android:fillViewport="true">
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/promptInput"
+        <!-- ─── 脚本 tab (2 fields: 创作 + 改写) ─── -->
+        <LinearLayout
+            android:id="@+id/scriptPanel"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:gravity="top|start"
-            android:inputType="textMultiLine|textNoSuggestions"
-            android:scrollbars="vertical"
-            android:textColor="@color/zdrama_text_primary"
-            android:textColorHint="@color/zdrama_text_secondary"
-            android:textSize="13sp" />
-    </com.google.android.material.textfield.TextInputLayout>
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/scriptCreateInputLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/manage_prompts_field_script_create_label"
+                app:boxBackgroundColor="@color/zdrama_surface"
+                app:boxStrokeColor="@color/zdrama_primary"
+                app:helperTextEnabled="true">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/scriptCreateInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="300dp"
+                    android:gravity="top|start"
+                    android:inputType="textMultiLine|textNoSuggestions"
+                    android:scrollbars="vertical"
+                    android:textColor="@color/zdrama_text_primary"
+                    android:textColorHint="@color/zdrama_text_secondary"
+                    android:textSize="13sp" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/scriptRewriteInputLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:hint="@string/manage_prompts_field_script_rewrite_label"
+                app:boxBackgroundColor="@color/zdrama_surface"
+                app:boxStrokeColor="@color/zdrama_primary"
+                app:helperTextEnabled="true">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/scriptRewriteInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="300dp"
+                    android:gravity="top|start"
+                    android:inputType="textMultiLine|textNoSuggestions"
+                    android:scrollbars="vertical"
+                    android:textColor="@color/zdrama_text_primary"
+                    android:textColorHint="@color/zdrama_text_secondary"
+                    android:textSize="13sp" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/resetScriptButton"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/manage_prompts_reset" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/saveScriptButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:text="@string/manage_prompts_save" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- ─── 角色提取 tab (1 field) ─── -->
+    <ScrollView
+        android:id="@+id/characterPanel"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="12dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/characterExtractInputLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/manage_prompts_field_character_extract_label"
+                app:boxBackgroundColor="@color/zdrama_surface"
+                app:boxStrokeColor="@color/zdrama_primary"
+                app:helperTextEnabled="true">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/characterExtractInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="500dp"
+                    android:gravity="top|start"
+                    android:inputType="textMultiLine|textNoSuggestions"
+                    android:scrollbars="vertical"
+                    android:textColor="@color/zdrama_text_primary"
+                    android:textColorHint="@color/zdrama_text_secondary"
+                    android:textSize="13sp" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/resetCharacterButton"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/manage_prompts_reset" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/saveCharacterButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:text="@string/manage_prompts_save" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- ─── 分镜 tab (1 field) ─── -->
+    <ScrollView
+        android:id="@+id/storyboardPanel"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="12dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/storyboardInputLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/manage_prompts_field_storyboard_label"
+                app:boxBackgroundColor="@color/zdrama_surface"
+                app:boxStrokeColor="@color/zdrama_primary"
+                app:helperTextEnabled="true">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/storyboardInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="500dp"
+                    android:gravity="top|start"
+                    android:inputType="textMultiLine|textNoSuggestions"
+                    android:scrollbars="vertical"
+                    android:textColor="@color/zdrama_text_primary"
+                    android:textColorHint="@color/zdrama_text_secondary"
+                    android:textSize="13sp" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/resetStoryboardButton"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/manage_prompts_reset" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/saveStoryboardButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:text="@string/manage_prompts_save" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
 
     <TextView
         android:id="@+id/statusText"
@@ -72,26 +255,4 @@
         android:layout_marginTop="8dp"
         android:textColor="@color/zdrama_text_secondary"
         android:textSize="12sp" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:orientation="horizontal">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/resetButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/manage_prompts_reset" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/saveButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:layout_weight="1"
-            android:text="@string/manage_prompts_save" />
-    </LinearLayout>
 </LinearLayout>
