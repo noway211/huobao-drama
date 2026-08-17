@@ -2,6 +2,8 @@ package com.huobao.zdrama.domain.usecase
 
 import android.util.Log
 import com.google.gson.Gson
+import com.huobao.zdrama.data.prompt.PromptDefaults
+import com.huobao.zdrama.data.prompt.PromptResolver
 import com.huobao.zdrama.data.remote.ChatMessage
 import com.huobao.zdrama.data.remote.ChatResponseTextExtractor
 import com.huobao.zdrama.data.repository.AgnesTextRepository
@@ -34,19 +36,10 @@ class ExtractCharactersUseCase(
             ""
         }
 
-        val systemPrompt = """你是制片助理，擅长从剧本中提取角色信息。
-
-提取规范：
-- 姓名：角色全名
-- 角色定位：主角/配角/龙套
-- 外貌描写：性别、年龄、体型、面部特征、发型、着装（50-100字）
-- 性格特点：核心性格标签
-- 角色描述：背景故事和关系
-
-提取要求：
-- 提取剧本中所有出场角色，不要遗漏任何有台词或重要动作的角色
-- 角色要包含完整的外貌特征描述
-- 只提取当前剧本真实出现的角色"""
+        val systemPrompt = PromptResolver.resolve(
+            settings.customCharacterExtractPrompt,
+            PromptDefaults.CHARACTER_EXTRACT_PROMPT
+        )
 
         val userPrompt = """请从以下剧本中提取所有角色信息，返回 JSON 数组。
 每个条目包含：name（角色名）、role（主角/配角/龙套）、description（角色描述）、appearance（外貌特征，用于生成角色立绘）、personality（性格特征）。

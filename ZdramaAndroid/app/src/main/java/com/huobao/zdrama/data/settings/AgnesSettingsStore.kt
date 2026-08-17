@@ -20,7 +20,11 @@ class AgnesSettingsStore(context: Context) {
             textModel = plainPreferences.getString(KEY_TEXT_MODEL, defaults.textModel).orEmpty(),
             imageModel = plainPreferences.getString(KEY_IMAGE_MODEL, defaults.imageModel).orEmpty().ifBlank { defaults.imageModel },
             videoModel = plainPreferences.getString(KEY_VIDEO_MODEL, defaults.videoModel).orEmpty().ifBlank { defaults.videoModel },
-            requestTimeoutSeconds = plainPreferences.getLong(KEY_TIMEOUT_SECONDS, defaults.requestTimeoutSeconds)
+            requestTimeoutSeconds = plainPreferences.getLong(KEY_TIMEOUT_SECONDS, defaults.requestTimeoutSeconds),
+            customScriptCreatePrompt = plainPreferences.getString(KEY_CUSTOM_SCRIPT_CREATE_PROMPT, null),
+            customScriptRewritePrompt = plainPreferences.getString(KEY_CUSTOM_SCRIPT_REWRITE_PROMPT, null),
+            customCharacterExtractPrompt = plainPreferences.getString(KEY_CUSTOM_CHARACTER_EXTRACT_PROMPT, null),
+            customStoryboardPrompt = plainPreferences.getString(KEY_CUSTOM_STORYBOARD_PROMPT, null)
         )
     }
 
@@ -34,6 +38,10 @@ class AgnesSettingsStore(context: Context) {
             .putString(KEY_IMAGE_MODEL, settings.imageModel.trim())
             .putString(KEY_VIDEO_MODEL, settings.videoModel.trim())
             .putLong(KEY_TIMEOUT_SECONDS, settings.requestTimeoutSeconds)
+            .putString(KEY_CUSTOM_SCRIPT_CREATE_PROMPT, settings.customScriptCreatePrompt?.trim().orEmpty().ifEmpty { null })
+            .putString(KEY_CUSTOM_SCRIPT_REWRITE_PROMPT, settings.customScriptRewritePrompt?.trim().orEmpty().ifEmpty { null })
+            .putString(KEY_CUSTOM_CHARACTER_EXTRACT_PROMPT, settings.customCharacterExtractPrompt?.trim().orEmpty().ifEmpty { null })
+            .putString(KEY_CUSTOM_STORYBOARD_PROMPT, settings.customStoryboardPrompt?.trim().orEmpty().ifEmpty { null })
             .apply()
     }
 
@@ -66,5 +74,10 @@ class AgnesSettingsStore(context: Context) {
         private const val KEY_IMAGE_MODEL = "image_model"
         private const val KEY_VIDEO_MODEL = "video_model"
         private const val KEY_TIMEOUT_SECONDS = "timeout_seconds"
+        // 4 个 LLM 流程的自定义系统提示词（覆盖 PromptDefaults 中的默认值）
+        private const val KEY_CUSTOM_SCRIPT_CREATE_PROMPT = "custom_script_create_prompt"
+        private const val KEY_CUSTOM_SCRIPT_REWRITE_PROMPT = "custom_script_rewrite_prompt"
+        private const val KEY_CUSTOM_CHARACTER_EXTRACT_PROMPT = "custom_character_extract_prompt"
+        private const val KEY_CUSTOM_STORYBOARD_PROMPT = "custom_storyboard_prompt"
     }
 }

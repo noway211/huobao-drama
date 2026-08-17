@@ -1,5 +1,6 @@
 package com.huobao.zdrama.ui.settings
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -36,6 +37,9 @@ class SettingsActivity : AppCompatActivity() {
         binding.testTextModelButton.setOnClickListener {
             testTextModel()
         }
+        binding.managePromptsButton.setOnClickListener {
+            startActivity(Intent(this, ManagePromptsActivity::class.java))
+        }
     }
 
     private fun render(settings: AgnesSettings) {
@@ -47,13 +51,19 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun readForm(): AgnesSettings {
+        // 从 store 读最新值，避免 Settings 页 save 时清空 4 个 custom 提示词字段
+        val existing = settingsStore.load()
         return AgnesSettings(
             apiKey = binding.apiKeyInput.text?.toString().orEmpty(),
             baseUrl = binding.baseUrlInput.text?.toString().orEmpty(),
             textModel = binding.textModelInput.text?.toString().orEmpty(),
             imageModel = binding.imageModelInput.text?.toString().orEmpty(),
             videoModel = binding.videoModelInput.text?.toString().orEmpty(),
-            requestTimeoutSeconds = AgnesSettings.DEFAULT_TIMEOUT_SECONDS
+            requestTimeoutSeconds = AgnesSettings.DEFAULT_TIMEOUT_SECONDS,
+            customScriptCreatePrompt = existing.customScriptCreatePrompt,
+            customScriptRewritePrompt = existing.customScriptRewritePrompt,
+            customCharacterExtractPrompt = existing.customCharacterExtractPrompt,
+            customStoryboardPrompt = existing.customStoryboardPrompt
         )
     }
 

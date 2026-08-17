@@ -6,7 +6,17 @@ data class AgnesSettings(
     val textModel: String,
     val imageModel: String,
     val videoModel: String,
-    val requestTimeoutSeconds: Long
+    val requestTimeoutSeconds: Long,
+    /**
+     * 4 个 LLM 流程的自定义系统提示词。
+     * - null 或 trim 后为空 → 调用方 fallback 到 PromptDefaults 的常量值
+     * - 其它情况 → 用 trim 后的用户值
+     * 与 Harmony 端 (settings.customXxx ?? '').trim() || DEFAULT 语义一致。
+     */
+    val customScriptCreatePrompt: String? = null,
+    val customScriptRewritePrompt: String? = null,
+    val customCharacterExtractPrompt: String? = null,
+    val customStoryboardPrompt: String? = null
 ) {
     companion object {
         const val DEFAULT_BASE_URL = "https://apihub.agnes-ai.com/"

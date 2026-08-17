@@ -5,6 +5,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
+import com.huobao.zdrama.data.prompt.PromptDefaults
+import com.huobao.zdrama.data.prompt.PromptResolver
 import com.huobao.zdrama.data.remote.AgnesClientFactory
 import com.huobao.zdrama.data.remote.ChatCompletionRequest
 import com.huobao.zdrama.data.remote.ChatMessage
@@ -36,7 +38,7 @@ class AgnesStoryboardRepository(
                 ChatCompletionRequest(
                     model = settings.textModel,
                     messages = listOf(
-                        ChatMessage(role = "system", content = SYSTEM_PROMPT),
+                        ChatMessage(role = "system", content = PromptResolver.resolve(settings.customStoryboardPrompt, PromptDefaults.STORYBOARD_PROMPT)),
                         ChatMessage(role = "user", content = buildUserPrompt(project, scriptToUse))
                     ),
                     temperature = 0.3,
@@ -152,7 +154,6 @@ class AgnesStoryboardRepository(
 
     companion object {
         private const val TAG = "AgnesStoryboardRepository"
-        private const val SYSTEM_PROMPT = "You convert short-drama scripts into production storyboard JSON for mobile vertical video. Return JSON only."
         // Matches scene headers in rewritten scripts: `## S01 | ...`, `## S02 · ...`, etc.
         private val SCENE_HEADER_REGEX = Regex("(?m)^##\\s*S\\d+\\b")
     }

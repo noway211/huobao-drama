@@ -98,5 +98,13 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:text="@string/settings_test_text_model" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/managePromptsButton"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/settings_manage_prompts" />
     </LinearLayout>
 </ScrollView>

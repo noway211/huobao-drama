@@ -213,4 +213,25 @@
     <string name="project_character_image_regenerate_failed">角色图生成失败</string>
     <string name="project_character_no_local_image">暂无可预览的本地图片</string>
     <string name="project_character_preview_close">关闭</string>
+    <string name="settings_manage_prompts">管理提示词</string>
+    <string name="manage_prompts_title">管理提示词</string>
+    <string name="manage_prompts_close">关闭</string>
+    <string name="manage_prompts_hint">查看和编辑 4 个 LLM 流程的系统提示词。留空则使用默认提示词。</string>
+    <string name="manage_prompts_content_hint">系统提示词</string>
+    <string name="manage_prompts_reset">重置为默认</string>
+    <string name="manage_prompts_save">保存当前</string>
+    <string name="manage_prompts_save_done">已保存</string>
+    <string name="manage_prompts_reset_done">已重置为默认</string>
+    <string name="manage_prompts_save_failed">保存失败</string>
+    <string name="manage_prompts_status_customized">已自定义</string>
+    <string name="manage_prompts_status_default">使用默认值</string>
+    <string name="manage_prompts_status_unsaved">未保存修改</string>
+    <string name="manage_prompts_discard_title">放弃修改？</string>
+    <string name="manage_prompts_discard_message">当前 prompt 还有未保存的修改，切换 prompt 会丢失。是否继续？</string>
+    <string name="manage_prompts_discard_confirm">放弃</string>
+    <string name="manage_prompts_discard_cancel">继续编辑</string>
+    <string name="manage_prompts_tab_script_create">脚本创作</string>
+    <string name="manage_prompts_tab_script_rewrite">脚本改写</string>
+    <string name="manage_prompts_tab_character_extract">角色提取</string>
+    <string name="manage_prompts_tab_storyboard">分镜拆解</string>
 </resources>
