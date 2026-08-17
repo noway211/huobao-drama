@@ -37,12 +37,99 @@
         android:textColor="@color/zdrama_text_secondary"
         android:textSize="13sp" />
 
-    <Spinner
-        android:id="@+id/promptSpinner"
+    <!-- ─── 自定义 Tab 栏：3 个 tab 同时可见，active 用 primary 蓝 + 2dp 下划线 + bold，inactive 用 textSecondary ─── -->
+    <LinearLayout
+        android:id="@+id/tabBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:background="@color/zdrama_surface" />
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/tabScriptContainer"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingVertical="12dp">
+
+            <TextView
+                android:id="@+id/tabScriptLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/manage_prompts_tab_script"
+                android:textColor="@color/zdrama_primary"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <View
+                android:id="@+id/tabScriptIndicator"
+                android:layout_width="28dp"
+                android:layout_height="2dp"
+                android:layout_marginTop="6dp"
+                android:background="@color/zdrama_primary" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/tabCharacterContainer"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingVertical="12dp">
+
+            <TextView
+                android:id="@+id/tabCharacterLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/manage_prompts_tab_character"
+                android:textColor="@color/zdrama_text_secondary"
+                android:textSize="15sp" />
+
+            <View
+                android:id="@+id/tabCharacterIndicator"
+                android:layout_width="28dp"
+                android:layout_height="2dp"
+                android:layout_marginTop="6dp"
+                android:background="@android:color/transparent" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/tabStoryboardContainer"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingVertical="12dp">
+
+            <TextView
+                android:id="@+id/tabStoryboardLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/manage_prompts_tab_storyboard"
+                android:textColor="@color/zdrama_text_secondary"
+                android:textSize="15sp" />
+
+            <View
+                android:id="@+id/tabStoryboardIndicator"
+                android:layout_width="28dp"
+                android:layout_height="2dp"
+                android:layout_marginTop="6dp"
+                android:background="@android:color/transparent" />
+        </LinearLayout>
+    </LinearLayout>
 
     <ScrollView
         android:layout_width="match_parent"

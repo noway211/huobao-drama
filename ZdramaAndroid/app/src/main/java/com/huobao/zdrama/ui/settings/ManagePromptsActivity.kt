@@ -1,9 +1,8 @@
 package com.huobao.zdrama.ui.settings
 
+import android.graphics.Typeface
 import android.os.Bundle
 import android.view.View
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -18,7 +17,7 @@ import com.huobao.zdrama.databinding.ActivityManagePromptsBinding
  * 移植自 Harmony 端 SettingsPage 的"管理提示词" Modal (commit 8c12702)。
  *
  * UI 结构（与 Harmony 对齐）：
- * - 顶部下拉框切换 3 个 tab：脚本 / 角色提取 / 分镜
+ * - 顶部 3 个 tab 同时可见（脚本 / 角色提取 / 分镜），active tab 用 primary 蓝 + bold + 2dp 下划线
  * - "脚本" tab 内含 2 个 TextArea（创作剧本 + 改写剧本），共享 1 组 [重置为默认][保存当前] 按钮
  * - "角色提取" / "分镜" tab 各 1 个 TextArea + 1 组按钮
  * - 每个 TextArea 顶部 hint 显示"默认 N 字"（取自 PromptDefaults 对应常量长度）
@@ -36,7 +35,7 @@ class ManagePromptsActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         settingsStore = AgnesSettingsStore(this)
-        setupSpinner()
+        setupTabs()
         setupHelperTexts()
         setupClickListeners()
     }
@@ -49,33 +48,26 @@ class ManagePromptsActivity : AppCompatActivity() {
 
     // ────────────── 初始化 ──────────────
 
-    private fun setupSpinner() {
-        val labels = listOf(
-            getString(R.string.manage_prompts_tab_script),
-            getString(R.string.manage_prompts_tab_character),
-            getString(R.string.manage_prompts_tab_storyboard)
-        )
-        binding.promptSpinner.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_item,
-            labels
-        ).apply {
-            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+    /**
+     * 3 个 tab 同时显示，点击切换；切换前做脏检查。
+     * 与 Harmony 端 `Tabs({ index: $$this.activePromptTab })` 行为一致。
+     */
+    private fun setupTabs() {
+        binding.tabScriptContainer.setOnClickListener { onTabClick(TAB_SCRIPT) }
+        binding.tabCharacterContainer.setOnClickListener { onTabClick(TAB_CHARACTER) }
+        binding.tabStoryboardContainer.setOnClickListener { onTabClick(TAB_STORYBOARD) }
+    }
+
+    private fun onTabClick(targetIndex: Int) {
+        if (targetIndex == activeTab) return
+        val proceed: () -> Unit = {
+            activeTab = targetIndex
+            renderActiveTab()
         }
-        binding.promptSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (position == activeTab) return
-                val proceed: () -> Unit = {
-                    activeTab = position
-                    renderActiveTab()
-                }
-                if (isActiveTabDirty()) {
-                    confirmDiscard(proceed)
-                } else {
-                    proceed()
-                }
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        if (isActiveTabDirty()) {
+            confirmDiscard(proceed)
+        } else {
+            proceed()
         }
     }
 
@@ -107,12 +99,38 @@ class ManagePromptsActivity : AppCompatActivity() {
         binding.saveStoryboardButton.setOnClickListener { onSaveStoryboardClick() }
     }
 
+    // ────────────── Tab 视觉状态 ──────────────
+
+    /**
+     * 切换 3 个 tab 的 active/inactive 视觉：
+     * - active: 蓝色 + bold + 2dp 蓝色下划线
+     * - inactive: 灰色 + normal + 透明下划线（占位避免高度跳变）
+     */
+    private fun applyTabStyles() {
+        applyTabStyle(binding.tabScriptLabel, binding.tabScriptIndicator, activeTab == TAB_SCRIPT)
+        applyTabStyle(binding.tabCharacterLabel, binding.tabCharacterIndicator, activeTab == TAB_CHARACTER)
+        applyTabStyle(binding.tabStoryboardLabel, binding.tabStoryboardIndicator, activeTab == TAB_STORYBOARD)
+    }
+
+    private fun applyTabStyle(label: android.widget.TextView, indicator: View, isActive: Boolean) {
+        if (isActive) {
+            label.setTextColor(getColor(R.color.zdrama_primary))
+            label.setTypeface(label.typeface, Typeface.BOLD)
+            indicator.setBackgroundColor(getColor(R.color.zdrama_primary))
+        } else {
+            label.setTextColor(getColor(R.color.zdrama_text_secondary))
+            label.setTypeface(label.typeface, Typeface.NORMAL)
+            indicator.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        }
+    }
+
     // ────────────── 渲染 ──────────────
 
     /**
      * 渲染当前 tab 的内容：仅显示对应 panel，回填 customXxx ?? default。
      */
     private fun renderActiveTab() {
+        applyTabStyles()
         binding.scriptPanel.visibility = if (activeTab == TAB_SCRIPT) View.VISIBLE else View.GONE
         binding.characterPanel.visibility = if (activeTab == TAB_CHARACTER) View.VISIBLE else View.GONE
         binding.storyboardPanel.visibility = if (activeTab == TAB_STORYBOARD) View.VISIBLE else View.GONE
@@ -254,9 +272,7 @@ class ManagePromptsActivity : AppCompatActivity() {
             .setTitle(R.string.manage_prompts_discard_title)
             .setMessage(R.string.manage_prompts_discard_message)
             .setPositiveButton(R.string.manage_prompts_discard_confirm) { _, _ -> onProceed() }
-            .setNegativeButton(R.string.manage_prompts_discard_cancel) { _, _ ->
-                binding.promptSpinner.setSelection(activeTab)
-            }
+            .setNegativeButton(R.string.manage_prompts_discard_cancel) { _, _ -> applyTabStyles() }
             .show()
     }
 
