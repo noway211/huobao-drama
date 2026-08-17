@@ -540,6 +540,18 @@ struct ProjectDetailPage {
           .fontWeight(FontWeight.Bold)
           .layoutWeight(1)
           .margin({ left: 12 })
+        Button('查看日志')
+          .fontSize(13)
+          .backgroundColor(Theme.surfaceAlt)
+          .fontColor(Theme.textPrimary)
+          .height(36)
+          .padding({ left: 10, right: 10 })
+          .margin({ right: 8 })
+          .enabled(!this.busy)
+          .opacity(this.busy ? 0.5 : 1)
+          .onClick(() => {
+            router.pushUrl({ url: 'pages/ApiLogPage' });
+          })
         Button('删除')
           .fontSize(14)
           .backgroundColor(Theme.surfaceAlt)
