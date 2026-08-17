@@ -21,6 +21,7 @@ struct VideoViewerPage {
   @State shots: StoryboardShot[] = [];
   @State loading: boolean = true;
   @State summaryText: string = '';
+  @State clearingAll: boolean = false;  // 防止「全部删除」期间重复点击
   @State fullScreenSrc: string = '';
   @State fullScreenLabel: string = '';
 
@@ -120,6 +121,54 @@ struct VideoViewerPage {
     });
   }
 
+  // 二次确认 → 批量软删除（DB 一次性 UPDATE）+ 容错 unlink 全部本地文件 + 重新 load
+  private async onClearAllVideosClick(): Promise<void> {
+    if (this.clearingAll) {
+      return;
+    }
+    if (this.shots.length === 0) {
+      promptAction.showToast({ message: '暂无已生成的视频' });
+      return;
+    }
+    const count: number = this.shots.length;
+    promptAction.showDialog({
+      title: '全部删除视频？',
+      message: `将一次性清空全部 ${count} 个已生成的视频（含本地文件），删除后需要重新生成。`,
+      buttons: [
+        { text: '取消', color: Theme.textSecondary },
+        { text: '全部删除', color: Theme.primary }
+      ]
+    }).then(async (r) => {
+      if (r.index !== 1) {
+        return;
+      }
+      this.clearingAll = true;
+      try {
+        // 1) 一次性 SQL UPDATE 清 DB（只动 COMPLETED 行），返回被清掉的本地路径列表
+        const paths: string[] = await UseCases.bulkClearShotVideosForProject(this.projectId);
+        // 2) 容错 unlink 每个本地文件（沙盒里文件可能已不在，不应阻塞）
+        let deletedFiles: number = 0;
+        for (const p of paths) {
+          try {
+            fileIo.unlinkSync(p);
+            deletedFiles++;
+          } catch (e) {
+            hilog.warn(1, "ClearAllVideos", "unlink failed: %{public}s", (e as Error).message);
+          }
+        }
+        hilog.info(1, "ClearAllVideos",
+          "project=%{public}d cleared=%{public}d files=%{public}d",
+          this.projectId, count, deletedFiles);
+        promptAction.showToast({ message: `已删除 ${count} 个视频` });
+        await this.onPageShow();
+      } catch (e) {
+        promptAction.showToast({ message: '删除失败:' + ((e as Error).message ?? String(e)) });
+      } finally {
+        this.clearingAll = false;
+      }
+    });
+  }
+
   build(): void {
     Column() {
       // ── 顶部栏 ──
@@ -148,6 +197,16 @@ struct VideoViewerPage {
         Text(this.summaryText)
           .fontSize(13)
           .fontColor(Theme.textSecondary)
+        // 全部删除：仅当有已生成视频时可点；进行中置灰
+        Button('全部删除')
+          .fontSize(13)
+          .backgroundColor(Theme.surfaceAlt)
+          .fontColor(Theme.textPrimary)
+          .height(32)
+          .padding({ left: 12, right: 12 })
+          .margin({ left: 8 })
+          .enabled(this.shots.length > 0 && !this.clearingAll)
+          .onClick((): void => { this.onClearAllVideosClick() })
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 12, bottom: 12 })

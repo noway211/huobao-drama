@@ -223,4 +223,86 @@ export class StoryboardLocalDataSource {
     predicates.equalTo('id', shotId);
     await store.update(values, predicates);
   }
+
+  /**
+   * 批量清空某项目下所有"已生成分镜图片"：DB 软删除（status 置 PENDING + 清字段），
+   * 并返回被影响的分镜行的 imageLocalPath 列表，方便 UI 层同步 unlink 本地文件。
+   *
+   * **重要**：只清 image_status='COMPLETED' 的行；FAILED / PROCESSING / PENDING 一律不动。
+   * 调用方拿到返回的 paths 后应自行 unlink（容错：文件已不在不应报错）。
+   *
+   * 对应 Android StoryboardLocalDataSource.bulkClearShotImagesForProject()。
+   */
+  async bulkClearShotImagesForProject(projectId: number): Promise<string[]> {
+    const store = await DramaDatabase.getStore();
+    // 1) 先查出会被影响的行（用于返回 localPath 给 UI 删文件）
+    const queryPred = new relationalStore.RdbPredicates(TABLE);
+    queryPred.equalTo('project_id', projectId);
+    queryPred.equalTo('image_status', 'COMPLETED');
+    const localPaths: string[] = [];
+    const rs = await store.query(queryPred, ['image_local_path']);
+    if (rs !== null && rs !== undefined) {
+      try {
+        while (rs.goToNextRow()) {
+          const p = nullableString(rs, 'image_local_path');
+          if (p !== null && p.length > 0) {
+            localPaths.push(p);
+          }
+        }
+      } finally {
+        rs.close();
+      }
+    }
+    // 2) 一次性 UPDATE（WHERE 同时带 project_id 和 image_status 双重过滤，避免影响其它行）
+    const updatePred = new relationalStore.RdbPredicates(TABLE);
+    updatePred.equalTo('project_id', projectId);
+    updatePred.equalTo('image_status', 'COMPLETED');
+    const values: relationalStore.ValuesBucket = {
+      'image_status': AssetStatus.PENDING,
+      'image_url': null,
+      'image_local_path': null,
+      'image_error_message': null,
+      'updated_at': Date.now()
+    };
+    await store.update(values, updatePred);
+    return localPaths;
+  }
+
+  /**
+   * 批量清空某项目下所有"已生成分镜视频"，语义与 bulkClearShotImagesForProject 对称。
+   * 对应 Android StoryboardLocalDataSource.bulkClearShotVideosForProject()。
+   */
+  async bulkClearShotVideosForProject(projectId: number): Promise<string[]> {
+    const store = await DramaDatabase.getStore();
+    const queryPred = new relationalStore.RdbPredicates(TABLE);
+    queryPred.equalTo('project_id', projectId);
+    queryPred.equalTo('video_status', 'COMPLETED');
+    const localPaths: string[] = [];
+    const rs = await store.query(queryPred, ['video_local_path']);
+    if (rs !== null && rs !== undefined) {
+      try {
+        while (rs.goToNextRow()) {
+          const p = nullableString(rs, 'video_local_path');
+          if (p !== null && p.length > 0) {
+            localPaths.push(p);
+          }
+        }
+      } finally {
+        rs.close();
+      }
+    }
+    const updatePred = new relationalStore.RdbPredicates(TABLE);
+    updatePred.equalTo('project_id', projectId);
+    updatePred.equalTo('video_status', 'COMPLETED');
+    const values: relationalStore.ValuesBucket = {
+      'video_status': AssetStatus.PENDING,
+      'video_task_id': null,
+      'video_url': null,
+      'video_local_path': null,
+      'video_error_message': null,
+      'updated_at': Date.now()
+    };
+    await store.update(values, updatePred);
+    return localPaths;
+  }
 }

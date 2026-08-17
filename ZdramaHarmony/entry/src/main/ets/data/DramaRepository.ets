@@ -124,6 +124,16 @@ export class DramaRepository {
       shotId, videoStatus, videoTaskId, videoUrl, videoLocalPath, videoErrorMessage);
   }
 
+  // 批量软删除某项目下所有已生成分镜图片：DB 一次性 UPDATE，返回被清掉的 imageLocalPath 列表
+  async bulkClearShotImagesForProject(projectId: number): Promise<string[]> {
+    return this.storyboards.bulkClearShotImagesForProject(projectId);
+  }
+
+  // 批量软删除某项目下所有已生成分镜视频：DB 一次性 UPDATE，返回被清掉的 videoLocalPath 列表
+  async bulkClearShotVideosForProject(projectId: number): Promise<string[]> {
+    return this.storyboards.bulkClearShotVideosForProject(projectId);
+  }
+
   // 为项目创建一集（默认第 1 集、DRAFT 草稿状态），返回新剧集 id
   async createEpisodeForProject(projectId: number, title: string, content: string): Promise<number> {
     const now = Date.now();

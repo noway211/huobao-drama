@@ -171,6 +171,22 @@ export class UseCases {
       shotId, videoStatus, videoTaskId, videoUrl, videoLocalPath, videoErrorMessage);
   }
 
+  /**
+   * 批量清空某项目下所有"已生成分镜图片"（DB 软删除）。返回被清掉的本地文件路径列表，
+   * 调用方需自行 unlink 沙盒文件。语义见 StoryboardLocalDataSource.bulkClearShotImagesForProject。
+   */
+  static async bulkClearShotImagesForProject(projectId: number): Promise<string[]> {
+    return UseCases.repo.bulkClearShotImagesForProject(projectId);
+  }
+
+  /**
+   * 批量清空某项目下所有"已生成分镜视频"（DB 软删除）。返回被清掉的本地文件路径列表，
+   * 调用方需自行 unlink 沙盒文件。语义见 StoryboardLocalDataSource.bulkClearShotVideosForProject。
+   */
+  static async bulkClearShotVideosForProject(projectId: number): Promise<string[]> {
+    return UseCases.repo.bulkClearShotVideosForProject(projectId);
+  }
+
   /** 更新项目的成片资产（用于软删除：传 PENDING + nulls,保留项目 status / currentStage）。 */
   static async updateProjectFinalVideo(
     projectId: number,
