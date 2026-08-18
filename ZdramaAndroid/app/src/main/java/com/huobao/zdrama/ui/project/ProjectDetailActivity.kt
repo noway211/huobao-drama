@@ -533,7 +533,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         binding.titleText.text = project.title
         binding.statusText.text = getString(R.string.project_status_label) + "：${project.status.toDisplayText()}\n" +
             getString(R.string.project_stage_label) + "：${project.currentStage.toDisplayText()}"
-        bindActiveGenerationStatus(project, storyboards)
+        bindProgressCard(project, storyboards, characters)
         bindPrompt(project.prompt)
         binding.metaText.text = buildString {
             append(getString(R.string.project_style_label)).append("：").append(project.style).append('\n')
@@ -710,6 +710,137 @@ class ProjectDetailActivity : AppCompatActivity() {
             if (selector(shot) == AssetStatus.PROCESSING) return Pair(index + 1, shot)
         }
         return null
+    }
+
+    // ────────────── 阶段进度卡片（模仿鸿蒙 1e91bc1） ──────────────
+    //
+    // 只在后台生成进行中 / 失败时显示。布局：
+    //   ● 阶段名                              第 N/M 张
+    //   ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔  (4dp 进度条)
+    //   正在处理：分镜 #3
+    //
+    // - 只有 IMAGE/VIDEO/CHARACTER_IMAGE 三个阶段有 current/total + entity；
+    //   其余阶段（脚本/分镜/角色提取/成片）只显示阶段名 + busyLabel。
+
+    private fun bindProgressCard(
+        project: DramaProject,
+        storyboards: List<StoryboardShot>,
+        characters: List<com.huobao.zdrama.domain.model.Character> = emptyList()
+    ) {
+        if (!hasActiveGenerationWork) {
+            binding.progressCard.visibility = View.GONE
+            return
+        }
+        // 从当前活跃的 workName 反推 stage（REWRITE 在 GenerationStage 里没对应值）
+        val activeStage = activeStageFromWorkNames() ?: project.currentStage.name
+        val stageLabelRes = stageLabelRes(activeStage)
+        binding.progressStageLabel.text = getString(stageLabelRes)
+
+        val progress = collectProgress(activeStage, storyboards, characters)
+        if (progress != null && progress.total > 0) {
+            // 有 current/total：显示 counter + 进度条 + 正在处理 X
+            binding.progressCounter.visibility = View.VISIBLE
+            binding.progressCounter.text = getString(
+                R.string.project_progress_counter,
+                progress.current,
+                progress.total
+            )
+            binding.progressBar.visibility = View.VISIBLE
+            binding.progressBar.max = progress.total
+            binding.progressBar.progress = progress.current
+            binding.progressDetail.visibility = View.VISIBLE
+            binding.progressDetail.text = if (progress.entityLabel != null) {
+                getString(R.string.project_progress_processing, progress.entityLabel)
+            } else {
+                getString(R.string.project_generation_waiting_next_shot)
+            }
+        } else {
+            // 无 per-entity 进度：只显示 busyLabel
+            binding.progressCounter.visibility = View.GONE
+            binding.progressBar.visibility = View.GONE
+            binding.progressDetail.visibility = View.VISIBLE
+            binding.progressDetail.text = getString(
+                R.string.project_generation_running_stage,
+                project.currentStage.toDisplayText()
+            )
+        }
+        binding.progressCard.visibility = View.VISIBLE
+    }
+
+    /**
+     * 从当前活跃的 workName 列表中解析出 stage 字符串（"text" / "rewrite" / "storyboard" / 等）。
+     * GenerationStage 枚举不含 REWRITE，所以需要走 workName 反查。返回 null 表示无活跃任务。
+     */
+    private fun activeStageFromWorkNames(): String? {
+        val prefix = "generation-$projectId-"
+        generationWorkInfosByName.forEach { (name, infos) ->
+            if (!name.startsWith(prefix)) return@forEach
+            val isActive = infos.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
+            if (isActive) return name.removePrefix(prefix)
+        }
+        return null
+    }
+
+    private data class ProgressInfo(
+        val current: Int,
+        val total: Int,
+        val entityLabel: String?
+    )
+
+    private fun collectProgress(
+        stage: String,
+        storyboards: List<StoryboardShot>,
+        characters: List<com.huobao.zdrama.domain.model.Character>
+    ): ProgressInfo? {
+        return when (stage) {
+            GenerationWorker.STAGE_IMAGE -> mediaProgress(storyboards, { it.imageStatus }, entityShot = true)
+            GenerationWorker.STAGE_VIDEO -> mediaProgress(storyboards, { it.videoStatus }, entityShot = true)
+            GenerationWorker.STAGE_CHARACTER_IMAGE -> characterImageProgress(characters)
+            else -> null
+        }
+    }
+
+    private fun mediaProgress(
+        storyboards: List<StoryboardShot>,
+        statusOf: (StoryboardShot) -> AssetStatus,
+        entityShot: Boolean
+    ): ProgressInfo? {
+        if (storyboards.isEmpty()) return null
+        val total = storyboards.size
+        val current = storyboards.count { statusOf(it) == AssetStatus.COMPLETED } +
+            storyboards.count { statusOf(it) == AssetStatus.FAILED }
+        val processing = storyboards.firstOrNull { statusOf(it) == AssetStatus.PROCESSING }
+        val entity = processing?.let {
+            if (entityShot) getString(R.string.project_progress_entity_shot, it.shotNumber) else null
+        }
+        return ProgressInfo(current = current.coerceAtMost(total), total = total, entityLabel = entity)
+    }
+
+    private fun characterImageProgress(characters: List<com.huobao.zdrama.domain.model.Character>): ProgressInfo? {
+        if (characters.isEmpty()) return null
+        val total = characters.size
+        val current = characters.count { it.imageStatus == AssetStatus.COMPLETED } +
+            characters.count { it.imageStatus == AssetStatus.FAILED }
+        val processing = characters.firstOrNull { it.imageStatus == AssetStatus.PROCESSING }
+        // 角色没有 shotNumber 概念，用列表 index + 1 替代（与 Harmony 端 `角色 #${shotNumber}` 一致）
+        val entity = processing?.let { idx ->
+            val pos = characters.indexOfFirst { it.id == idx.id } + 1
+            getString(R.string.project_progress_entity_character, pos)
+        }
+        return ProgressInfo(current = current.coerceAtMost(total), total = total, entityLabel = entity)
+    }
+
+    private fun stageLabelRes(stage: String): Int = when (stage) {
+        GenerationWorker.STAGE_TEXT -> R.string.project_progress_stage_text
+        GenerationWorker.STAGE_REWRITE -> R.string.project_progress_stage_rewrite
+        GenerationWorker.STAGE_STORYBOARD -> R.string.project_progress_stage_storyboard
+        GenerationWorker.STAGE_IMAGE -> R.string.project_progress_stage_image
+        GenerationWorker.STAGE_VIDEO -> R.string.project_progress_stage_video
+        GenerationWorker.STAGE_FINAL_VIDEO -> R.string.project_progress_stage_final_video
+        GenerationWorker.STAGE_CHARACTER_EXTRACT -> R.string.project_progress_stage_character_extract
+        GenerationWorker.STAGE_CHARACTER_IMAGE -> R.string.project_progress_stage_character_image
+        GenerationWorker.STAGE_FULL -> R.string.project_progress_stage_full
+        else -> R.string.project_progress_stage_text
     }
 
     private fun showMissingProject() {

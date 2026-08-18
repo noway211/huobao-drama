@@ -265,4 +265,18 @@
     <string name="project_character_delete_image_message">删除后需要重新生成角色图。</string>
     <string name="project_character_image_deleted">角色图已删除</string>
     <string name="project_character_image_delete_failed">角色图删除失败</string>
+    <string name="project_progress_dot">●</string>
+    <string name="project_progress_counter">第 %1$d/%2$d 张</string>
+    <string name="project_progress_processing">正在处理：%1$s</string>
+    <string name="project_progress_stage_text">创作脚本</string>
+    <string name="project_progress_stage_rewrite">改写脚本</string>
+    <string name="project_progress_stage_storyboard">生成分镜</string>
+    <string name="project_progress_stage_character_extract">提取角色</string>
+    <string name="project_progress_stage_character_image">生成角色图</string>
+    <string name="project_progress_stage_image">生成图片</string>
+    <string name="project_progress_stage_video">生成视频</string>
+    <string name="project_progress_stage_final_video">合成成片</string>
+    <string name="project_progress_stage_full">一键生成短剧</string>
+    <string name="project_progress_entity_shot">分镜 #%1$d</string>
+    <string name="project_progress_entity_character">角色 #%1$d</string>
 </resources>
