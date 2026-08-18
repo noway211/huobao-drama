@@ -233,8 +233,10 @@
     <string name="manage_prompts_tab_script">脚本</string>
     <string name="manage_prompts_tab_character">角色提取</string>
     <string name="manage_prompts_tab_storyboard">分镜</string>
-    <string name="manage_prompts_field_script_create_label">创作剧本（用于"生成剧本"流程）</string>
-    <string name="manage_prompts_field_script_rewrite_label">改写剧本（用于"改写剧本"流程）</string>
+    <string name="manage_prompts_field_script_create_label">创作剧本</string>
+    <string name="manage_prompts_field_script_rewrite_label">改写剧本</string>
+    <string name="manage_prompts_field_script_create_helper">用于「生成剧本」流程 · 默认 %1$d 字</string>
+    <string name="manage_prompts_field_script_rewrite_helper">用于「改写剧本」流程 · 默认 %1$d 字</string>
     <string name="manage_prompts_field_character_extract_label">角色提取（从剧本抽取 name/role/description/appearance/personality）</string>
     <string name="manage_prompts_field_storyboard_label">分镜（拆解剧本为分镜 JSON，文字字段中文，image/video prompt 英文）</string>
     <string name="manage_prompts_field_default_length">默认 %1$d 字</string>

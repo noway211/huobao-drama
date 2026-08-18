@@ -72,12 +72,19 @@ class ManagePromptsActivity : AppCompatActivity() {
     }
 
     /**
-     * 给每个 TextInputLayout 设置 "默认 N 字" helper text，N 取自 PromptDefaults 常量长度。
-     * 让用户能看到默认 prompt 的体量。
+     * 给每个 TextInputLayout 设置 helper text。
+     * - 脚本 2 个字段：用途 + 默认 N 字（如「用于「生成剧本」流程 · 默认 1234 字」）
+     * - 角色提取 / 分镜：只显示默认 N 字
      */
     private fun setupHelperTexts() {
-        binding.scriptCreateInputLayout.helperText = defaultLengthText(PromptDefaults.SCRIPT_CREATE_PROMPT)
-        binding.scriptRewriteInputLayout.helperText = defaultLengthText(PromptDefaults.SCRIPT_REWRITE_PROMPT)
+        binding.scriptCreateInputLayout.helperText = getString(
+            R.string.manage_prompts_field_script_create_helper,
+            PromptDefaults.SCRIPT_CREATE_PROMPT.length
+        )
+        binding.scriptRewriteInputLayout.helperText = getString(
+            R.string.manage_prompts_field_script_rewrite_helper,
+            PromptDefaults.SCRIPT_REWRITE_PROMPT.length
+        )
         binding.characterExtractInputLayout.helperText = defaultLengthText(PromptDefaults.CHARACTER_EXTRACT_PROMPT)
         binding.storyboardInputLayout.helperText = defaultLengthText(PromptDefaults.STORYBOARD_PROMPT)
     }
