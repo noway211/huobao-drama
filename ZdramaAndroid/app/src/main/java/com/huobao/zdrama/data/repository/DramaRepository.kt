@@ -1,6 +1,7 @@
 package com.huobao.zdrama.data.repository
 
 import android.content.Context
+import android.util.Log
 import com.huobao.zdrama.data.local.CharacterLocalDataSource
 import com.huobao.zdrama.data.local.EpisodeLocalDataSource
 import com.huobao.zdrama.data.local.ProjectLocalDataSource
@@ -13,6 +14,7 @@ import com.huobao.zdrama.domain.model.EpisodeStatus
 import com.huobao.zdrama.domain.model.GenerationStage
 import com.huobao.zdrama.domain.model.ProjectStatus
 import com.huobao.zdrama.domain.model.StoryboardShot
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -191,5 +193,102 @@ class DramaRepository(context: Context) {
 
     suspend fun updateCharacterAppearance(characterId: Long, appearance: String): Boolean = withContext(Dispatchers.IO) {
         characterLocalDataSource.updateCharacterAppearance(characterId, appearance) > 0
+    }
+
+    // ────────────── 软删除（DB status → PENDING + 清字段 + 删本地文件） ──────────────
+    //
+    // 与鸿蒙端 `viewer-delete-assets` (commit 0dfde93) 行为一致：DB 软删除必做，本地文件容错
+    // （File.delete() 失败不抛，只 warn），单条 / 全量两种粒度。
+
+    /** 软删除单张分镜图片：DB 软删除 + 删除本地文件。返回 (DB ok, 本地文件是否被删)。 */
+    suspend fun deleteShotImage(shotId: Long): DeleteResult = withContext(Dispatchers.IO) {
+        val shot = getShotByIdFallback(shotId)
+            ?: return@withContext DeleteResult(dbUpdated = false, fileDeleted = false)
+        val fileDeleted = unlinkIfExists(shot.imageLocalPath, "shot image #$shotId")
+        val dbOk = updateShotImage(shotId, AssetStatus.PENDING, null, null, null)
+        DeleteResult(dbUpdated = dbOk, fileDeleted = fileDeleted)
+    }
+
+    /** 软删除单条分镜视频：DB 软删除 + 删除本地文件。 */
+    suspend fun deleteShotVideo(shotId: Long): DeleteResult = withContext(Dispatchers.IO) {
+        val shot = getShotByIdFallback(shotId)
+            ?: return@withContext DeleteResult(dbUpdated = false, fileDeleted = false)
+        val fileDeleted = unlinkIfExists(shot.videoLocalPath, "shot video #$shotId")
+        val dbOk = updateShotVideo(shotId, AssetStatus.PENDING, null, null, null, null)
+        DeleteResult(dbUpdated = dbOk, fileDeleted = fileDeleted)
+    }
+
+    /** 软删除单张角色立绘：DB 软删除 + 删除本地文件。 */
+    suspend fun deleteCharacterImage(characterId: Long): DeleteResult = withContext(Dispatchers.IO) {
+        val character = characterLocalDataSource.getCharacter(characterId)
+            ?: return@withContext DeleteResult(dbUpdated = false, fileDeleted = false)
+        val fileDeleted = unlinkIfExists(character.imageLocalPath, "character image #$characterId")
+        val dbOk = updateCharacterImage(characterId, AssetStatus.PENDING, null, null, null)
+        DeleteResult(dbUpdated = dbOk, fileDeleted = fileDeleted)
+    }
+
+    /** 软删除项目成片：DB 软删除（保留 status / currentStage）+ 删除本地文件。 */
+    suspend fun deleteProjectFinalVideo(projectId: Long): DeleteResult = withContext(Dispatchers.IO) {
+        val project = getProject(projectId)
+            ?: return@withContext DeleteResult(dbUpdated = false, fileDeleted = false)
+        val fileDeleted = unlinkIfExists(project.finalVideoLocalPath, "final video #$projectId")
+        val dbOk = updateProjectFinalVideo(
+            projectId = projectId,
+            status = project.status,
+            currentStage = project.currentStage,
+            finalVideoStatus = AssetStatus.PENDING,
+            finalVideoLocalPath = null,
+            finalVideoErrorMessage = null,
+            errorMessage = project.errorMessage
+        )
+        DeleteResult(dbUpdated = dbOk, fileDeleted = fileDeleted)
+    }
+
+    /** 批量软删除项目所有分镜图片。返回成功条数。 */
+    suspend fun deleteAllStoryboardImages(projectId: Long): Int = withContext(Dispatchers.IO) {
+        var count = 0
+        getStoryboards(projectId).forEach { shot ->
+            if (shot.imageLocalPath.isNullOrBlank() && shot.imageUrl.isNullOrBlank()) return@forEach
+            if (deleteShotImage(shot.id).dbUpdated) count++
+        }
+        count
+    }
+
+    /** 批量软删除项目所有分镜视频。返回成功条数。 */
+    suspend fun deleteAllStoryboardVideos(projectId: Long): Int = withContext(Dispatchers.IO) {
+        var count = 0
+        getStoryboards(projectId).forEach { shot ->
+            if (shot.videoLocalPath.isNullOrBlank() && shot.videoUrl.isNullOrBlank()) return@forEach
+            if (deleteShotVideo(shot.id).dbUpdated) count++
+        }
+        count
+    }
+
+    /**
+     * 单 shot 查询：getStoryboards 只按 projectId 查，所以用最小反范式——遍历
+     * 当前缓存的所有 storyboard 项目。生产项目大后可换成 dedicated 单 shot DAO。
+     * 当前规模 (≤ 几十个分镜/项目) 可接受。
+     */
+    private suspend fun getShotByIdFallback(shotId: Long): StoryboardShot? = withContext(Dispatchers.IO) {
+        // 反范式：扫描所有 project 的 storyboard 找 shotId 对应 shot。
+        // 注意：实际项目数有限，避免引入额外 DAO。
+        projectLocalDataSource.getProjects().firstNotNullOfOrNull { p ->
+            storyboardLocalDataSource.getStoryboards(p.id).firstOrNull { it.id == shotId }
+        }
+    }
+
+    /** 软删除工具：存在则删，失败只 warn 不抛。 */
+    private fun unlinkIfExists(path: String?, tag: String): Boolean {
+        if (path.isNullOrBlank()) return false
+        return runCatching { File(path).takeIf { it.exists() }?.delete() ?: false }
+            .onFailure { Log.w(TAG, "unlink failed for $tag ($path): ${it.message}") }
+            .getOrDefault(false)
+    }
+
+    /** 软删除结果：DB 是否成功更新 + 本地文件是否被删除。 */
+    data class DeleteResult(val dbUpdated: Boolean, val fileDeleted: Boolean)
+
+    companion object {
+        private const val TAG = "DramaRepository"
     }
 }

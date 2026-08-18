@@ -10,7 +10,9 @@ import com.huobao.zdrama.domain.model.AssetStatus
 import com.huobao.zdrama.domain.model.StoryboardShot
 import java.io.File
 
-class ImageGalleryAdapter : RecyclerView.Adapter<ImageGalleryAdapter.ImageViewHolder>() {
+class ImageGalleryAdapter(
+    private val onLongClick: (StoryboardShot) -> Unit = {}
+) : RecyclerView.Adapter<ImageGalleryAdapter.ImageViewHolder>() {
     private val shots = mutableListOf<StoryboardShot>()
 
     fun submitList(items: List<StoryboardShot>) {
@@ -64,6 +66,12 @@ class ImageGalleryAdapter : RecyclerView.Adapter<ImageGalleryAdapter.ImageViewHo
                     val fallback = context.getString(R.string.project_image_placeholder_pending)
                     binding.shotStatusText.text = "$fallback（$statusText）"
                 }
+            }
+            // 仅当该 shot 有 image（本地或远端）时才允许长按删除
+            val canDelete = !shot.imageLocalPath.isNullOrBlank() || !shot.imageUrl.isNullOrBlank()
+            binding.root.setOnLongClickListener {
+                if (canDelete) onLongClick(shot)
+                canDelete
             }
         }
 

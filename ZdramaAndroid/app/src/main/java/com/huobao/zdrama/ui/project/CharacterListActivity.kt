@@ -36,7 +36,8 @@ class CharacterListActivity : AppCompatActivity() {
     private val adapter = CharacterAdapter(
         onEditAppearance = { ch -> showEditAppearanceDialog(ch) },
         onRegenerateImage = { ch -> regenerateSingle(ch) },
-        onPreviewImage = { ch -> previewImage(ch) }
+        onPreviewImage = { ch -> previewImage(ch) },
+        onDeleteImage = { ch -> confirmDeleteImage(ch) }
     )
     private var projectId: Long = 0L
     private var cachedCharacters: List<Character> = emptyList()
@@ -200,6 +201,37 @@ class CharacterListActivity : AppCompatActivity() {
     private fun finishWithMessage(messageRes: Int) {
         Toast.makeText(this, messageRes, Toast.LENGTH_SHORT).show()
         finish()
+    }
+
+    // ────────────── 删除角色图（软删除） ──────────────
+
+    private fun confirmDeleteImage(character: Character) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.project_character_delete_image_title)
+            .setMessage(R.string.project_character_delete_image_message)
+            .setNegativeButton(R.string.project_delete_cancel, null)
+            .setPositiveButton(R.string.project_delete_confirm) { _, _ -> performDeleteImage(character) }
+            .show()
+    }
+
+    private fun performDeleteImage(character: Character) {
+        lifecycleScope.launch {
+            val result = dramaRepository.deleteCharacterImage(character.id)
+            if (result.dbUpdated) {
+                Toast.makeText(
+                    this@CharacterListActivity,
+                    R.string.project_character_image_deleted,
+                    Toast.LENGTH_SHORT
+                ).show()
+                loadCharacters()
+            } else {
+                Toast.makeText(
+                    this@CharacterListActivity,
+                    R.string.project_character_image_delete_failed,
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
     }
 
     companion object {

@@ -4,8 +4,10 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.widget.MediaController
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.huobao.zdrama.R
@@ -19,15 +21,20 @@ import kotlinx.coroutines.launch
 class VideoPlayerActivity : AppCompatActivity() {
     private lateinit var binding: ActivityVideoPlayerBinding
     private lateinit var getStoryboardsUseCase: GetStoryboardsUseCase
+    private lateinit var repository: DramaRepository
     private val playableShots = mutableListOf<StoryboardShot>()
     private var currentIndex = 0
+    private var projectId: Long = 0L
+    private var isFinalVideoMode = false
+    private var finalVideoPath: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityVideoPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        getStoryboardsUseCase = GetStoryboardsUseCase(DramaRepository(this))
+        repository = DramaRepository(this)
+        getStoryboardsUseCase = GetStoryboardsUseCase(repository)
         binding.videoView.setMediaController(MediaController(this).apply {
             setAnchorView(binding.videoView)
         })
@@ -48,6 +55,9 @@ class VideoPlayerActivity : AppCompatActivity() {
             }
         }
         binding.nextButton.setOnClickListener { playAt(currentIndex + 1) }
+        binding.deleteCurrentButton.setOnClickListener { confirmDeleteCurrent() }
+        binding.deleteAllButton.setOnClickListener { confirmDeleteAll() }
+        binding.deleteFinalButton.setOnClickListener { confirmDeleteFinal() }
 
         val videoPath = intent.getStringExtra(EXTRA_VIDEO_PATH)
         if (!videoPath.isNullOrBlank()) {
@@ -55,7 +65,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             return
         }
 
-        val projectId = intent.getLongExtra(EXTRA_PROJECT_ID, 0L)
+        projectId = intent.getLongExtra(EXTRA_PROJECT_ID, 0L)
         if (projectId <= 0L) {
             showNoVideos()
             return
@@ -77,6 +87,10 @@ class VideoPlayerActivity : AppCompatActivity() {
             if (playableShots.isEmpty()) {
                 showNoVideos()
             } else {
+                // 启用分镜模式按钮组
+                binding.deleteAllButton.visibility = View.VISIBLE
+                binding.deleteCurrentButton.visibility = View.VISIBLE
+                binding.deleteFinalButton.visibility = View.GONE
                 playAt(0)
             }
         }
@@ -88,9 +102,15 @@ class VideoPlayerActivity : AppCompatActivity() {
             showNoVideos()
             return
         }
+        isFinalVideoMode = true
+        finalVideoPath = videoPath
         binding.shotText.setText(R.string.video_player_final_label)
         binding.previousButton.isEnabled = false
         binding.nextButton.isEnabled = false
+        // 启用成片模式按钮组
+        binding.deleteAllButton.visibility = View.GONE
+        binding.deleteCurrentButton.visibility = View.GONE
+        binding.deleteFinalButton.visibility = View.VISIBLE
         val uri = Uri.fromFile(file)
         Log.d(TAG, "Playing final video: path=${file.absolutePath}, exists=${file.exists()}, size=${file.length()}")
         binding.videoView.setOnPreparedListener {
@@ -142,6 +162,75 @@ class VideoPlayerActivity : AppCompatActivity() {
         return videoUrl
             ?.takeIf { it.isNotBlank() }
             ?.let { Uri.parse(it) }
+    }
+
+    // ────────────── 删除操作 ──────────────
+
+    private fun confirmDeleteCurrent() {
+        if (playableShots.isEmpty() || currentIndex !in playableShots.indices) return
+        val shot = playableShots[currentIndex]
+        AlertDialog.Builder(this)
+            .setTitle(R.string.project_video_delete_title)
+            .setMessage(R.string.project_video_delete_message)
+            .setNegativeButton(R.string.project_delete_cancel, null)
+            .setPositiveButton(R.string.project_delete_confirm) { _, _ -> performDeleteCurrent(shot.id) }
+            .show()
+    }
+
+    private fun performDeleteCurrent(shotId: Long) {
+        lifecycleScope.launch {
+            val result = repository.deleteShotVideo(shotId)
+            if (result.dbUpdated) {
+                Toast.makeText(this@VideoPlayerActivity, R.string.project_video_deleted, Toast.LENGTH_SHORT).show()
+                binding.videoView.stopPlayback()
+                loadVideos(projectId)
+            } else {
+                Toast.makeText(this@VideoPlayerActivity, R.string.project_video_delete_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun confirmDeleteAll() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.project_video_delete_all)
+            .setMessage(getString(R.string.project_video_bulk_delete_confirm_message, playableShots.size))
+            .setNegativeButton(R.string.project_delete_cancel, null)
+            .setPositiveButton(R.string.project_delete_confirm) { _, _ -> performDeleteAll() }
+            .show()
+    }
+
+    private fun performDeleteAll() {
+        lifecycleScope.launch {
+            val count = repository.deleteAllStoryboardVideos(projectId)
+            Toast.makeText(
+                this@VideoPlayerActivity,
+                getString(R.string.project_video_bulk_deleted, count),
+                Toast.LENGTH_SHORT
+            ).show()
+            binding.videoView.stopPlayback()
+            loadVideos(projectId)
+        }
+    }
+
+    private fun confirmDeleteFinal() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.project_final_video_delete_title)
+            .setMessage(R.string.project_final_video_delete_message)
+            .setNegativeButton(R.string.project_delete_cancel, null)
+            .setPositiveButton(R.string.project_delete_confirm) { _, _ -> performDeleteFinal() }
+            .show()
+    }
+
+    private fun performDeleteFinal() {
+        lifecycleScope.launch {
+            val result = repository.deleteProjectFinalVideo(projectId)
+            if (result.dbUpdated) {
+                Toast.makeText(this@VideoPlayerActivity, R.string.project_final_video_deleted, Toast.LENGTH_SHORT).show()
+                finish()
+            } else {
+                Toast.makeText(this@VideoPlayerActivity, R.string.project_final_video_delete_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun showNoVideos() {

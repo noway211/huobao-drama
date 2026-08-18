@@ -3,6 +3,7 @@ package com.huobao.zdrama.ui.project
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.huobao.zdrama.R
@@ -14,7 +15,8 @@ import java.io.File
 class CharacterAdapter(
     private val onEditAppearance: (Character) -> Unit,
     private val onRegenerateImage: (Character) -> Unit,
-    private val onPreviewImage: (Character) -> Unit
+    private val onPreviewImage: (Character) -> Unit,
+    private val onDeleteImage: (Character) -> Unit
 ) : RecyclerView.Adapter<CharacterAdapter.CharacterViewHolder>() {
     private val items = mutableListOf<Character>()
 
@@ -65,6 +67,10 @@ class CharacterAdapter(
             binding.avatarImage.setOnClickListener { onPreviewImage(character) }
             binding.editAppearanceButton.setOnClickListener { onEditAppearance(character) }
             binding.regenerateImageButton.setOnClickListener { onRegenerateImage(character) }
+            // 仅当已生成图（本地或远端）才显示删除按钮，与鸿蒙端 `imageStatus === COMPLETED` 守卫一致
+            val hasImage = !character.imageLocalPath.isNullOrBlank() || !character.imageUrl.isNullOrBlank()
+            binding.deleteImageButton.visibility = if (hasImage) View.VISIBLE else View.GONE
+            binding.deleteImageButton.setOnClickListener { onDeleteImage(character) }
         }
 
         private fun statusDisplay(context: android.content.Context, character: Character): String {

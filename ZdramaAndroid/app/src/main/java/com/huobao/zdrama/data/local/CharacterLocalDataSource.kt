@@ -39,6 +39,22 @@ class CharacterLocalDataSource(context: Context) {
         return cursor.use { readCharacters(it) }
     }
 
+    fun getCharacter(characterId: Long): Character? {
+        val cursor = database.readableDatabase.query(
+            DramaLocalDatabase.TABLE_CHARACTERS,
+            null,
+            "${DramaLocalDatabase.COL_ID} = ?",
+            arrayOf(characterId.toString()),
+            null,
+            null,
+            null,
+            "1"
+        )
+        return cursor.use {
+            if (it.moveToFirst()) readCharacters(it).firstOrNull() else null
+        }
+    }
+
     fun deleteCharactersForProject(projectId: Long): Int {
         return database.writableDatabase.delete(
             DramaLocalDatabase.TABLE_CHARACTERS,
