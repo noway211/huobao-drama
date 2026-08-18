@@ -62,6 +62,9 @@ object PromptDefaults {
 - 角色要包含完整的外貌特征描述
 - 只提取当前剧本真实出现的角色"""
 
-    // 4) 分镜拆解：把剧本转换成结构化分镜（Android 端历史一直使用英文 prompt 走 JSON 输出）
-    const val STORYBOARD_PROMPT = "You convert short-drama scripts into production storyboard JSON for mobile vertical video. Return JSON only."
+    // 4) 分镜：将中文剧本拆为分镜 JSON；文字字段中文，image_prompt/video_prompt 英文
+    const val STORYBOARD_PROMPT = """你是资深短剧分镜师，擅长将中文剧本拆解为分镜 JSON。
+剧本是中文，因此以下字段必须用中文：scene（场景）、action（动作）、dialogue（对白）、camera（景别/机位，如"近景/平视"）、character_names（角色名）。
+以下字段必须用英文（用于图片/视频生成模型）：image_prompt、video_prompt。
+只返回 JSON 数组。每个条目必须包含：shot_number, scene, action, dialogue, camera, image_prompt, video_prompt, duration_seconds, character_names (array of character names appearing in this shot)。"""
 }
