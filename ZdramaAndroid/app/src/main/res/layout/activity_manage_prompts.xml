@@ -152,7 +152,8 @@
                 android:hint="@string/manage_prompts_field_script_create_label"
                 app:boxBackgroundColor="@color/zdrama_surface"
                 app:boxStrokeColor="@color/zdrama_primary"
-                app:helperTextEnabled="true">
+                app:helperTextEnabled="true"
+                app:hintTextColor="@color/text_input_hint_color">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/scriptCreateInput"
@@ -162,7 +163,7 @@
                     android:inputType="textMultiLine|textNoSuggestions"
                     android:scrollbars="vertical"
                     android:textColor="@color/zdrama_text_primary"
-                    android:textColorHint="@color/zdrama_text_secondary"
+                    android:textColorHint="@color/zdrama_text_primary"
                     android:textSize="13sp" />
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -174,7 +175,8 @@
                 android:hint="@string/manage_prompts_field_script_rewrite_label"
                 app:boxBackgroundColor="@color/zdrama_surface"
                 app:boxStrokeColor="@color/zdrama_primary"
-                app:helperTextEnabled="true">
+                app:helperTextEnabled="true"
+                app:hintTextColor="@color/text_input_hint_color">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/scriptRewriteInput"
@@ -184,7 +186,7 @@
                     android:inputType="textMultiLine|textNoSuggestions"
                     android:scrollbars="vertical"
                     android:textColor="@color/zdrama_text_primary"
-                    android:textColorHint="@color/zdrama_text_secondary"
+                    android:textColorHint="@color/zdrama_text_primary"
                     android:textSize="13sp" />
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -235,7 +237,8 @@
                 android:hint="@string/manage_prompts_field_character_extract_label"
                 app:boxBackgroundColor="@color/zdrama_surface"
                 app:boxStrokeColor="@color/zdrama_primary"
-                app:helperTextEnabled="true">
+                app:helperTextEnabled="true"
+                app:hintTextColor="@color/text_input_hint_color">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/characterExtractInput"
@@ -245,7 +248,7 @@
                     android:inputType="textMultiLine|textNoSuggestions"
                     android:scrollbars="vertical"
                     android:textColor="@color/zdrama_text_primary"
-                    android:textColorHint="@color/zdrama_text_secondary"
+                    android:textColorHint="@color/zdrama_text_primary"
                     android:textSize="13sp" />
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -296,7 +299,8 @@
                 android:hint="@string/manage_prompts_field_storyboard_label"
                 app:boxBackgroundColor="@color/zdrama_surface"
                 app:boxStrokeColor="@color/zdrama_primary"
-                app:helperTextEnabled="true">
+                app:helperTextEnabled="true"
+                app:hintTextColor="@color/text_input_hint_color">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/storyboardInput"
@@ -306,7 +310,7 @@
                     android:inputType="textMultiLine|textNoSuggestions"
                     android:scrollbars="vertical"
                     android:textColor="@color/zdrama_text_primary"
-                    android:textColorHint="@color/zdrama_text_secondary"
+                    android:textColorHint="@color/zdrama_text_primary"
                     android:textSize="13sp" />
             </com.google.android.material.textfield.TextInputLayout>
 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TextInputLayout hint 颜色状态列表（用于 app:hintTextColor）：
+  - focused: zdrama_primary 蓝（与 boxStrokeColor 呼应，提示当前在编辑哪个字段）
+  - 未 focused 但已 float（即字段非空）：zdrama_text_primary 亮白，确保在深色 surface 上清晰可读
+  - 未 focused 且未 float（即字段空、内联在输入区）：zdrama_text_primary，让 placeholder 同样清晰
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/zdrama_primary" android:state_focused="true" />
+    <item android:color="@color/zdrama_text_primary" />
+</selector>
