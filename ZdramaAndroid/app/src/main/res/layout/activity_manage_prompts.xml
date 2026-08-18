@@ -160,6 +160,7 @@
                 android:layout_height="wrap_content"
                 app:boxBackgroundColor="@color/zdrama_surface"
                 app:boxStrokeColor="@color/zdrama_primary"
+                app:expandedHintEnabled="false"
                 app:helperTextEnabled="true"
                 app:hintEnabled="false">
 
@@ -169,6 +170,7 @@
                     android:layout_height="300dp"
                     android:gravity="top|start"
                     android:inputType="textMultiLine|textNoSuggestions"
+                    android:paddingTop="0dp"
                     android:scrollbars="vertical"
                     android:textColor="@color/zdrama_text_primary"
                     android:textSize="13sp" />
@@ -190,6 +192,7 @@
                 android:layout_height="wrap_content"
                 app:boxBackgroundColor="@color/zdrama_surface"
                 app:boxStrokeColor="@color/zdrama_primary"
+                app:expandedHintEnabled="false"
                 app:helperTextEnabled="true"
                 app:hintEnabled="false">
 
@@ -199,6 +202,7 @@
                     android:layout_height="300dp"
                     android:gravity="top|start"
                     android:inputType="textMultiLine|textNoSuggestions"
+                    android:paddingTop="0dp"
                     android:scrollbars="vertical"
                     android:textColor="@color/zdrama_text_primary"
                     android:textSize="13sp" />
@@ -259,6 +263,7 @@
                 android:layout_height="wrap_content"
                 app:boxBackgroundColor="@color/zdrama_surface"
                 app:boxStrokeColor="@color/zdrama_primary"
+                app:expandedHintEnabled="false"
                 app:helperTextEnabled="true"
                 app:hintEnabled="false">
 
@@ -268,6 +273,7 @@
                     android:layout_height="500dp"
                     android:gravity="top|start"
                     android:inputType="textMultiLine|textNoSuggestions"
+                    android:paddingTop="0dp"
                     android:scrollbars="vertical"
                     android:textColor="@color/zdrama_text_primary"
                     android:textSize="13sp" />
@@ -328,6 +334,7 @@
                 android:layout_height="wrap_content"
                 app:boxBackgroundColor="@color/zdrama_surface"
                 app:boxStrokeColor="@color/zdrama_primary"
+                app:expandedHintEnabled="false"
                 app:helperTextEnabled="true"
                 app:hintEnabled="false">
 
@@ -337,6 +344,7 @@
                     android:layout_height="500dp"
                     android:gravity="top|start"
                     android:inputType="textMultiLine|textNoSuggestions"
+                    android:paddingTop="0dp"
                     android:scrollbars="vertical"
                     android:textColor="@color/zdrama_text_primary"
                     android:textSize="13sp" />
