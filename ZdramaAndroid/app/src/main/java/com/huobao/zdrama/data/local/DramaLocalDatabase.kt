@@ -69,11 +69,17 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
             db.execSQL(SQL_CREATE_CHARACTERS)
             db.execSQL(SQL_CREATE_INDEX_CHARACTERS_PROJECT_ID)
         }
+        if (oldVersion < 10) {
+            db.execSQL("ALTER TABLE $TABLE_STORYBOARDS ADD COLUMN $COL_CHARACTER_NAMES TEXT")
+        }
+        if (oldVersion < 11) {
+            db.execSQL("ALTER TABLE $TABLE_STORYBOARDS ADD COLUMN $COL_CHARACTER_IDS TEXT")
+        }
     }
 
     companion object {
         private const val DATABASE_NAME = "zdrama.db"
-        private const val DATABASE_VERSION = 9
+        private const val DATABASE_VERSION = 11
 
         const val TABLE_PROJECTS = "projects"
         const val COL_ID = "id"
@@ -113,6 +119,8 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
         const val COL_VIDEO_URL = "video_url"
         const val COL_VIDEO_LOCAL_PATH = "video_local_path"
         const val COL_VIDEO_ERROR_MESSAGE = "video_error_message"
+        const val COL_CHARACTER_NAMES = "character_names"
+        const val COL_CHARACTER_IDS = "character_ids"
 
         const val TABLE_EPISODES = "episodes"
         const val COL_EPISODE_ID = "episode_id"
@@ -169,6 +177,8 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
                 $COL_IMAGE_PROMPT TEXT NOT NULL,
                 $COL_VIDEO_PROMPT TEXT NOT NULL,
                 $COL_DURATION_SECONDS INTEGER NOT NULL,
+                $COL_CHARACTER_NAMES TEXT,
+                $COL_CHARACTER_IDS TEXT,
                 $COL_IMAGE_STATUS TEXT NOT NULL DEFAULT 'PENDING',
                 $COL_IMAGE_URL TEXT,
                 $COL_IMAGE_LOCAL_PATH TEXT,

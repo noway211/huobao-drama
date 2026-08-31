@@ -42,7 +42,7 @@ class AgnesStoryboardRepository(
                         ChatMessage(role = "user", content = buildUserPrompt(project, scriptToUse))
                     ),
                     temperature = 0.3,
-                    max_tokens = 6000
+                    max_tokens = 10000
                 )
             )
             Log.d(TAG, "storyboard response structure: ${ChatResponseTextExtractor.describe(response)}")
@@ -67,6 +67,9 @@ class AgnesStoryboardRepository(
                     imagePrompt = item.imagePrompt.orEmpty(),
                     videoPrompt = item.videoPrompt.orEmpty(),
                     durationSeconds = item.durationSeconds?.toIntOrNull() ?: project.shotDurationSeconds,
+                    characterNames = item.characterNames ?: emptyList(),
+                    // 与 Harmony buildShots 一致：初始绑定写入 LLM 返回的角色名字数组 JSON
+                    characterIds = item.characterNames?.takeIf { it.isNotEmpty() }?.let { gson.toJson(it) },
                     imageStatus = AssetStatus.PENDING,
                     imageUrl = null,
                     imageLocalPath = null,
@@ -129,7 +132,7 @@ class AgnesStoryboardRepository(
             Script:
             $script
 
-            Return only a JSON array. Each item must use these keys: shot_number, scene, action, dialogue, camera, image_prompt, video_prompt, duration_seconds.
+            Return only a JSON array. Each item must use these keys: shot_number, scene, action, dialogue, camera, image_prompt, video_prompt, duration_seconds, character_names. character_names must be an array of character names that appear in this shot (use the exact character name strings from the script), or [] if no characters appear.
         """.trimIndent()
     }
 
@@ -149,7 +152,8 @@ class AgnesStoryboardRepository(
         val camera: String?,
         @SerializedName("image_prompt") val imagePrompt: String?,
         @SerializedName("video_prompt") val videoPrompt: String?,
-        @SerializedName("duration_seconds") val durationSeconds: String?
+        @SerializedName("duration_seconds") val durationSeconds: String?,
+        @SerializedName("character_names") val characterNames: List<String>?
     )
 
     companion object {

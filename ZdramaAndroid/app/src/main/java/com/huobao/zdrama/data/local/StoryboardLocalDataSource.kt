@@ -4,11 +4,15 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.huobao.zdrama.domain.model.AssetStatus
 import com.huobao.zdrama.domain.model.StoryboardShot
+import java.util.ArrayList
 
 class StoryboardLocalDataSource(context: Context) {
     private val database = DramaLocalDatabase(context)
+    private val gson = Gson()
 
     fun replaceStoryboards(projectId: Long, shots: List<StoryboardShot>) {
         val db = database.writableDatabase
@@ -119,6 +123,23 @@ class StoryboardLocalDataSource(context: Context) {
         )
     }
 
+    /**
+     * 更新分镜的角色绑定。characterIds 为 JSON 字符串：
+     * 数字 ID 数组（用户绑定）或名字字符串数组（LLM 初始生成）；空绑定传 "" 或 null。
+     */
+    fun updateShotCharacterIds(shotId: Long, characterIds: String?): Int {
+        val values = ContentValues().apply {
+            put(DramaLocalDatabase.COL_CHARACTER_IDS, characterIds)
+            put(DramaLocalDatabase.COL_UPDATED_AT, System.currentTimeMillis())
+        }
+        return database.writableDatabase.update(
+            DramaLocalDatabase.TABLE_STORYBOARDS,
+            values,
+            "${DramaLocalDatabase.COL_ID} = ?",
+            arrayOf(shotId.toString())
+        )
+    }
+
     private fun insertStoryboard(db: SQLiteDatabase, shot: StoryboardShot): Long {
         val now = System.currentTimeMillis()
         val values = ContentValues().apply {
@@ -131,6 +152,9 @@ class StoryboardLocalDataSource(context: Context) {
             put(DramaLocalDatabase.COL_IMAGE_PROMPT, shot.imagePrompt)
             put(DramaLocalDatabase.COL_VIDEO_PROMPT, shot.videoPrompt)
             put(DramaLocalDatabase.COL_DURATION_SECONDS, shot.durationSeconds)
+            put(DramaLocalDatabase.COL_CHARACTER_NAMES, encodeCharacterNames(shot.characterNames))
+            // characterIds 为空时回退写入 characterNames 的 JSON，保证新列始终有值（与 Harmony 语义一致）
+            put(DramaLocalDatabase.COL_CHARACTER_IDS, shot.characterIds ?: encodeCharacterNames(shot.characterNames))
             put(DramaLocalDatabase.COL_IMAGE_STATUS, shot.imageStatus.name)
             put(DramaLocalDatabase.COL_IMAGE_URL, shot.imageUrl)
             put(DramaLocalDatabase.COL_IMAGE_LOCAL_PATH, shot.imageLocalPath)
@@ -149,6 +173,9 @@ class StoryboardLocalDataSource(context: Context) {
     private fun readShots(cursor: Cursor): List<StoryboardShot> {
         val shots = mutableListOf<StoryboardShot>()
         while (cursor.moveToNext()) {
+            val names = decodeCharacterNames(cursor.getString(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_CHARACTER_NAMES)))
+            // 旧数据 character_ids 列为 NULL 时回退到 character_names 的 JSON，保证 domain 层永远有绑定值
+            val rawCharacterIds = cursor.getString(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_CHARACTER_IDS))
             shots.add(
                 StoryboardShot(
                     id = cursor.getLong(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_ID)),
@@ -161,6 +188,8 @@ class StoryboardLocalDataSource(context: Context) {
                     imagePrompt = cursor.getString(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_IMAGE_PROMPT)),
                     videoPrompt = cursor.getString(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_VIDEO_PROMPT)),
                     durationSeconds = cursor.getInt(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_DURATION_SECONDS)),
+                    characterNames = names,
+                    characterIds = rawCharacterIds ?: encodeCharacterNames(names),
                     imageStatus = parseAssetStatus(cursor.getString(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_IMAGE_STATUS))),
                     imageUrl = cursor.getString(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_IMAGE_URL)),
                     imageLocalPath = cursor.getString(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_IMAGE_LOCAL_PATH)),
@@ -181,5 +210,17 @@ class StoryboardLocalDataSource(context: Context) {
     private fun parseAssetStatus(value: String?): AssetStatus {
         return runCatching { AssetStatus.valueOf(value ?: AssetStatus.PENDING.name) }
             .getOrDefault(AssetStatus.PENDING)
+    }
+
+    private fun encodeCharacterNames(names: List<String>): String? {
+        if (names.isEmpty()) return null
+        return gson.toJson(names)
+    }
+
+    private fun decodeCharacterNames(json: String?): List<String> {
+        if (json.isNullOrBlank()) return emptyList()
+        val type = object : TypeToken<ArrayList<String>>() {}.type
+        return runCatching { gson.fromJson<ArrayList<String>>(json, type) }
+            .getOrNull() ?: emptyList()
     }
 }

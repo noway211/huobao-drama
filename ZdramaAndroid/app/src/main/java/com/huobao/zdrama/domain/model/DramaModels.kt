@@ -84,6 +84,13 @@ data class StoryboardShot(
     val imagePrompt: String,
     val videoPrompt: String,
     val durationSeconds: Int,
+    val characterNames: List<String>,
+    /**
+     * 角色绑定（与 Harmony 端语义一致）：JSON 字符串，兼容两种格式——
+     * 分镜生成时写入 LLM 返回的角色名字符串数组（如 ["Alice","Bob"]）；
+     * 用户手工绑定后写入角色数字 ID 数组（如 [1,3]）。null/空串视为无绑定。
+     */
+    val characterIds: String? = null,
     val imageStatus: AssetStatus,
     val imageUrl: String?,
     val imageLocalPath: String?,

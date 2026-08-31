@@ -123,6 +123,11 @@ class DramaRepository(context: Context) {
         storyboardLocalDataSource.updateShotVideoPrompt(shotId, newPrompt) > 0
     }
 
+    /** 更新分镜的角色绑定（JSON：数字 ID 数组或名字数组；空绑定传 "" 或 null）。 */
+    suspend fun updateShotCharacterIds(shotId: Long, characterIds: String?): Boolean = withContext(Dispatchers.IO) {
+        storyboardLocalDataSource.updateShotCharacterIds(shotId, characterIds) > 0
+    }
+
     // --- Episode methods ---
 
     suspend fun getEpisodeForProject(projectId: Long): Episode? = withContext(Dispatchers.IO) {

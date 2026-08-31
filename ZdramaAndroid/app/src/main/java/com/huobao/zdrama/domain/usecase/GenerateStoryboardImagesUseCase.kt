@@ -1,10 +1,14 @@
 package com.huobao.zdrama.domain.usecase
 
+import android.util.Log
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.huobao.zdrama.data.repository.AgnesImageRepository
 import com.huobao.zdrama.data.repository.DramaRepository
 import com.huobao.zdrama.data.repository.MediaDownloadRepository
 import com.huobao.zdrama.data.settings.AgnesSettings
 import com.huobao.zdrama.domain.model.AssetStatus
+import com.huobao.zdrama.domain.model.Character
 import com.huobao.zdrama.domain.model.GenerationStage
 import com.huobao.zdrama.domain.model.ProjectStatus
 import com.huobao.zdrama.domain.model.StoryboardShot
@@ -15,6 +19,13 @@ class GenerateStoryboardImagesUseCase(
     private val agnesImageRepository: AgnesImageRepository,
     private val mediaDownloadRepository: MediaDownloadRepository
 ) {
+    private val gson = Gson()
+
+    /** 角色参考信息（buildCharacterReferences 返回值）。 */
+    private data class CharacterRefInfo(
+        val referenceUrls: List<String>,
+        val characterText: String
+    )
     suspend fun execute(projectId: Long, settings: AgnesSettings): Result<Int> {
         val project = dramaRepository.getProject(projectId)
             ?: return Result.failure(IllegalArgumentException("Project not found"))
@@ -51,7 +62,20 @@ class GenerateStoryboardImagesUseCase(
                 imageErrorMessage = null
             )
 
-            val imageResult = agnesImageRepository.generateImage(settings, shot)
+            // 收集分镜绑定角色的参考图，并为其生成 "reference image N" 绑定前缀文本
+            val charRef = buildCharacterReferences(projectId, shot)
+            val enrichedPrompt = if (charRef.characterText.isNotEmpty()) {
+                "${charRef.characterText}${shot.imagePrompt}"
+            } else {
+                shot.imagePrompt
+            }
+            Log.d(TAG, "shot #${shot.shotNumber} image: refs=${charRef.referenceUrls.size} enriched=${charRef.characterText.isNotEmpty()}")
+
+            val imageResult = agnesImageRepository.generateImage(
+                settings = settings,
+                prompt = enrichedPrompt,
+                referenceImages = charRef.referenceUrls
+            )
             if (imageResult.isSuccess) {
                 val imageUrl = imageResult.getOrThrow()
                 val downloadResult = mediaDownloadRepository.downloadToGeneratedMedia(
@@ -110,6 +134,87 @@ class GenerateStoryboardImagesUseCase(
 
     private fun isExistingLocalFile(path: String?): Boolean {
         return !path.isNullOrBlank() && File(path).exists()
+    }
+
+    private fun isExistingNonEmptyFile(path: String?): Boolean {
+        if (path.isNullOrBlank()) return false
+        val file = File(path)
+        return file.exists() && file.length() > 0
+    }
+
+    /**
+     * 收集分镜关联角色的参考图，并为每张参考图生成 "reference image N" 绑定前缀。
+     * characterText 中每条形如 "The person in reference image N is <Name> (<Appearance>)."
+     * 与 referenceUrls[N-1] 一一对应，弥补 extra_body.image 不支持 per-image 标签的 API 限制。
+     * 移植自 Harmony 端 UseCases.buildCharacterReferences。
+     */
+    private suspend fun buildCharacterReferences(projectId: Long, shot: StoryboardShot): CharacterRefInfo {
+        val refs = mutableListOf<String>()
+        val descLines = mutableListOf<String>()
+
+        val allCharacters = dramaRepository.getCharacters(projectId)
+        if (allCharacters.isEmpty()) {
+            return CharacterRefInfo(emptyList(), "")
+        }
+
+        // 统一 ID / 名字两条路径：优先按数字 ID 查表，回退到字符串名查表
+        val resolved = resolveCharacters(shot.characterIds, allCharacters)
+
+        for (ch in resolved) {
+            if (refs.size >= 3) break
+
+            val refUrl = if (isExistingNonEmptyFile(ch.imageLocalPath)) ch.imageLocalPath else ch.imageUrl
+            // Atomic：refUrl 与 appearance 缺一就跳过该角色，避免数组错位
+            if (refUrl.isNullOrBlank() || ch.appearance.isBlank()) continue
+
+            refs.add(refUrl)
+            descLines.add("The person in reference image ${refs.size} is ${ch.name} (${ch.appearance}).")
+        }
+
+        val characterText = if (descLines.isNotEmpty()) descLines.joinToString(" ") + "\n" else ""
+        return CharacterRefInfo(refs, characterText)
+    }
+
+    /**
+     * 将 shot.characterIds 解析为 Character[]。优先按数字 ID 查表，回退到字符串名查表。
+     * 未匹配的 ID/name 静默跳过。空输入返回空列表。移植自 Harmony 端 UseCases.resolveCharacters。
+     */
+    private fun resolveCharacters(characterIds: String?, allCharacters: List<Character>): List<Character> {
+        if (allCharacters.isEmpty()) return emptyList()
+
+        // 路径 1：按数字 ID 查表
+        val numericIds = parseCharacterIds(characterIds)
+        if (numericIds.isNotEmpty()) {
+            val charMap = allCharacters.associateBy { it.id }
+            val out = numericIds.mapNotNull { charMap[it] }
+            if (out.isNotEmpty()) return out
+        }
+
+        // 路径 2：按字符串名查表（fallback）
+        val names = parseCharacterNames(characterIds)
+        if (names.isNullOrEmpty()) return emptyList()
+        val nameMap = allCharacters.associateBy { it.name }
+        return names.mapNotNull { nameMap[it] }
+    }
+
+    /** 从 characterIds JSON 中解析数字 ID 数组；混合/字符串数组返回空（走名字 fallback）。 */
+    private fun parseCharacterIds(characterIds: String?): List<Long> {
+        if (characterIds.isNullOrBlank()) return emptyList()
+        val type = object : TypeToken<ArrayList<Long>>() {}.type
+        return runCatching { gson.fromJson<ArrayList<Long>>(characterIds, type) }
+            .getOrNull()?.toList() ?: emptyList()
+    }
+
+    /** 从 characterIds JSON 中解析名字字符串数组（非字符串内容返回 null）。 */
+    private fun parseCharacterNames(characterIds: String?): List<String>? {
+        if (characterIds.isNullOrBlank()) return null
+        val type = object : TypeToken<ArrayList<String>>() {}.type
+        return runCatching { gson.fromJson<ArrayList<String>>(characterIds, type) }
+            .getOrNull()?.toList()
+    }
+
+    companion object {
+        private const val TAG = "GenerateStoryboardImagesUseCase"
     }
 
     /** 自动替换触发内容审查的敏感词，对齐 Harmony 端 patchSensitivePrompts。 */

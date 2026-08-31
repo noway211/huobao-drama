@@ -52,7 +52,9 @@ data class ImageGenerationRequest(
 )
 
 data class ImageExtraBody(
-    @SerializedName("response_format") val responseFormat: String
+    @SerializedName("response_format") val responseFormat: String,
+    /** 图生图参考图（Agnes：data URI 或 http(s) URL 数组），不传则文生图。 */
+    val image: List<String>? = null
 )
 
 data class ImageGenerationResponse(
