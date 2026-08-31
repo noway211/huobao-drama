@@ -31,4 +31,13 @@
         android:layout_marginTop="4dp"
         android:textColor="@color/zdrama_text_secondary"
         android:textSize="14sp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/deleteImageButton"
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/project_image_delete_one"
+        android:visibility="gone" />
 </LinearLayout>

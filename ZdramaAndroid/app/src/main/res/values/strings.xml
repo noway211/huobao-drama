@@ -243,6 +243,7 @@
     <string name="manage_prompts_placeholder">在此输入自定义提示词…清空则使用默认值</string>
     <string name="project_image_delete_all">全部删除</string>
     <string name="project_image_delete_one">删除图片</string>
+    <string name="project_image_count_summary">%1$d / %2$d 张图片</string>
     <string name="project_image_delete_title">删除图片？</string>
     <string name="project_image_delete_message">删除后需要重新生成。</string>
     <string name="project_image_deleted">图片已删除</string>
@@ -262,6 +263,10 @@
     <string name="project_final_video_delete_message">删除成片后需要重新合成。是否继续？</string>
     <string name="project_final_video_deleted">成片已删除</string>
     <string name="project_final_video_delete_failed">成片删除失败</string>
+    <string name="project_final_video_save_to_album">保存到相册</string>
+    <string name="project_final_video_saved_to_album">已保存到相册</string>
+    <string name="project_final_video_save_failed">保存失败：%1$s</string>
+    <string name="album_permission_denied">未授权访问相册，请在设置中允许存储权限</string>
     <string name="project_character_delete_image">删除图片</string>
     <string name="project_character_delete_image_title">删除角色图片？</string>
     <string name="project_character_delete_image_message">删除后需要重新生成角色图。</string>

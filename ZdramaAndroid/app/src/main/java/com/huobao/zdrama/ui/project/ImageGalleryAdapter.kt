@@ -2,6 +2,7 @@ package com.huobao.zdrama.ui.project
 
 import android.graphics.BitmapFactory
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.huobao.zdrama.R
@@ -11,7 +12,8 @@ import com.huobao.zdrama.domain.model.StoryboardShot
 import java.io.File
 
 class ImageGalleryAdapter(
-    private val onLongClick: (StoryboardShot) -> Unit = {}
+    private val onLongClick: (StoryboardShot) -> Unit = {},
+    private val onDeleteImage: (StoryboardShot) -> Unit = {}
 ) : RecyclerView.Adapter<ImageGalleryAdapter.ImageViewHolder>() {
     private val shots = mutableListOf<StoryboardShot>()
 
@@ -67,8 +69,10 @@ class ImageGalleryAdapter(
                     binding.shotStatusText.text = "$fallback（$statusText）"
                 }
             }
-            // 仅当该 shot 有 image（本地或远端）时才允许长按删除
+            // 仅当该 shot 有 image（本地或远端）时才允许删除（按钮 + 长按）
             val canDelete = !shot.imageLocalPath.isNullOrBlank() || !shot.imageUrl.isNullOrBlank()
+            binding.deleteImageButton.visibility = if (canDelete) View.VISIBLE else View.GONE
+            binding.deleteImageButton.setOnClickListener { onDeleteImage(shot) }
             binding.root.setOnLongClickListener {
                 if (canDelete) onLongClick(shot)
                 canDelete

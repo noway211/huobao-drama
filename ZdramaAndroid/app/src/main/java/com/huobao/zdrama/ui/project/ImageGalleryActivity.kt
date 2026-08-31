@@ -19,7 +19,10 @@ class ImageGalleryActivity : AppCompatActivity() {
     private lateinit var getProjectDetailUseCase: GetProjectDetailUseCase
     private lateinit var getStoryboardsUseCase: GetStoryboardsUseCase
     private lateinit var repository: DramaRepository
-    private val adapter = ImageGalleryAdapter(onLongClick = { shot -> confirmDeleteOne(shot) })
+    private val adapter = ImageGalleryAdapter(
+        onLongClick = { shot -> confirmDeleteOne(shot) },
+        onDeleteImage = { shot -> confirmDeleteOne(shot) }
+    )
     private var projectId: Long = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,14 +59,19 @@ class ImageGalleryActivity : AppCompatActivity() {
                 return@launch
             }
             val storyboards = getStoryboardsUseCase.execute(projectId)
-            val hasAnyImage = storyboards.any {
+            val imageCount = storyboards.count {
                 !it.imageLocalPath.isNullOrBlank() || !it.imageUrl.isNullOrBlank()
             }
-            if (storyboards.isEmpty() || !hasAnyImage) {
+            if (storyboards.isEmpty() || imageCount == 0) {
                 finishWithMessage(R.string.project_no_images)
                 return@launch
             }
             binding.titleText.text = project.title
+            binding.countText.text = getString(
+                R.string.project_image_count_summary,
+                imageCount,
+                storyboards.size
+            )
             adapter.submitList(storyboards)
             binding.deleteAllButton.isEnabled = true
         }
