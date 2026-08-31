@@ -94,6 +94,17 @@
             android:text="@string/project_video_delete_one" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/saveFinalButton"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:text="@string/project_final_video_save_to_album"
+            android:visibility="gone" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/deleteFinalButton"
             style="?attr/materialButtonOutlinedStyle"
             android:layout_width="0dp"

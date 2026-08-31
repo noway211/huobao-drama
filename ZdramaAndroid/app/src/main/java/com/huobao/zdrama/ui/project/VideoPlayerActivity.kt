@@ -1,7 +1,10 @@
 package com.huobao.zdrama.ui.project
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.media.MediaPlayer
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -9,8 +12,10 @@ import android.widget.MediaController
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.huobao.zdrama.R
+import com.huobao.zdrama.data.repository.AlbumSaver
 import com.huobao.zdrama.data.repository.DramaRepository
 import com.huobao.zdrama.databinding.ActivityVideoPlayerBinding
 import com.huobao.zdrama.domain.model.StoryboardShot
@@ -27,6 +32,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var projectId: Long = 0L
     private var isFinalVideoMode = false
     private var finalVideoPath: String? = null
+    private var finalVideoTitle: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,6 +64,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         binding.deleteCurrentButton.setOnClickListener { confirmDeleteCurrent() }
         binding.deleteAllButton.setOnClickListener { confirmDeleteAll() }
         binding.deleteFinalButton.setOnClickListener { confirmDeleteFinal() }
+        binding.saveFinalButton.setOnClickListener { saveFinalToAlbum() }
 
         val videoPath = intent.getStringExtra(EXTRA_VIDEO_PATH)
         if (!videoPath.isNullOrBlank()) {
@@ -90,6 +97,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 // 启用分镜模式按钮组
                 binding.deleteAllButton.visibility = View.VISIBLE
                 binding.deleteCurrentButton.visibility = View.VISIBLE
+                binding.saveFinalButton.visibility = View.GONE
                 binding.deleteFinalButton.visibility = View.GONE
                 playAt(0)
             }
@@ -104,12 +112,14 @@ class VideoPlayerActivity : AppCompatActivity() {
         }
         isFinalVideoMode = true
         finalVideoPath = videoPath
+        finalVideoTitle = intent.getStringExtra(EXTRA_PROJECT_TITLE)
         binding.shotText.setText(R.string.video_player_final_label)
         binding.previousButton.isEnabled = false
         binding.nextButton.isEnabled = false
         // 启用成片模式按钮组
         binding.deleteAllButton.visibility = View.GONE
         binding.deleteCurrentButton.visibility = View.GONE
+        binding.saveFinalButton.visibility = View.VISIBLE
         binding.deleteFinalButton.visibility = View.VISIBLE
         val uri = Uri.fromFile(file)
         Log.d(TAG, "Playing final video: path=${file.absolutePath}, exists=${file.exists()}, size=${file.length()}")
@@ -233,6 +243,58 @@ class VideoPlayerActivity : AppCompatActivity() {
         }
     }
 
+    // ────────────── 保存到相册 ──────────────
+
+    /** 保存成片到系统相册（Android 10+ 免权限直写；更低版本先申请 WRITE_EXTERNAL_STORAGE）。 */
+    private fun saveFinalToAlbum() {
+        val path = finalVideoPath ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                REQUEST_SAVE_TO_ALBUM
+            )
+            return
+        }
+        lifecycleScope.launch {
+            val result = AlbumSaver.saveVideo(
+                this@VideoPlayerActivity,
+                path,
+                finalVideoTitle ?: "final_video"
+            )
+            Toast.makeText(
+                this@VideoPlayerActivity,
+                if (result.isSuccess) {
+                    getString(R.string.project_final_video_saved_to_album)
+                } else {
+                    getString(
+                        R.string.project_final_video_save_failed,
+                        result.exceptionOrNull()?.message ?: "未知错误"
+                    )
+                },
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_SAVE_TO_ALBUM) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                saveFinalToAlbum()
+            } else {
+                Toast.makeText(this, R.string.album_permission_denied, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun showNoVideos() {
         Toast.makeText(this, R.string.video_no_generated_videos, Toast.LENGTH_SHORT).show()
         finish()
@@ -242,5 +304,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         private const val TAG = "VideoPlayerActivity"
         const val EXTRA_PROJECT_ID = "extra_project_id"
         const val EXTRA_VIDEO_PATH = "extra_video_path"
+        const val EXTRA_PROJECT_TITLE = "extra_project_title"
+        private const val REQUEST_SAVE_TO_ALBUM = 1001
     }
 }

@@ -36,6 +36,7 @@ class ProjectDetailActivity : AppCompatActivity() {
     private lateinit var getStoryboardsUseCase: GetStoryboardsUseCase
     private lateinit var getCharactersUseCase: GetCharactersUseCase
     private var projectId: Long = 0L
+    private var projectTitle: String? = null
     private var hasGeneratedVideos = false
     private var hasFinalVideo = false
     private var finalVideoLocalPath: String? = null
@@ -394,6 +395,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         startActivity(
             Intent(this, VideoPlayerActivity::class.java)
                 .putExtra(VideoPlayerActivity.EXTRA_VIDEO_PATH, path)
+                .putExtra(VideoPlayerActivity.EXTRA_PROJECT_TITLE, projectTitle)
         )
     }
 
@@ -531,6 +533,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         binding.viewCharactersButton.isEnabled = characters.isNotEmpty()
         bindGenerationButtonTexts(project, storyboards, characters)
         binding.titleText.text = project.title
+        projectTitle = project.title
         binding.statusText.text = getString(R.string.project_status_label) + "：${project.status.toDisplayText()}\n" +
             getString(R.string.project_stage_label) + "：${project.currentStage.toDisplayText()}"
         bindProgressCard(project, storyboards, characters)
