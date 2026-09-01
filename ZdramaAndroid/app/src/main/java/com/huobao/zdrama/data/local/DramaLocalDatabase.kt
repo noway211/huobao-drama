@@ -75,11 +75,29 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
         if (oldVersion < 11) {
             db.execSQL("ALTER TABLE $TABLE_STORYBOARDS ADD COLUMN $COL_CHARACTER_IDS TEXT")
         }
+        if (oldVersion < 12) {
+            // 多集支持：成片状态从 projects 表迁到 episodes 表（每集独立成片，对齐 backend video_merges 语义）
+            db.execSQL("ALTER TABLE $TABLE_EPISODES ADD COLUMN $COL_EPISODE_FINAL_VIDEO_STATUS TEXT NOT NULL DEFAULT 'PENDING'")
+            db.execSQL("ALTER TABLE $TABLE_EPISODES ADD COLUMN $COL_EPISODE_FINAL_VIDEO_LOCAL_PATH TEXT")
+            db.execSQL("ALTER TABLE $TABLE_EPISODES ADD COLUMN $COL_EPISODE_FINAL_VIDEO_ERROR_MESSAGE TEXT")
+            // 历史遗留：v8 之后创建项目的分镜 insert 时未写 episode_id（模型当时无该字段），
+            // 统一回填到该项目第一集（栈内旧数据多为单集项目）
+            db.execSQL("""
+                UPDATE $TABLE_STORYBOARDS
+                SET $COL_EPISODE_ID = (
+                    SELECT $COL_ID FROM $TABLE_EPISODES
+                    WHERE $TABLE_EPISODES.$COL_PROJECT_ID = $TABLE_STORYBOARDS.$COL_PROJECT_ID
+                    ORDER BY $COL_EPISODE_NUMBER ASC
+                    LIMIT 1
+                )
+                WHERE $COL_EPISODE_ID IS NULL
+            """)
+        }
     }
 
     companion object {
         private const val DATABASE_NAME = "zdrama.db"
-        private const val DATABASE_VERSION = 11
+        private const val DATABASE_VERSION = 12
 
         const val TABLE_PROJECTS = "projects"
         const val COL_ID = "id"
@@ -129,6 +147,9 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
         const val COL_EPISODE_CONTENT = "content"
         const val COL_EPISODE_SCRIPT_CONTENT = "script_content"
         const val COL_EPISODE_STATUS = "episode_status"
+        const val COL_EPISODE_FINAL_VIDEO_STATUS = "final_video_status"
+        const val COL_EPISODE_FINAL_VIDEO_LOCAL_PATH = "final_video_local_path"
+        const val COL_EPISODE_FINAL_VIDEO_ERROR_MESSAGE = "final_video_error_message"
 
         const val TABLE_CHARACTERS = "characters"
         const val COL_CHARACTER_PROJECT_ID = "project_id"
@@ -169,6 +190,7 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
             CREATE TABLE IF NOT EXISTS $TABLE_STORYBOARDS (
                 $COL_ID INTEGER PRIMARY KEY AUTOINCREMENT,
                 $COL_PROJECT_ID INTEGER NOT NULL,
+                $COL_EPISODE_ID INTEGER,
                 $COL_SHOT_NUMBER INTEGER NOT NULL,
                 $COL_SCENE TEXT NOT NULL,
                 $COL_ACTION TEXT NOT NULL,
@@ -202,6 +224,9 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
                 $COL_EPISODE_CONTENT TEXT,
                 $COL_EPISODE_SCRIPT_CONTENT TEXT,
                 $COL_EPISODE_STATUS TEXT NOT NULL DEFAULT 'DRAFT',
+                $COL_EPISODE_FINAL_VIDEO_STATUS TEXT NOT NULL DEFAULT 'PENDING',
+                $COL_EPISODE_FINAL_VIDEO_LOCAL_PATH TEXT,
+                $COL_EPISODE_FINAL_VIDEO_ERROR_MESSAGE TEXT,
                 $COL_CREATED_AT INTEGER NOT NULL,
                 $COL_UPDATED_AT INTEGER NOT NULL
             )

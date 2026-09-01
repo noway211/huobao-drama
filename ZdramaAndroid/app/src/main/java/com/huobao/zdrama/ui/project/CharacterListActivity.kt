@@ -193,7 +193,8 @@ class CharacterListActivity : AppCompatActivity() {
     }
 
     private fun enqueueGenerateAll() {
-        GenerationWorker.enqueue(this, projectId, GenerationWorker.STAGE_CHARACTER_IMAGE)
+        // 角色图是项目级资产（对齐 backend drama 级 characters），episodeId 传 0 占位
+        GenerationWorker.enqueue(this, projectId, 0L, GenerationWorker.STAGE_CHARACTER_IMAGE)
         Toast.makeText(this, R.string.project_character_image_queued, Toast.LENGTH_SHORT).show()
         finish()
     }

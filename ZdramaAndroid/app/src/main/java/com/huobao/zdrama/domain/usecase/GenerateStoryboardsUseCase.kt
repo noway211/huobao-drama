@@ -11,12 +11,12 @@ class GenerateStoryboardsUseCase(
     private val dramaRepository: DramaRepository,
     private val agnesStoryboardRepository: AgnesStoryboardRepository
 ) {
-    suspend fun execute(projectId: Long, settings: AgnesSettings): Result<List<StoryboardShot>> {
+    suspend fun execute(projectId: Long, episodeId: Long, settings: AgnesSettings): Result<List<StoryboardShot>> {
         val project = dramaRepository.getProject(projectId)
             ?: return Result.failure(IllegalArgumentException("Project not found"))
 
         // Prefer episode's scriptContent, fall back to project.generatedScript
-        val episode = dramaRepository.getEpisodeForProject(projectId)
+        val episode = dramaRepository.getEpisodeById(episodeId) ?: dramaRepository.getEpisodeForProject(projectId)
         val script = episode?.scriptContent ?: project.generatedScript
         if (script.isNullOrBlank()) {
             return Result.failure(IllegalArgumentException("Generate script before storyboard"))
@@ -32,7 +32,7 @@ class GenerateStoryboardsUseCase(
 
         val result = agnesStoryboardRepository.generateStoryboards(settings, project, script)
         result.onSuccess { shots ->
-            dramaRepository.replaceStoryboards(projectId, shots)
+            dramaRepository.replaceStoryboards(projectId, episodeId, shots)
             dramaRepository.updateProjectTextResult(
                 projectId = projectId,
                 status = ProjectStatus.COMPLETED,

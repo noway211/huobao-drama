@@ -2,7 +2,11 @@ package com.huobao.zdrama.ui.project
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -15,6 +19,7 @@ import com.huobao.zdrama.data.settings.AgnesSettingsStore
 import com.huobao.zdrama.databinding.ActivityProjectDetailBinding
 import com.huobao.zdrama.domain.model.AssetStatus
 import com.huobao.zdrama.domain.model.DramaProject
+import com.huobao.zdrama.domain.model.Episode
 import com.huobao.zdrama.domain.model.GenerationStage
 import com.huobao.zdrama.domain.model.ProjectStatus
 import com.huobao.zdrama.domain.model.StoryboardShot
@@ -37,12 +42,15 @@ class ProjectDetailActivity : AppCompatActivity() {
     private lateinit var getCharactersUseCase: GetCharactersUseCase
     private var projectId: Long = 0L
     private var projectTitle: String? = null
+    private var currentEpisodeId: Long = 0L
+    private var episodes: List<Episode> = emptyList()
     private var hasGeneratedVideos = false
     private var hasFinalVideo = false
     private var finalVideoLocalPath: String? = null
     private var hasActiveGenerationWork = false
     private var activeGenerationRefreshJob: Job? = null
     private val generationWorkInfosByName = mutableMapOf<String, List<WorkInfo>>()
+    private val observedWorkNames = mutableSetOf<String>()
     private var promptExpanded = false
     private var boundPrompt: String? = null
     private var cachedCharacterCount: Int = 0
@@ -98,7 +106,6 @@ class ProjectDetailActivity : AppCompatActivity() {
         binding.viewApiLogButton.setOnClickListener { openApiLog() }
         binding.deleteProjectButton.setOnClickListener { confirmDeleteProject() }
         binding.promptToggle.setOnClickListener { togglePrompt() }
-        observeGenerationWork(projectId)
         loadProject(projectId)
     }
 
@@ -118,19 +125,39 @@ class ProjectDetailActivity : AppCompatActivity() {
             if (project == null) {
                 showMissingProject()
             } else {
-                val storyboards = getStoryboardsUseCase.execute(projectId)
+                val loadedEpisodes = dramaRepository.getEpisodes(projectId)
+                episodes = loadedEpisodes
+                if (currentEpisodeId <= 0L || loadedEpisodes.none { it.id == currentEpisodeId }) {
+                    currentEpisodeId = loadedEpisodes.firstOrNull()?.id ?: 0L
+                }
+                bindEpisodeChips(loadedEpisodes)
+                observeGenerationWork(projectId, loadedEpisodes)
+                val storyboards = if (currentEpisodeId > 0L) {
+                    getStoryboardsUseCase.execute(projectId, currentEpisodeId)
+                } else {
+                    emptyList()
+                }
+                val episode = loadedEpisodes.firstOrNull { it.id == currentEpisodeId }
                 val characters = getCharactersUseCase.execute(projectId)
                 cachedCharacterCount = characters.size
-                bindProject(project, storyboards, characters)
+                bindProject(project, episode, storyboards, characters)
             }
         }
     }
 
-    private fun observeGenerationWork(projectId: Long) {
-        GenerationWorker.workNamesForProject(projectId).forEach { workName ->
-            WorkManager.getInstance(this)
-                .getWorkInfosForUniqueWorkLiveData(workName)
-                .observe(this) { workInfos -> handleWorkInfos(workName, workInfos) }
+    /**
+     * 每集注册一次 WorkManager LiveData 观察（用 observedWorkNames 去重）。
+     * 其他集/本集的生成任务都会触发 handleWorkInfos → 刷新按钮状态 + 重载当前集数据。
+     */
+    private fun observeGenerationWork(projectId: Long, episodes: List<Episode>) {
+        episodes.forEach { episode ->
+            GenerationWorker.workNamesForEpisode(projectId, episode.id).forEach { workName ->
+                if (observedWorkNames.add(workName)) {
+                    WorkManager.getInstance(this)
+                        .getWorkInfosForUniqueWorkLiveData(workName)
+                        .observe(this) { workInfos -> handleWorkInfos(workName, workInfos) }
+                }
+            }
         }
     }
 
@@ -197,8 +224,9 @@ class ProjectDetailActivity : AppCompatActivity() {
         }
         lifecycleScope.launch {
             val project = getProjectDetailUseCase.execute(projectId)
-            val storyboards = getStoryboardsUseCase.execute(projectId)
-            val warningMessageRes = regenerationWarningMessageRes(stage, project, storyboards)
+            val episode = currentEpisode()
+            val storyboards = getCurrentEpisodeStoryboards()
+            val warningMessageRes = regenerationWarningMessageRes(stage, project, episode, storyboards)
             if (warningMessageRes == null) {
                 enqueueGeneration(stage, queuedMessageRes)
             } else {
@@ -217,11 +245,12 @@ class ProjectDetailActivity : AppCompatActivity() {
     private fun regenerationWarningMessageRes(
         stage: String,
         project: DramaProject?,
+        episode: Episode?,
         storyboards: List<StoryboardShot>
     ): Int? {
         return when (stage) {
             GenerationWorker.STAGE_TEXT -> {
-                if (!project?.generatedScript.isNullOrBlank()) R.string.project_regenerate_script_message else null
+                if (!episode?.scriptContent.isNullOrBlank()) R.string.project_regenerate_script_message else null
             }
             GenerationWorker.STAGE_STORYBOARD -> {
                 if (storyboards.isNotEmpty()) R.string.project_regenerate_storyboard_message else null
@@ -237,12 +266,12 @@ class ProjectDetailActivity : AppCompatActivity() {
                 } else null
             }
             GenerationWorker.STAGE_FINAL_VIDEO -> {
-                if (project?.finalVideoStatus == AssetStatus.COMPLETED || isExistingFile(project?.finalVideoLocalPath)) {
+                if (episode?.finalVideoStatus == AssetStatus.COMPLETED || isExistingFile(episode?.finalVideoLocalPath)) {
                     R.string.project_regenerate_final_video_message
                 } else null
             }
             GenerationWorker.STAGE_FULL -> {
-                if (hasAnyGeneratedContent(project, storyboards)) R.string.project_regenerate_full_message else null
+                if (hasAnyGeneratedContent(project, episode, storyboards)) R.string.project_regenerate_full_message else null
             }
             GenerationWorker.STAGE_CHARACTER_EXTRACT -> {
                 if (cachedCharacterCount > 0) R.string.project_regenerate_characters_message else null
@@ -254,11 +283,15 @@ class ProjectDetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun hasAnyGeneratedContent(project: DramaProject?, storyboards: List<StoryboardShot>): Boolean {
-        return !project?.generatedScript.isNullOrBlank() ||
+    private fun hasAnyGeneratedContent(
+        project: DramaProject?,
+        episode: Episode?,
+        storyboards: List<StoryboardShot>
+    ): Boolean {
+        return !episode?.scriptContent.isNullOrBlank() ||
             storyboards.isNotEmpty() ||
-            project?.finalVideoStatus == AssetStatus.COMPLETED ||
-            isExistingFile(project?.finalVideoLocalPath)
+            episode?.finalVideoStatus == AssetStatus.COMPLETED ||
+            isExistingFile(episode?.finalVideoLocalPath)
     }
 
     private fun enqueueGeneration(stage: String, messageRes: Int) {
@@ -266,10 +299,14 @@ class ProjectDetailActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.project_generation_running, Toast.LENGTH_SHORT).show()
             return
         }
+        if (currentEpisodeId <= 0L) {
+            Toast.makeText(this, R.string.project_missing, Toast.LENGTH_SHORT).show()
+            return
+        }
         lifecycleScope.launch {
             when (val preflight = checkGenerationPreflight(stage)) {
                 is GenerationPreflight.Ready -> {
-                    GenerationWorker.enqueue(this@ProjectDetailActivity, projectId, stage)
+                    GenerationWorker.enqueue(this@ProjectDetailActivity, projectId, currentEpisodeId, stage)
                     Toast.makeText(this@ProjectDetailActivity, messageRes, Toast.LENGTH_SHORT).show()
                     loadProject(projectId)
                 }
@@ -277,6 +314,23 @@ class ProjectDetailActivity : AppCompatActivity() {
                     Toast.makeText(this@ProjectDetailActivity, preflight.messageRes, Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+    }
+
+    /** 当前选中集；兜底回退到最新一集（保持 0L 时旧逻辑的 getEpisodeForProject 语义）。 */
+    private suspend fun currentEpisode(): Episode? {
+        return if (currentEpisodeId > 0L) {
+            dramaRepository.getEpisodeById(currentEpisodeId) ?: dramaRepository.getEpisodeForProject(projectId)
+        } else {
+            dramaRepository.getEpisodeForProject(projectId)
+        }
+    }
+
+    private suspend fun getCurrentEpisodeStoryboards(): List<StoryboardShot> {
+        return if (currentEpisodeId > 0L) {
+            getStoryboardsUseCase.execute(projectId, currentEpisodeId)
+        } else {
+            emptyList()
         }
     }
 
@@ -288,11 +342,11 @@ class ProjectDetailActivity : AppCompatActivity() {
 
         val project = getProjectDetailUseCase.execute(projectId)
             ?: return GenerationPreflight.Blocked(R.string.project_missing)
-        val storyboards = getStoryboardsUseCase.execute(projectId)
+        val episode = currentEpisode()
+        val storyboards = getCurrentEpisodeStoryboards()
 
         return when (stage) {
             GenerationWorker.STAGE_REWRITE -> {
-                val episode = dramaRepository.getEpisodeForProject(projectId)
                 if (episode?.content.isNullOrBlank()) {
                     GenerationPreflight.Blocked(R.string.project_rewrite_no_content)
                 } else {
@@ -300,7 +354,6 @@ class ProjectDetailActivity : AppCompatActivity() {
                 }
             }
             GenerationWorker.STAGE_STORYBOARD -> {
-                val episode = dramaRepository.getEpisodeForProject(projectId)
                 val hasScript = !episode?.scriptContent.isNullOrBlank() || !project.generatedScript.isNullOrBlank()
                 if (!hasScript) {
                     GenerationPreflight.Blocked(R.string.project_generation_missing_script)
@@ -334,7 +387,6 @@ class ProjectDetailActivity : AppCompatActivity() {
                 }
             }
             GenerationWorker.STAGE_CHARACTER_EXTRACT -> {
-                val episode = dramaRepository.getEpisodeForProject(projectId)
                 val hasScript = !episode?.scriptContent.isNullOrBlank() || !project.generatedScript.isNullOrBlank()
                 if (!hasScript) {
                     GenerationPreflight.Blocked(R.string.project_generation_missing_script)
@@ -355,7 +407,11 @@ class ProjectDetailActivity : AppCompatActivity() {
     }
 
     private fun cancelGeneration() {
-        GenerationWorker.cancelProject(this, projectId)
+        if (currentEpisodeId > 0L) {
+            GenerationWorker.cancelEpisode(this, projectId, currentEpisodeId)
+        } else {
+            GenerationWorker.cancelEpisode(this, projectId, 0L)
+        }
         binding.cancelGenerationButton.visibility = View.GONE
         binding.workStatusText.visibility = View.VISIBLE
         binding.workStatusText.setText(R.string.project_generation_cancelled)
@@ -383,6 +439,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         startActivity(
             Intent(this, VideoPlayerActivity::class.java)
                 .putExtra(VideoPlayerActivity.EXTRA_PROJECT_ID, projectId)
+                .putExtra(VideoPlayerActivity.EXTRA_EPISODE_ID, currentEpisodeId)
         )
     }
 
@@ -396,6 +453,8 @@ class ProjectDetailActivity : AppCompatActivity() {
             Intent(this, VideoPlayerActivity::class.java)
                 .putExtra(VideoPlayerActivity.EXTRA_VIDEO_PATH, path)
                 .putExtra(VideoPlayerActivity.EXTRA_PROJECT_TITLE, projectTitle)
+                .putExtra(VideoPlayerActivity.EXTRA_PROJECT_ID, projectId)
+                .putExtra(VideoPlayerActivity.EXTRA_EPISODE_ID, currentEpisodeId)
         )
     }
 
@@ -403,6 +462,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         startActivity(
             Intent(this, ScriptViewerActivity::class.java)
                 .putExtra(ScriptViewerActivity.EXTRA_PROJECT_ID, projectId)
+                .putExtra(ScriptViewerActivity.EXTRA_EPISODE_ID, currentEpisodeId)
         )
     }
 
@@ -410,6 +470,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         startActivity(
             Intent(this, StoryboardViewerActivity::class.java)
                 .putExtra(StoryboardViewerActivity.EXTRA_PROJECT_ID, projectId)
+                .putExtra(StoryboardViewerActivity.EXTRA_EPISODE_ID, currentEpisodeId)
         )
     }
 
@@ -417,6 +478,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         startActivity(
             Intent(this, ImageGalleryActivity::class.java)
                 .putExtra(ImageGalleryActivity.EXTRA_PROJECT_ID, projectId)
+                .putExtra(ImageGalleryActivity.EXTRA_EPISODE_ID, currentEpisodeId)
         )
     }
 
@@ -441,7 +503,7 @@ class ProjectDetailActivity : AppCompatActivity() {
             return
         }
         lifecycleScope.launch {
-            val episode = dramaRepository.getEpisodeForProject(projectId)
+            val episode = currentEpisode()
             if (episode?.content.isNullOrBlank()) {
                 Toast.makeText(this@ProjectDetailActivity, R.string.project_rewrite_no_content, Toast.LENGTH_SHORT).show()
                 return@launch
@@ -462,7 +524,11 @@ class ProjectDetailActivity : AppCompatActivity() {
     }
 
     private fun enqueueRewrite() {
-        GenerationWorker.enqueue(this, projectId, GenerationWorker.STAGE_REWRITE)
+        if (currentEpisodeId <= 0L) {
+            Toast.makeText(this, R.string.project_missing, Toast.LENGTH_SHORT).show()
+            return
+        }
+        GenerationWorker.enqueue(this, projectId, currentEpisodeId, GenerationWorker.STAGE_REWRITE)
         Toast.makeText(this, R.string.project_rewrite_queued, Toast.LENGTH_SHORT).show()
         loadProject(projectId)
     }
@@ -507,8 +573,10 @@ class ProjectDetailActivity : AppCompatActivity() {
     }
 
     private fun deleteProject() {
-        GenerationWorker.cancelProject(this, projectId)
         lifecycleScope.launch {
+            dramaRepository.getEpisodes(projectId).forEach {
+                GenerationWorker.cancelEpisode(this@ProjectDetailActivity, projectId, it.id)
+            }
             val deleted = dramaRepository.deleteProject(projectId)
             if (deleted) {
                 Toast.makeText(this@ProjectDetailActivity, R.string.project_deleted, Toast.LENGTH_SHORT).show()
@@ -519,19 +587,24 @@ class ProjectDetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun bindProject(project: DramaProject, storyboards: List<StoryboardShot>, characters: List<com.huobao.zdrama.domain.model.Character> = emptyList()) {
+    private fun bindProject(
+        project: DramaProject,
+        episode: Episode?,
+        storyboards: List<StoryboardShot>,
+        characters: List<com.huobao.zdrama.domain.model.Character> = emptyList()
+    ) {
         hasGeneratedVideos = storyboards.any { it.hasPlayableVideo() }
-        finalVideoLocalPath = project.finalVideoLocalPath
-        hasFinalVideo = project.finalVideoStatus == AssetStatus.COMPLETED && isExistingFile(project.finalVideoLocalPath)
+        finalVideoLocalPath = episode?.finalVideoLocalPath
+        hasFinalVideo = episode?.finalVideoStatus == AssetStatus.COMPLETED && isExistingFile(episode.finalVideoLocalPath)
         binding.playVideosButton.isEnabled = hasGeneratedVideos
         binding.playFinalVideoButton.isEnabled = hasFinalVideo
-        binding.viewScriptButton.isEnabled = !project.generatedScript.isNullOrBlank()
+        binding.viewScriptButton.isEnabled = !episode?.scriptContent.isNullOrBlank()
         binding.viewStoryboardButton.isEnabled = storyboards.isNotEmpty()
         binding.viewImagesButton.isEnabled = storyboards.any {
             isExistingFile(it.imageLocalPath) || !it.imageUrl.isNullOrBlank()
         }
         binding.viewCharactersButton.isEnabled = characters.isNotEmpty()
-        bindGenerationButtonTexts(project, storyboards, characters)
+        bindGenerationButtonTexts(project, episode, storyboards, characters)
         binding.titleText.text = project.title
         projectTitle = project.title
         binding.statusText.text = getString(R.string.project_status_label) + "：${project.status.toDisplayText()}\n" +
@@ -544,11 +617,12 @@ class ProjectDetailActivity : AppCompatActivity() {
             append(getString(R.string.project_aspect_ratio_label)).append("：").append(project.aspectRatio).append('\n')
             append(getString(R.string.project_shot_count_label)).append("：").append(project.shotCount).append('\n')
             append(getString(R.string.project_duration_label)).append("：").append(project.shotDurationSeconds).append('\n')
-            append(getString(R.string.project_final_video_status_label)).append("：").append(project.finalVideoStatus.toDisplayText())
-            project.finalVideoLocalPath?.takeIf { it.isNotBlank() }?.let { path ->
+            append(getString(R.string.project_final_video_status_label)).append("：")
+                .append((episode?.finalVideoStatus ?: AssetStatus.PENDING).toDisplayText())
+            episode?.finalVideoLocalPath?.takeIf { it.isNotBlank() }?.let { path ->
                 append('\n').append(getString(R.string.project_final_video_local_path_label)).append("：").append(path)
             }
-            project.finalVideoErrorMessage?.takeIf { it.isNotBlank() }?.let { error ->
+            episode?.finalVideoErrorMessage?.takeIf { it.isNotBlank() }?.let { error ->
                 append('\n').append(getString(R.string.project_error_label)).append("：").append(error)
             }
             project.errorMessage?.takeIf { it.isNotBlank() }?.let { error ->
@@ -607,14 +681,15 @@ class ProjectDetailActivity : AppCompatActivity() {
 
     private fun bindGenerationButtonTexts(
         project: DramaProject,
+        episode: Episode?,
         storyboards: List<StoryboardShot>,
         characters: List<com.huobao.zdrama.domain.model.Character> = emptyList()
     ) {
         binding.generateFullButton.setText(
-            if (hasAnyGeneratedContent(project, storyboards)) R.string.project_regenerate_full else R.string.project_generate_full
+            if (hasAnyGeneratedContent(project, episode, storyboards)) R.string.project_regenerate_full else R.string.project_generate_full
         )
         binding.generateScriptButton.setText(
-            if (!project.generatedScript.isNullOrBlank()) R.string.project_regenerate_script else R.string.project_generate_script
+            if (!episode?.scriptContent.isNullOrBlank()) R.string.project_regenerate_script else R.string.project_generate_script
         )
         binding.generateStoryboardButton.setText(
             if (storyboards.isNotEmpty()) R.string.project_regenerate_storyboards else R.string.project_generate_storyboards
@@ -634,7 +709,7 @@ class ProjectDetailActivity : AppCompatActivity() {
             }
         )
         binding.composeFinalVideoButton.setText(
-            if (project.finalVideoStatus == AssetStatus.COMPLETED || isExistingFile(project.finalVideoLocalPath)) {
+            if (episode?.finalVideoStatus == AssetStatus.COMPLETED || isExistingFile(episode?.finalVideoLocalPath)) {
                 R.string.project_recompose_final_video
             } else {
                 R.string.project_compose_final_video
@@ -775,7 +850,8 @@ class ProjectDetailActivity : AppCompatActivity() {
      * GenerationStage 枚举不含 REWRITE，所以需要走 workName 反查。返回 null 表示无活跃任务。
      */
     private fun activeStageFromWorkNames(): String? {
-        val prefix = "generation-$projectId-"
+        if (currentEpisodeId <= 0L) return null
+        val prefix = "generation-$projectId-$currentEpisodeId-"
         generationWorkInfosByName.forEach { (name, infos) ->
             if (!name.startsWith(prefix)) return@forEach
             val isActive = infos.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
@@ -849,6 +925,127 @@ class ProjectDetailActivity : AppCompatActivity() {
     private fun showMissingProject() {
         Toast.makeText(this, R.string.project_missing, Toast.LENGTH_SHORT).show()
         finish()
+    }
+
+    // ────────────── 集切换器（横向 chips：第 N 集 / ＋新增；长按删除） ──────────────
+
+    private fun bindEpisodeChips(loadedEpisodes: List<Episode>) {
+        binding.episodeChipContainer.removeAllViews()
+        loadedEpisodes.forEach { episode ->
+            binding.episodeChipContainer.addView(buildEpisodeChip(episode))
+        }
+        binding.episodeChipContainer.addView(buildAddEpisodeChip())
+    }
+
+    private fun buildEpisodeChip(episode: Episode): TextView {
+        val selected = episode.id == currentEpisodeId
+        return TextView(this).apply {
+            text = getString(R.string.episode_chip_format, episode.episodeNumber)
+            setTextColor(getColor(if (selected) R.color.zdrama_black else R.color.zdrama_primary))
+            setBackgroundColor(getColor(if (selected) R.color.zdrama_primary else R.color.zdrama_surface))
+            textSize = 15f
+            setPadding(28, 14, 28, 14)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { marginEnd = 10 }
+            setOnClickListener {
+                if (episode.id != currentEpisodeId) {
+                    currentEpisodeId = episode.id
+                    loadProject(projectId)
+                }
+            }
+            setOnLongClickListener {
+                confirmDeleteEpisode(episode)
+                true
+            }
+        }
+    }
+
+    private fun buildAddEpisodeChip(): TextView {
+        return TextView(this).apply {
+            text = getString(R.string.episode_add)
+            setTextColor(getColor(R.color.zdrama_primary))
+            setBackgroundColor(getColor(R.color.zdrama_surface))
+            textSize = 15f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(28, 14, 28, 14)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            setOnClickListener { showAddEpisodeDialog() }
+        }
+    }
+
+    private fun showAddEpisodeDialog() {
+        val titleInput = EditText(this).apply { hint = getString(R.string.episode_title_hint) }
+        val contentInput = EditText(this).apply {
+            hint = getString(R.string.episode_content_hint)
+            gravity = Gravity.TOP
+            minLines = 4
+        }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(28, 8, 28, 0)
+            addView(titleInput)
+            addView(contentInput)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.episode_add_title)
+            .setView(container)
+            .setNegativeButton(R.string.project_delete_cancel, null)
+            .setPositiveButton(R.string.episode_add_confirm) { _, _ -> createEpisode(titleInput, contentInput) }
+            .show()
+    }
+
+    private fun createEpisode(titleInput: EditText, contentInput: EditText) {
+        val title = titleInput.text?.toString()?.trim().orEmpty()
+        val content = contentInput.text?.toString()?.trim()
+        if (title.isEmpty() && content.isNullOrBlank()) {
+            Toast.makeText(this, R.string.episode_create_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            val id = dramaRepository.createEpisodeForProject(projectId, title, content)
+            if (id > 0L) {
+                currentEpisodeId = id
+                Toast.makeText(this@ProjectDetailActivity, R.string.episode_created, Toast.LENGTH_SHORT).show()
+                loadProject(projectId)
+            } else {
+                Toast.makeText(this@ProjectDetailActivity, R.string.episode_create_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun confirmDeleteEpisode(episode: Episode) {
+        if (episodes.size <= 1) {
+            Toast.makeText(this, R.string.episode_delete_last, Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.episode_delete_title)
+            .setMessage(getString(
+                R.string.episode_delete_message,
+                getString(R.string.episode_chip_format, episode.episodeNumber)
+            ))
+            .setNegativeButton(R.string.project_delete_cancel, null)
+            .setPositiveButton(R.string.project_delete_confirm) { _, _ -> deleteEpisode(episode) }
+            .show()
+    }
+
+    private fun deleteEpisode(episode: Episode) {
+        lifecycleScope.launch {
+            GenerationWorker.cancelEpisode(this@ProjectDetailActivity, projectId, episode.id)
+            val deleted = dramaRepository.deleteEpisode(episode.id)
+            if (deleted) {
+                currentEpisodeId = 0L // loadProject 重新选定第一集
+                Toast.makeText(this@ProjectDetailActivity, R.string.episode_deleted, Toast.LENGTH_SHORT).show()
+                loadProject(projectId)
+            } else {
+                Toast.makeText(this@ProjectDetailActivity, R.string.episode_delete_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     companion object {

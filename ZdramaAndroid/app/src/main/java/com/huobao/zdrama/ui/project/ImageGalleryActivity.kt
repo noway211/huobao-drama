@@ -24,6 +24,7 @@ class ImageGalleryActivity : AppCompatActivity() {
         onDeleteImage = { shot -> confirmDeleteOne(shot) }
     )
     private var projectId: Long = 0L
+    private var episodeId: Long = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +40,7 @@ class ImageGalleryActivity : AppCompatActivity() {
         binding.deleteAllButton.setOnClickListener { confirmDeleteAll() }
 
         projectId = intent.getLongExtra(EXTRA_PROJECT_ID, 0L)
+        episodeId = intent.getLongExtra(EXTRA_EPISODE_ID, 0L)
         if (projectId <= 0L) {
             finishWithMessage(R.string.project_missing)
             return
@@ -51,6 +53,14 @@ class ImageGalleryActivity : AppCompatActivity() {
         if (projectId > 0L) loadImages()
     }
 
+    private suspend fun currentEpisodeStoryboards(): List<StoryboardShot> {
+        return if (episodeId > 0L) {
+            getStoryboardsUseCase.execute(projectId, episodeId)
+        } else {
+            getStoryboardsUseCase.execute(projectId)
+        }
+    }
+
     private fun loadImages() {
         lifecycleScope.launch {
             val project = getProjectDetailUseCase.execute(projectId)
@@ -58,7 +68,7 @@ class ImageGalleryActivity : AppCompatActivity() {
                 finishWithMessage(R.string.project_missing)
                 return@launch
             }
-            val storyboards = getStoryboardsUseCase.execute(projectId)
+            val storyboards = currentEpisodeStoryboards()
             val imageCount = storyboards.count {
                 !it.imageLocalPath.isNullOrBlank() || !it.imageUrl.isNullOrBlank()
             }
@@ -102,7 +112,7 @@ class ImageGalleryActivity : AppCompatActivity() {
 
     private fun confirmDeleteAll() {
         lifecycleScope.launch {
-            val shots = getStoryboardsUseCase.execute(projectId)
+            val shots = currentEpisodeStoryboards()
                 .filter { !it.imageLocalPath.isNullOrBlank() || !it.imageUrl.isNullOrBlank() }
             if (shots.isEmpty()) {
                 Toast.makeText(this@ImageGalleryActivity, R.string.project_no_images, Toast.LENGTH_SHORT).show()
@@ -119,7 +129,7 @@ class ImageGalleryActivity : AppCompatActivity() {
 
     private fun performDeleteAll() {
         lifecycleScope.launch {
-            val count = repository.deleteAllStoryboardImages(projectId)
+            val count = repository.deleteAllStoryboardImages(projectId, episodeId)
             Toast.makeText(
                 this@ImageGalleryActivity,
                 getString(R.string.project_image_bulk_deleted, count),
@@ -136,5 +146,6 @@ class ImageGalleryActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_PROJECT_ID = "extra_project_id"
+        const val EXTRA_EPISODE_ID = "extra_episode_id"
     }
 }

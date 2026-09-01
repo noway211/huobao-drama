@@ -27,7 +27,16 @@ class ZdramaApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        backfillStoryboardEpisodeIds()
         resetOrphanGenerationJobs()
+    }
+
+    /** 多集改造前创建的分镜 episode_id 可能为 NULL（按集查询会漏），启动时兜底回填一次。 */
+    private fun backfillStoryboardEpisodeIds() {
+        val repository = DramaRepository(this)
+        scope.launch {
+            repository.backfillStoryboardEpisodeIds()
+        }
     }
 
     private fun resetOrphanGenerationJobs() {
@@ -36,8 +45,10 @@ class ZdramaApplication : Application() {
         scope.launch {
             val projects = repository.getProjects()
             projects.filter { it.status == ProjectStatus.PROCESSING }.forEach { project ->
-                GenerationWorker.workNamesForProject(project.id).forEach { workName ->
-                    workManager.cancelUniqueWork(workName)
+                repository.getEpisodes(project.id).forEach { episode ->
+                    GenerationWorker.workNamesForEpisode(project.id, episode.id).forEach { workName ->
+                        workManager.cancelUniqueWork(workName)
+                    }
                 }
                 repository.updateProjectTextResult(
                     projectId = project.id,

@@ -26,10 +26,10 @@ class GenerateStoryboardImagesUseCase(
         val referenceUrls: List<String>,
         val characterText: String
     )
-    suspend fun execute(projectId: Long, settings: AgnesSettings): Result<Int> {
+    suspend fun execute(projectId: Long, episodeId: Long, settings: AgnesSettings): Result<Int> {
         val project = dramaRepository.getProject(projectId)
             ?: return Result.failure(IllegalArgumentException("Project not found"))
-        val shots = dramaRepository.getStoryboards(projectId)
+        val shots = dramaRepository.getStoryboards(projectId, episodeId)
         if (shots.isEmpty()) {
             return Result.failure(IllegalArgumentException("Generate storyboards before images"))
         }

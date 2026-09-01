@@ -30,6 +30,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private val playableShots = mutableListOf<StoryboardShot>()
     private var currentIndex = 0
     private var projectId: Long = 0L
+    private var episodeId: Long = 0L
     private var isFinalVideoMode = false
     private var finalVideoPath: String? = null
     private var finalVideoTitle: String? = null
@@ -66,13 +67,15 @@ class VideoPlayerActivity : AppCompatActivity() {
         binding.deleteFinalButton.setOnClickListener { confirmDeleteFinal() }
         binding.saveFinalButton.setOnClickListener { saveFinalToAlbum() }
 
+        projectId = intent.getLongExtra(EXTRA_PROJECT_ID, 0L)
+        episodeId = intent.getLongExtra(EXTRA_EPISODE_ID, 0L)
+
         val videoPath = intent.getStringExtra(EXTRA_VIDEO_PATH)
         if (!videoPath.isNullOrBlank()) {
             playSingleVideo(videoPath)
             return
         }
 
-        projectId = intent.getLongExtra(EXTRA_PROJECT_ID, 0L)
         if (projectId <= 0L) {
             showNoVideos()
             return
@@ -87,8 +90,11 @@ class VideoPlayerActivity : AppCompatActivity() {
 
     private fun loadVideos(projectId: Long) {
         lifecycleScope.launch {
-            val shots = getStoryboardsUseCase.execute(projectId)
-                .filter { it.playableVideoUri() != null }
+            val shots = if (episodeId > 0L) {
+                getStoryboardsUseCase.execute(projectId, episodeId)
+            } else {
+                getStoryboardsUseCase.execute(projectId)
+            }.filter { it.playableVideoUri() != null }
             playableShots.clear()
             playableShots.addAll(shots)
             if (playableShots.isEmpty()) {
@@ -211,7 +217,7 @@ class VideoPlayerActivity : AppCompatActivity() {
 
     private fun performDeleteAll() {
         lifecycleScope.launch {
-            val count = repository.deleteAllStoryboardVideos(projectId)
+            val count = repository.deleteAllStoryboardVideos(projectId, episodeId)
             Toast.makeText(
                 this@VideoPlayerActivity,
                 getString(R.string.project_video_bulk_deleted, count),
@@ -233,7 +239,12 @@ class VideoPlayerActivity : AppCompatActivity() {
 
     private fun performDeleteFinal() {
         lifecycleScope.launch {
-            val result = repository.deleteProjectFinalVideo(projectId)
+            // 多集：成片挂在集上；无集号（旧版本深链接）时退回项目级删除
+            val result = if (episodeId > 0L) {
+                repository.deleteEpisodeFinalVideo(episodeId)
+            } else {
+                repository.deleteProjectFinalVideo(projectId)
+            }
             if (result.dbUpdated) {
                 Toast.makeText(this@VideoPlayerActivity, R.string.project_final_video_deleted, Toast.LENGTH_SHORT).show()
                 finish()
@@ -303,6 +314,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "VideoPlayerActivity"
         const val EXTRA_PROJECT_ID = "extra_project_id"
+        const val EXTRA_EPISODE_ID = "extra_episode_id"
         const val EXTRA_VIDEO_PATH = "extra_video_path"
         const val EXTRA_PROJECT_TITLE = "extra_project_title"
         private const val REQUEST_SAVE_TO_ALBUM = 1001

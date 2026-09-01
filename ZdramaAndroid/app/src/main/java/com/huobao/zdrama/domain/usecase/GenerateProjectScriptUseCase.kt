@@ -11,9 +11,16 @@ class GenerateProjectScriptUseCase(
     private val dramaRepository: DramaRepository,
     private val agnesTextRepository: AgnesTextRepository
 ) {
-    suspend fun execute(projectId: Long, settings: AgnesSettings): Result<String> {
+    /**
+     * 基于项目信息（标题/提示词/风格）为目标剧集生成剧本。
+     * 结果写入 episode.scriptContent；project.generatedScript 同步镜像最新集脚本（兼容旧读取方）。
+     */
+    suspend fun execute(projectId: Long, episodeId: Long, settings: AgnesSettings): Result<String> {
         val project = dramaRepository.getProject(projectId)
             ?: return Result.failure(IllegalArgumentException("Project not found"))
+        val episode = dramaRepository.getEpisodeById(episodeId)
+            ?: dramaRepository.getEpisodeForProject(projectId)
+            ?: return Result.failure(IllegalArgumentException("Episode not found"))
 
         dramaRepository.updateProjectTextResult(
             projectId = projectId,
@@ -25,6 +32,11 @@ class GenerateProjectScriptUseCase(
 
         val result = agnesTextRepository.generateScript(settings, project)
         result.onSuccess { script ->
+            dramaRepository.updateEpisodeScriptContent(
+                episodeId = episode.id,
+                scriptContent = script,
+                status = EpisodeStatus.COMPLETED
+            )
             dramaRepository.updateProjectTextResult(
                 projectId = projectId,
                 status = ProjectStatus.COMPLETED,
@@ -32,21 +44,17 @@ class GenerateProjectScriptUseCase(
                 generatedScript = script,
                 errorMessage = null
             )
-            // Sync to episode.scriptContent
-            val episode = dramaRepository.getEpisodeForProject(projectId)
-            if (episode != null) {
-                dramaRepository.updateEpisodeScriptContent(
-                    episodeId = episode.id,
-                    scriptContent = script,
-                    status = EpisodeStatus.COMPLETED
-                )
-            }
         }.onFailure { throwable ->
+            dramaRepository.updateEpisodeScriptContent(
+                episodeId = episode.id,
+                scriptContent = episode.scriptContent,
+                status = EpisodeStatus.FAILED
+            )
             dramaRepository.updateProjectTextResult(
                 projectId = projectId,
                 status = ProjectStatus.FAILED,
                 currentStage = GenerationStage.TEXT,
-                generatedScript = project.generatedScript,
+                generatedScript = episode.scriptContent ?: project.generatedScript,
                 errorMessage = throwable.message
             )
         }

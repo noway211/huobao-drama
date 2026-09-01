@@ -15,6 +15,7 @@ class ScriptViewerActivity : AppCompatActivity() {
     private lateinit var dramaRepository: DramaRepository
     private lateinit var getProjectDetailUseCase: GetProjectDetailUseCase
     private var projectId: Long = 0L
+    private var episodeId: Long = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,6 +25,7 @@ class ScriptViewerActivity : AppCompatActivity() {
         dramaRepository = DramaRepository(this)
         getProjectDetailUseCase = GetProjectDetailUseCase(dramaRepository)
         projectId = intent.getLongExtra(EXTRA_PROJECT_ID, 0L)
+        episodeId = intent.getLongExtra(EXTRA_EPISODE_ID, 0L)
         if (projectId <= 0L) {
             finishWithMessage(R.string.project_missing)
             return
@@ -43,14 +45,17 @@ class ScriptViewerActivity : AppCompatActivity() {
                 finishWithMessage(R.string.project_missing)
                 return@launch
             }
-            // Prefer episode's scriptContent, fall back to project.generatedScript
-            val episode = dramaRepository.getEpisodeForProject(projectId)
+            // Prefer target episode's scriptContent, fall back to project.generatedScript
+            val episode = dramaRepository.getEpisodeById(episodeId) ?: dramaRepository.getEpisodeForProject(projectId)
             val script = episode?.scriptContent ?: project.generatedScript.orEmpty()
             if (script.isBlank()) {
                 finishWithMessage(R.string.project_no_script)
                 return@launch
             }
-            binding.titleText.text = project.title
+            binding.titleText.text = getString(
+                    R.string.episode_chip_format,
+                    episode?.episodeNumber ?: 0
+                ) + " · " + project.title
             binding.scriptText.text = script
         }
     }
@@ -62,5 +67,6 @@ class ScriptViewerActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_PROJECT_ID = "extra_project_id"
+        const val EXTRA_EPISODE_ID = "extra_episode_id"
     }
 }

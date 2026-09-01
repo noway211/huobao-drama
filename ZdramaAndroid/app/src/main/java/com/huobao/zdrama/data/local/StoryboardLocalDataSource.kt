@@ -14,16 +14,19 @@ class StoryboardLocalDataSource(context: Context) {
     private val database = DramaLocalDatabase(context)
     private val gson = Gson()
 
-    fun replaceStoryboards(projectId: Long, shots: List<StoryboardShot>) {
+    /** 替换某集的全部分镜：先删该集旧分镜，再批量插入。 */
+    fun replaceStoryboards(projectId: Long, episodeId: Long, shots: List<StoryboardShot>) {
         val db = database.writableDatabase
         db.beginTransaction()
         try {
             db.delete(
                 DramaLocalDatabase.TABLE_STORYBOARDS,
-                "${DramaLocalDatabase.COL_PROJECT_ID} = ?",
-                arrayOf(projectId.toString())
+                "${DramaLocalDatabase.COL_PROJECT_ID} = ? AND ${DramaLocalDatabase.COL_EPISODE_ID} = ?",
+                arrayOf(projectId.toString(), episodeId.toString())
             )
-            shots.forEach { shot -> insertStoryboard(db, shot.copy(projectId = projectId)) }
+            shots.forEach { shot ->
+                insertStoryboard(db, shot.copy(projectId = projectId, episodeId = episodeId))
+            }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -38,12 +41,59 @@ class StoryboardLocalDataSource(context: Context) {
         )
     }
 
+    /** 删除某集的全部分镜（用于删除剧集 / 重新生成某集分镜）。 */
+    fun deleteStoryboardsForEpisode(projectId: Long, episodeId: Long): Int {
+        return database.writableDatabase.delete(
+            DramaLocalDatabase.TABLE_STORYBOARDS,
+            "${DramaLocalDatabase.COL_PROJECT_ID} = ? AND ${DramaLocalDatabase.COL_EPISODE_ID} = ?",
+            arrayOf(projectId.toString(), episodeId.toString())
+        )
+    }
+
+    /**
+     * 历史数据修复：把 episode_id 为 NULL 的分镜回填到所属项目的第一集。
+     * 多集改造前（v8 migration 之后创建的）分镜 insert 时未写 episode_id，
+     * 而 v8 的回填 UPDATE 只覆盖当时存量行，之后新增的仍为 NULL，
+     * 导致按集查询（getStoryboards(projectId, episodeId)）漏掉这些镜头。
+     * 启动时兜底执行一次，对已升级到 v12 的存量库生效。
+     */
+    fun backfillEpisodeIds() {
+        database.writableDatabase.execSQL(
+            """
+            UPDATE ${DramaLocalDatabase.TABLE_STORYBOARDS}
+            SET ${DramaLocalDatabase.COL_EPISODE_ID} = (
+                SELECT ${DramaLocalDatabase.COL_ID} FROM ${DramaLocalDatabase.TABLE_EPISODES}
+                WHERE ${DramaLocalDatabase.TABLE_EPISODES}.${DramaLocalDatabase.COL_PROJECT_ID} =
+                      ${DramaLocalDatabase.TABLE_STORYBOARDS}.${DramaLocalDatabase.COL_PROJECT_ID}
+                ORDER BY ${DramaLocalDatabase.COL_EPISODE_NUMBER} ASC
+                LIMIT 1
+            )
+            WHERE ${DramaLocalDatabase.COL_EPISODE_ID} IS NULL
+            """
+        )
+    }
+
+    /** 查询项目全部分镜（项目级视图，兼容旧调用）。 */
     fun getStoryboards(projectId: Long): List<StoryboardShot> {
         val cursor = database.readableDatabase.query(
             DramaLocalDatabase.TABLE_STORYBOARDS,
             null,
             "${DramaLocalDatabase.COL_PROJECT_ID} = ?",
             arrayOf(projectId.toString()),
+            null,
+            null,
+            "${DramaLocalDatabase.COL_SHOT_NUMBER} ASC"
+        )
+        return cursor.use { readShots(it) }
+    }
+
+    /** 查询某集的全部分镜（多集支持的主查询路径）。 */
+    fun getStoryboards(projectId: Long, episodeId: Long): List<StoryboardShot> {
+        val cursor = database.readableDatabase.query(
+            DramaLocalDatabase.TABLE_STORYBOARDS,
+            null,
+            "${DramaLocalDatabase.COL_PROJECT_ID} = ? AND ${DramaLocalDatabase.COL_EPISODE_ID} = ?",
+            arrayOf(projectId.toString(), episodeId.toString()),
             null,
             null,
             "${DramaLocalDatabase.COL_SHOT_NUMBER} ASC"
@@ -144,6 +194,7 @@ class StoryboardLocalDataSource(context: Context) {
         val now = System.currentTimeMillis()
         val values = ContentValues().apply {
             put(DramaLocalDatabase.COL_PROJECT_ID, shot.projectId)
+            put(DramaLocalDatabase.COL_EPISODE_ID, shot.episodeId)
             put(DramaLocalDatabase.COL_SHOT_NUMBER, shot.shotNumber)
             put(DramaLocalDatabase.COL_SCENE, shot.scene)
             put(DramaLocalDatabase.COL_ACTION, shot.action)
@@ -180,6 +231,7 @@ class StoryboardLocalDataSource(context: Context) {
                 StoryboardShot(
                     id = cursor.getLong(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_ID)),
                     projectId = cursor.getLong(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_PROJECT_ID)),
+                    episodeId = readNullableLong(cursor, DramaLocalDatabase.COL_EPISODE_ID),
                     shotNumber = cursor.getInt(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_SHOT_NUMBER)),
                     scene = cursor.getString(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_SCENE)),
                     action = cursor.getString(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_ACTION)),
@@ -210,6 +262,12 @@ class StoryboardLocalDataSource(context: Context) {
     private fun parseAssetStatus(value: String?): AssetStatus {
         return runCatching { AssetStatus.valueOf(value ?: AssetStatus.PENDING.name) }
             .getOrDefault(AssetStatus.PENDING)
+    }
+
+    /** 读取可空整数列（如 episode_id，旧数据可能为 NULL）。 */
+    private fun readNullableLong(cursor: Cursor, column: String): Long? {
+        val index = cursor.getColumnIndexOrThrow(column)
+        return if (cursor.isNull(index)) null else cursor.getLong(index)
     }
 
     private fun encodeCharacterNames(names: List<String>): String? {

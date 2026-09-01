@@ -16,8 +16,9 @@ class RewriteEpisodeScriptUseCase(
      * Reads from episode.content, writes result to episode.scriptContent.
      * Also syncs to project.generatedScript for backward compatibility.
      */
-    suspend fun execute(projectId: Long, settings: AgnesSettings): Result<String> {
-        val episode = dramaRepository.getEpisodeForProject(projectId)
+    suspend fun execute(projectId: Long, episodeId: Long, settings: AgnesSettings): Result<String> {
+        val episode = dramaRepository.getEpisodeById(episodeId)
+            ?: dramaRepository.getEpisodeForProject(projectId)
             ?: return Result.failure(IllegalArgumentException("Episode not found for project"))
         val rawContent = episode.content
             ?: return Result.failure(IllegalArgumentException("Episode has no raw content to rewrite"))

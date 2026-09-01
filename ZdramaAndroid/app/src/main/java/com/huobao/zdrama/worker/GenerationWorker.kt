@@ -15,7 +15,6 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.huobao.zdrama.R
-import com.huobao.zdrama.data.media.LocalMp4Composer
 import com.huobao.zdrama.data.repository.AgnesImageRepository
 import com.huobao.zdrama.data.repository.AgnesStoryboardRepository
 import com.huobao.zdrama.data.repository.AgnesTextRepository
@@ -24,6 +23,7 @@ import com.huobao.zdrama.data.repository.DramaRepository
 import com.huobao.zdrama.data.repository.MediaDownloadRepository
 import com.huobao.zdrama.data.settings.AgnesSettings
 import com.huobao.zdrama.data.settings.AgnesSettingsStore
+import com.huobao.zdrama.data.media.LocalMp4Composer
 import com.huobao.zdrama.domain.usecase.ComposeFinalVideoUseCase
 import com.huobao.zdrama.domain.usecase.ExtractCharactersUseCase
 import com.huobao.zdrama.domain.usecase.GenerateCharacterImagesUseCase
@@ -35,12 +35,18 @@ import com.huobao.zdrama.domain.usecase.RewriteEpisodeScriptUseCase
 import com.huobao.zdrama.ui.project.ProjectDetailActivity
 import kotlin.Result as KotlinResult
 
+/**
+ * 生成 Worker。所有 STAGE 均绑定 (projectId, episodeId)：
+ * 一个剧集的一条生成链互不阻塞（uniqueWorkName 含 episodeId），
+ * 多集可并行生成，互不影响（对齐 backend 按 episode_id 驱动 agent 的模式）。
+ */
 class GenerationWorker(
     appContext: Context,
     workerParams: WorkerParameters
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): androidx.work.ListenableWorker.Result {
         val projectId = inputData.getLong(KEY_PROJECT_ID, 0L)
+        val episodeId = inputData.getLong(KEY_EPISODE_ID, 0L)
         val stage = inputData.getString(KEY_STAGE).orEmpty()
         if (projectId <= 0L || stage.isBlank()) return androidx.work.ListenableWorker.Result.failure()
 
@@ -50,15 +56,15 @@ class GenerationWorker(
         val dramaRepository = DramaRepository(applicationContext)
         val mediaDownloadRepository = MediaDownloadRepository(applicationContext)
         val result = when (stage) {
-            STAGE_TEXT -> runText(projectId, settings, dramaRepository)
-            STAGE_REWRITE -> runRewrite(projectId, settings, dramaRepository)
-            STAGE_STORYBOARD -> runStoryboard(projectId, settings, dramaRepository)
-            STAGE_IMAGE -> runImages(projectId, settings, dramaRepository, mediaDownloadRepository)
-            STAGE_VIDEO -> runVideos(projectId, settings, dramaRepository, mediaDownloadRepository)
-            STAGE_FINAL_VIDEO -> runFinalVideo(projectId, dramaRepository)
-            STAGE_CHARACTER_EXTRACT -> runCharacterExtract(projectId, settings, dramaRepository)
+            STAGE_TEXT -> runText(projectId, episodeId, settings, dramaRepository)
+            STAGE_REWRITE -> runRewrite(projectId, episodeId, settings, dramaRepository)
+            STAGE_STORYBOARD -> runStoryboard(projectId, episodeId, settings, dramaRepository)
+            STAGE_IMAGE -> runImages(projectId, episodeId, settings, dramaRepository, mediaDownloadRepository)
+            STAGE_VIDEO -> runVideos(projectId, episodeId, settings, dramaRepository, mediaDownloadRepository)
+            STAGE_FINAL_VIDEO -> runFinalVideo(projectId, episodeId, dramaRepository)
+            STAGE_CHARACTER_EXTRACT -> runCharacterExtract(projectId, episodeId, settings, dramaRepository)
             STAGE_CHARACTER_IMAGE -> runCharacterImages(projectId, settings, dramaRepository, mediaDownloadRepository)
-            STAGE_FULL -> runFullPipeline(projectId, settings, dramaRepository, mediaDownloadRepository)
+            STAGE_FULL -> runFullPipeline(projectId, episodeId, settings, dramaRepository, mediaDownloadRepository)
             else -> return androidx.work.ListenableWorker.Result.failure()
         }
 
@@ -69,58 +75,64 @@ class GenerationWorker(
         }
     }
 
+    /** 一键全流程：作用于当前集（text → storyboard → images → videos → final video）。 */
     private suspend fun runFullPipeline(
         projectId: Long,
+        episodeId: Long,
         settings: AgnesSettings,
         dramaRepository: DramaRepository,
         mediaDownloadRepository: MediaDownloadRepository
     ): KotlinResult<Unit> {
-        val scriptResult = runText(projectId, settings, dramaRepository)
+        val scriptResult = runText(projectId, episodeId, settings, dramaRepository)
         if (scriptResult.isFailure) return scriptResult
-        val storyboardResult = runStoryboard(projectId, settings, dramaRepository)
+        val storyboardResult = runStoryboard(projectId, episodeId, settings, dramaRepository)
         if (storyboardResult.isFailure) return storyboardResult
-        val imageResult = runImages(projectId, settings, dramaRepository, mediaDownloadRepository)
+        val imageResult = runImages(projectId, episodeId, settings, dramaRepository, mediaDownloadRepository)
         if (imageResult.isFailure) return imageResult
-        val videoResult = runVideos(projectId, settings, dramaRepository, mediaDownloadRepository)
+        val videoResult = runVideos(projectId, episodeId, settings, dramaRepository, mediaDownloadRepository)
         if (videoResult.isFailure) return videoResult
-        return runFinalVideo(projectId, dramaRepository)
+        return runFinalVideo(projectId, episodeId, dramaRepository)
     }
 
     private suspend fun runText(
         projectId: Long,
+        episodeId: Long,
         settings: AgnesSettings,
         dramaRepository: DramaRepository
     ): KotlinResult<Unit> {
         return GenerateProjectScriptUseCase(
             dramaRepository,
             AgnesTextRepository()
-        ).execute(projectId, settings).map { Unit }
+        ).execute(projectId, episodeId, settings).map { Unit }
     }
 
     private suspend fun runRewrite(
         projectId: Long,
+        episodeId: Long,
         settings: AgnesSettings,
         dramaRepository: DramaRepository
     ): KotlinResult<Unit> {
         return RewriteEpisodeScriptUseCase(
             dramaRepository,
             AgnesTextRepository()
-        ).execute(projectId, settings).map { Unit }
+        ).execute(projectId, episodeId, settings).map { Unit }
     }
 
     private suspend fun runStoryboard(
         projectId: Long,
+        episodeId: Long,
         settings: AgnesSettings,
         dramaRepository: DramaRepository
     ): KotlinResult<Unit> {
         return GenerateStoryboardsUseCase(
             dramaRepository,
             AgnesStoryboardRepository()
-        ).execute(projectId, settings).map { Unit }
+        ).execute(projectId, episodeId, settings).map { Unit }
     }
 
     private suspend fun runImages(
         projectId: Long,
+        episodeId: Long,
         settings: AgnesSettings,
         dramaRepository: DramaRepository,
         mediaDownloadRepository: MediaDownloadRepository
@@ -129,11 +141,12 @@ class GenerationWorker(
             dramaRepository,
             AgnesImageRepository(),
             mediaDownloadRepository
-        ).execute(projectId, settings).map { Unit }
+        ).execute(projectId, episodeId, settings).map { Unit }
     }
 
     private suspend fun runVideos(
         projectId: Long,
+        episodeId: Long,
         settings: AgnesSettings,
         dramaRepository: DramaRepository,
         mediaDownloadRepository: MediaDownloadRepository
@@ -142,29 +155,31 @@ class GenerationWorker(
             dramaRepository,
             AgnesVideoRepository(),
             mediaDownloadRepository
-        ).execute(projectId, settings).map { Unit }
+        ).execute(projectId, episodeId, settings).map { Unit }
     }
 
     private suspend fun runFinalVideo(
         projectId: Long,
+        episodeId: Long,
         dramaRepository: DramaRepository
     ): KotlinResult<Unit> {
         return ComposeFinalVideoUseCase(
             dramaRepository,
             LocalMp4Composer(),
             applicationContext.filesDir
-        ).execute(projectId).map { Unit }
+        ).execute(projectId, episodeId).map { Unit }
     }
 
     private suspend fun runCharacterExtract(
         projectId: Long,
+        episodeId: Long,
         settings: AgnesSettings,
         dramaRepository: DramaRepository
     ): KotlinResult<Unit> {
         return ExtractCharactersUseCase(
             dramaRepository,
             AgnesTextRepository()
-        ).execute(projectId, settings).map { Unit }
+        ).execute(projectId, episodeId, settings).map { Unit }
     }
 
     private suspend fun runCharacterImages(
@@ -251,35 +266,38 @@ class GenerationWorker(
         const val STAGE_FULL = "full"
 
         private const val KEY_PROJECT_ID = "project_id"
+        private const val KEY_EPISODE_ID = "episode_id"
         private const val KEY_STAGE = "stage"
         private const val CHANNEL_ID = "generation"
         private const val NOTIFICATION_ID_BASE = 1000
         private const val NOTIFICATION_ID_PROJECT_RANGE = 100000
 
-        fun enqueue(context: Context, projectId: Long, stage: String) {
+        /** 入队一个作用于 (projectId, episodeId, stage) 的生成任务；episodeId 参与唯一键，多集可并行。 */
+        fun enqueue(context: Context, projectId: Long, episodeId: Long, stage: String) {
             val request = OneTimeWorkRequestBuilder<GenerationWorker>()
                 .setInputData(
                     workDataOf(
                         KEY_PROJECT_ID to projectId,
+                        KEY_EPISODE_ID to episodeId,
                         KEY_STAGE to stage
                     )
                 )
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(
-                uniqueWorkName(projectId, stage),
+                uniqueWorkName(projectId, episodeId, stage),
                 ExistingWorkPolicy.KEEP,
                 request
             )
         }
 
-        fun cancelProject(context: Context, projectId: Long) {
+        fun cancelEpisode(context: Context, projectId: Long, episodeId: Long) {
             val workManager = WorkManager.getInstance(context)
-            workNamesForProject(projectId).forEach { workName ->
+            workNamesForEpisode(projectId, episodeId).forEach { workName ->
                 workManager.cancelUniqueWork(workName)
             }
         }
 
-        fun workNamesForProject(projectId: Long): List<String> {
+        fun workNamesForEpisode(projectId: Long, episodeId: Long): List<String> {
             return listOf(
                 STAGE_TEXT,
                 STAGE_REWRITE,
@@ -288,13 +306,12 @@ class GenerationWorker(
                 STAGE_VIDEO,
                 STAGE_FINAL_VIDEO,
                 STAGE_CHARACTER_EXTRACT,
-                STAGE_CHARACTER_IMAGE,
                 STAGE_FULL
-            ).map { stage -> uniqueWorkName(projectId, stage) }
+            ).map { stage -> uniqueWorkName(projectId, episodeId, stage) }
         }
 
-        private fun uniqueWorkName(projectId: Long, stage: String): String {
-            return "generation-$projectId-$stage"
+        private fun uniqueWorkName(projectId: Long, episodeId: Long, stage: String): String {
+            return "generation-$projectId-$episodeId-$stage"
         }
     }
 }

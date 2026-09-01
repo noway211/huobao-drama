@@ -9,4 +9,9 @@ class GetStoryboardsUseCase(
     suspend fun execute(projectId: Long): List<StoryboardShot> {
         return dramaRepository.getStoryboards(projectId)
     }
+
+    /** 多集支持：查询某集的分镜。 */
+    suspend fun execute(projectId: Long, episodeId: Long): List<StoryboardShot> {
+        return dramaRepository.getStoryboards(projectId, episodeId)
+    }
 }

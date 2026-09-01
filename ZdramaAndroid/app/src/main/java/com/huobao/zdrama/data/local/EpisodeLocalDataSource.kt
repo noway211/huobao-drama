@@ -3,6 +3,7 @@ package com.huobao.zdrama.data.local
 import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
+import com.huobao.zdrama.domain.model.AssetStatus
 import com.huobao.zdrama.domain.model.Episode
 import com.huobao.zdrama.domain.model.EpisodeStatus
 
@@ -37,6 +38,24 @@ class EpisodeLocalDataSource(context: Context) {
         )
         return cursor.use {
             if (it.moveToFirst()) readEpisode(it) else null
+        }
+    }
+
+    /** 多集支持：按集号升序返回项目全部剧集。 */
+    fun getEpisodes(projectId: Long): List<Episode> {
+        val cursor = database.readableDatabase.query(
+            DramaLocalDatabase.TABLE_EPISODES,
+            null,
+            "${DramaLocalDatabase.COL_PROJECT_ID} = ?",
+            arrayOf(projectId.toString()),
+            null,
+            null,
+            "${DramaLocalDatabase.COL_EPISODE_NUMBER} ASC"
+        )
+        return cursor.use {
+            val list = mutableListOf<Episode>()
+            while (it.moveToNext()) list.add(readEpisode(it))
+            list
         }
     }
 
@@ -83,6 +102,36 @@ class EpisodeLocalDataSource(context: Context) {
         )
     }
 
+    /** 每集独立成片的生成状态（对齐 backend video_merges.episodeId 语义）。 */
+    fun updateEpisodeFinalVideo(
+        episodeId: Long,
+        finalVideoStatus: AssetStatus,
+        finalVideoLocalPath: String?,
+        finalVideoErrorMessage: String?
+    ): Int {
+        val values = ContentValues().apply {
+            put(DramaLocalDatabase.COL_EPISODE_FINAL_VIDEO_STATUS, finalVideoStatus.name)
+            put(DramaLocalDatabase.COL_EPISODE_FINAL_VIDEO_LOCAL_PATH, finalVideoLocalPath)
+            put(DramaLocalDatabase.COL_EPISODE_FINAL_VIDEO_ERROR_MESSAGE, finalVideoErrorMessage)
+            put(DramaLocalDatabase.COL_UPDATED_AT, System.currentTimeMillis())
+        }
+        return database.writableDatabase.update(
+            DramaLocalDatabase.TABLE_EPISODES,
+            values,
+            "${DramaLocalDatabase.COL_ID} = ?",
+            arrayOf(episodeId.toString())
+        )
+    }
+
+    /** 删除单个剧集（调用方需先清理该集分镜与媒体文件）。 */
+    fun deleteEpisode(episodeId: Long): Int {
+        return database.writableDatabase.delete(
+            DramaLocalDatabase.TABLE_EPISODES,
+            "${DramaLocalDatabase.COL_ID} = ?",
+            arrayOf(episodeId.toString())
+        )
+    }
+
     fun deleteEpisodesForProject(projectId: Long): Int {
         return database.writableDatabase.delete(
             DramaLocalDatabase.TABLE_EPISODES,
@@ -100,9 +149,17 @@ class EpisodeLocalDataSource(context: Context) {
             content = cursor.getString(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_EPISODE_CONTENT)),
             scriptContent = cursor.getString(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_EPISODE_SCRIPT_CONTENT)),
             status = parseEpisodeStatus(cursor.getString(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_EPISODE_STATUS))),
+            finalVideoStatus = parseAssetStatus(cursor.getString(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_EPISODE_FINAL_VIDEO_STATUS))),
+            finalVideoLocalPath = cursor.getString(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_EPISODE_FINAL_VIDEO_LOCAL_PATH)),
+            finalVideoErrorMessage = cursor.getString(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_EPISODE_FINAL_VIDEO_ERROR_MESSAGE)),
             createdAt = cursor.getLong(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_CREATED_AT)),
             updatedAt = cursor.getLong(cursor.getColumnIndexOrThrow(DramaLocalDatabase.COL_UPDATED_AT))
         )
+    }
+
+    private fun parseAssetStatus(value: String?): AssetStatus {
+        return runCatching { AssetStatus.valueOf(value ?: AssetStatus.PENDING.name) }
+            .getOrDefault(AssetStatus.PENDING)
     }
 
     private fun parseEpisodeStatus(value: String?): EpisodeStatus {

@@ -64,8 +64,10 @@ class ProjectListActivity : AppCompatActivity() {
     }
 
     private fun deleteProject(project: DramaProject) {
-        GenerationWorker.cancelProject(this, project.id)
         lifecycleScope.launch {
+            dramaRepository.getEpisodes(project.id).forEach {
+                GenerationWorker.cancelEpisode(this@ProjectListActivity, project.id, it.id)
+            }
             val deleted = dramaRepository.deleteProject(project.id)
             if (deleted) {
                 Toast.makeText(this@ProjectListActivity, R.string.project_deleted, Toast.LENGTH_SHORT).show()

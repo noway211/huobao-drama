@@ -73,12 +73,18 @@ class DramaRepository(context: Context) {
         ) > 0
     }
 
-    suspend fun replaceStoryboards(projectId: Long, shots: List<StoryboardShot>) = withContext(Dispatchers.IO) {
-        storyboardLocalDataSource.replaceStoryboards(projectId, shots)
+    /** 替换某集的全部分镜（先删后插）。 */
+    suspend fun replaceStoryboards(projectId: Long, episodeId: Long, shots: List<StoryboardShot>) = withContext(Dispatchers.IO) {
+        storyboardLocalDataSource.replaceStoryboards(projectId, episodeId, shots)
     }
 
     suspend fun getStoryboards(projectId: Long): List<StoryboardShot> = withContext(Dispatchers.IO) {
         storyboardLocalDataSource.getStoryboards(projectId)
+    }
+
+    /** 多集支持：查询某集的全部分镜。 */
+    suspend fun getStoryboards(projectId: Long, episodeId: Long): List<StoryboardShot> = withContext(Dispatchers.IO) {
+        storyboardLocalDataSource.getStoryboards(projectId, episodeId)
     }
 
     suspend fun updateShotImage(
@@ -134,12 +140,27 @@ class DramaRepository(context: Context) {
         episodeLocalDataSource.getEpisodeForProject(projectId)
     }
 
+    suspend fun getEpisodes(projectId: Long): List<Episode> = withContext(Dispatchers.IO) {
+        episodeLocalDataSource.getEpisodes(projectId)
+    }
+
+    /** 历史数据修复：episode_id 为 NULL 的存量分镜回填到所属项目第一集。 */
+    suspend fun backfillStoryboardEpisodeIds() = withContext(Dispatchers.IO) {
+        storyboardLocalDataSource.backfillEpisodeIds()
+    }
+
+    suspend fun getEpisodeById(episodeId: Long): Episode? = withContext(Dispatchers.IO) {
+        episodeLocalDataSource.getEpisodeById(episodeId)
+    }
+
+    /** 新建剧集：集号取当前最大 +1（项目首个为第 1 集），返回新集的 id。 */
     suspend fun createEpisodeForProject(projectId: Long, title: String, content: String?): Long = withContext(Dispatchers.IO) {
+        val nextNumber = (episodeLocalDataSource.getEpisodes(projectId).maxOfOrNull { it.episodeNumber } ?: 0) + 1
         val now = System.currentTimeMillis()
         episodeLocalDataSource.insertEpisode(Episode(
             id = 0L,
             projectId = projectId,
-            episodeNumber = 1,
+            episodeNumber = nextNumber,
             title = title,
             content = content,
             scriptContent = null,
@@ -147,6 +168,45 @@ class DramaRepository(context: Context) {
             createdAt = now,
             updatedAt = now
         ))
+    }
+
+    /** 删除单集：级联删除该集分镜、成片与本地媒体目录，再删集记录。 */
+    suspend fun deleteEpisode(episodeId: Long): Boolean = withContext(Dispatchers.IO) {
+        val episode = episodeLocalDataSource.getEpisodeById(episodeId)
+            ?: return@withContext false
+        storyboardLocalDataSource.deleteStoryboardsForEpisode(episode.projectId, episodeId)
+        unlinkIfExists(episode.finalVideoLocalPath, "episode final video #$episodeId")
+        val dbOk = episodeLocalDataSource.deleteEpisode(episodeId) > 0
+        // 清理该集媒体目录（分镜图片/视频存在 generated/<projectId>/ 下按 shot 命名，由 deleteProject 统一清理；这里只删成片目录）
+        episode.finalVideoLocalPath?.takeIf { it.isNotBlank() }?.let { path ->
+            runCatching { File(path).parentFile?.takeIf { it.exists() }?.deleteRecursively() }
+                .onFailure { Log.w(TAG, "delete episode dir failed for #$episodeId: ${it.message}") }
+        }
+        dbOk
+    }
+
+    /** 软删除某集成片：DB 清状态 + 删本地文件。 */
+    suspend fun deleteEpisodeFinalVideo(episodeId: Long): DeleteResult = withContext(Dispatchers.IO) {
+        val episode = episodeLocalDataSource.getEpisodeById(episodeId)
+            ?: return@withContext DeleteResult(dbUpdated = false, fileDeleted = false)
+        val fileDeleted = unlinkIfExists(episode.finalVideoLocalPath, "episode final video #$episodeId")
+        val dbOk = episodeLocalDataSource.updateEpisodeFinalVideo(episodeId, AssetStatus.PENDING, null, null) > 0
+        DeleteResult(dbUpdated = dbOk, fileDeleted = fileDeleted)
+    }
+
+    /** 每集独立成片的状态写入（多集支持后的成片落库路径）。 */
+    suspend fun updateEpisodeFinalVideo(
+        episodeId: Long,
+        finalVideoStatus: AssetStatus,
+        finalVideoLocalPath: String?,
+        finalVideoErrorMessage: String?
+    ): Boolean = withContext(Dispatchers.IO) {
+        episodeLocalDataSource.updateEpisodeFinalVideo(
+            episodeId = episodeId,
+            finalVideoStatus = finalVideoStatus,
+            finalVideoLocalPath = finalVideoLocalPath,
+            finalVideoErrorMessage = finalVideoErrorMessage
+        ) > 0
     }
 
     suspend fun updateEpisodeScriptContent(
@@ -249,20 +309,20 @@ class DramaRepository(context: Context) {
         DeleteResult(dbUpdated = dbOk, fileDeleted = fileDeleted)
     }
 
-    /** 批量软删除项目所有分镜图片。返回成功条数。 */
-    suspend fun deleteAllStoryboardImages(projectId: Long): Int = withContext(Dispatchers.IO) {
+    /** 批量软删除某集所有分镜图片。返回成功条数。 */
+    suspend fun deleteAllStoryboardImages(projectId: Long, episodeId: Long): Int = withContext(Dispatchers.IO) {
         var count = 0
-        getStoryboards(projectId).forEach { shot ->
+        getStoryboards(projectId, episodeId).forEach { shot ->
             if (shot.imageLocalPath.isNullOrBlank() && shot.imageUrl.isNullOrBlank()) return@forEach
             if (deleteShotImage(shot.id).dbUpdated) count++
         }
         count
     }
 
-    /** 批量软删除项目所有分镜视频。返回成功条数。 */
-    suspend fun deleteAllStoryboardVideos(projectId: Long): Int = withContext(Dispatchers.IO) {
+    /** 批量软删除某集所有分镜视频。返回成功条数。 */
+    suspend fun deleteAllStoryboardVideos(projectId: Long, episodeId: Long): Int = withContext(Dispatchers.IO) {
         var count = 0
-        getStoryboards(projectId).forEach { shot ->
+        getStoryboards(projectId, episodeId).forEach { shot ->
             if (shot.videoLocalPath.isNullOrBlank() && shot.videoUrl.isNullOrBlank()) return@forEach
             if (deleteShotVideo(shot.id).dbUpdated) count++
         }

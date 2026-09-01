@@ -17,11 +17,12 @@ class ExtractCharactersUseCase(
     private val dramaRepository: DramaRepository,
     private val agnesTextRepository: AgnesTextRepository
 ) {
-    suspend fun execute(projectId: Long, settings: AgnesSettings): Result<Int> {
+    suspend fun execute(projectId: Long, episodeId: Long, settings: AgnesSettings): Result<Int> {
         val project = dramaRepository.getProject(projectId)
             ?: return Result.failure(IllegalArgumentException("Project not found"))
 
-        val episode = dramaRepository.getEpisodeForProject(projectId)
+        // 多集支持：从指定集脚本提取；角色仍挂项目级（对齐 backend drama 级 characters + save_dedup_characters）
+        val episode = dramaRepository.getEpisodeById(episodeId) ?: dramaRepository.getEpisodeForProject(projectId)
         val script = episode?.scriptContent ?: project.generatedScript
         if (script.isNullOrBlank()) {
             return Result.failure(IllegalArgumentException("请先创作或改写脚本"))

@@ -69,6 +69,9 @@ data class Episode(
     val content: String?,
     val scriptContent: String?,
     val status: EpisodeStatus,
+    val finalVideoStatus: AssetStatus = AssetStatus.PENDING,
+    val finalVideoLocalPath: String? = null,
+    val finalVideoErrorMessage: String? = null,
     val createdAt: Long,
     val updatedAt: Long
 )
@@ -76,6 +79,8 @@ data class Episode(
 data class StoryboardShot(
     val id: Long,
     val projectId: Long,
+    /** 所属剧集；多集支持后所有分镜都必须归属某一集（DB v8 起有该列，v10 已回填） */
+    val episodeId: Long? = null,
     val shotNumber: Int,
     val scene: String,
     val action: String,

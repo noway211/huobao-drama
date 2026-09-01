@@ -31,6 +31,7 @@ class StoryboardViewerActivity : AppCompatActivity() {
     private lateinit var dramaRepository: DramaRepository
     private val gson = Gson()
     private var projectId: Long = 0L
+    private var episodeId: Long = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +46,7 @@ class StoryboardViewerActivity : AppCompatActivity() {
         updateShotPromptUseCase = UpdateShotPromptUseCase(repository)
 
         projectId = intent.getLongExtra(EXTRA_PROJECT_ID, 0L)
+        episodeId = intent.getLongExtra(EXTRA_EPISODE_ID, 0L)
         if (projectId <= 0L) {
             Toast.makeText(this, R.string.project_missing, Toast.LENGTH_SHORT).show()
             finish()
@@ -65,7 +67,11 @@ class StoryboardViewerActivity : AppCompatActivity() {
                 finish()
                 return@launch
             }
-            val all = getStoryboardsUseCase.execute(projectId)
+            val all = if (episodeId > 0L) {
+                getStoryboardsUseCase.execute(projectId, episodeId)
+            } else {
+                getStoryboardsUseCase.execute(projectId)
+            }
             if (all.isEmpty()) {
                 Toast.makeText(this@StoryboardViewerActivity, R.string.project_no_storyboards, Toast.LENGTH_SHORT).show()
                 finish()
@@ -349,5 +355,6 @@ class StoryboardViewerActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_PROJECT_ID = "extra_project_id"
+        const val EXTRA_EPISODE_ID = "extra_episode_id"
     }
 }
