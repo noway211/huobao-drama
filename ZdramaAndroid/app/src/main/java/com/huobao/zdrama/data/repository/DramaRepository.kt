@@ -170,14 +170,20 @@ class DramaRepository(context: Context) {
         ))
     }
 
-    /** 删除单集：级联删除该集分镜、成片与本地媒体目录，再删集记录。 */
+    /** 删除单集：级联删除该集分镜（含其图片/视频文件）、成片与成片目录，再删集记录。 */
     suspend fun deleteEpisode(episodeId: Long): Boolean = withContext(Dispatchers.IO) {
         val episode = episodeLocalDataSource.getEpisodeById(episodeId)
             ?: return@withContext false
+        // 分镜媒体按 generated/<projectId>/shot_<id>_* 平铺存放，不在成片目录内：
+        // 必须在删除分镜行之前先取路径，否则行删掉后再也找不到这些文件（只能等 deleteProject 清理）。
+        storyboardLocalDataSource.getStoryboards(episode.projectId, episodeId).forEach { shot ->
+            unlinkIfExists(shot.imageLocalPath, "shot image #${shot.id}")
+            unlinkIfExists(shot.videoLocalPath, "shot video #${shot.id}")
+        }
         storyboardLocalDataSource.deleteStoryboardsForEpisode(episode.projectId, episodeId)
         unlinkIfExists(episode.finalVideoLocalPath, "episode final video #$episodeId")
         val dbOk = episodeLocalDataSource.deleteEpisode(episodeId) > 0
-        // 清理该集媒体目录（分镜图片/视频存在 generated/<projectId>/ 下按 shot 命名，由 deleteProject 统一清理；这里只删成片目录）
+        // 清理该集成片目录（此时目录内文件已删，deleteRecursively 兜底清掉中间产物如 concat_list.txt）
         episode.finalVideoLocalPath?.takeIf { it.isNotBlank() }?.let { path ->
             runCatching { File(path).parentFile?.takeIf { it.exists() }?.deleteRecursively() }
                 .onFailure { Log.w(TAG, "delete episode dir failed for #$episodeId: ${it.message}") }
