@@ -267,6 +267,8 @@
     <string name="project_final_video_saved_to_album">已保存到相册</string>
     <string name="project_final_video_save_failed">保存失败：%1$s</string>
     <string name="album_permission_denied">未授权访问相册，请在设置中允许存储权限</string>
+    <string name="project_shot_video_save_no_local">该分镜视频还未下载到本地，无法保存到相册</string>
+    <string name="project_shot_video_album_title">分镜%1$d</string>
     <string name="project_character_delete_image">删除图片</string>
     <string name="project_character_delete_image_title">删除角色图片？</string>
     <string name="project_character_delete_image_message">删除后需要重新生成角色图。</string>

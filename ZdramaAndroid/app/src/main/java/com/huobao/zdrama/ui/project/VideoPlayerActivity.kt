@@ -65,7 +65,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         binding.deleteCurrentButton.setOnClickListener { confirmDeleteCurrent() }
         binding.deleteAllButton.setOnClickListener { confirmDeleteAll() }
         binding.deleteFinalButton.setOnClickListener { confirmDeleteFinal() }
-        binding.saveFinalButton.setOnClickListener { saveFinalToAlbum() }
+        binding.saveFinalButton.setOnClickListener { saveCurrentToAlbum() }
 
         projectId = intent.getLongExtra(EXTRA_PROJECT_ID, 0L)
         episodeId = intent.getLongExtra(EXTRA_EPISODE_ID, 0L)
@@ -100,10 +100,10 @@ class VideoPlayerActivity : AppCompatActivity() {
             if (playableShots.isEmpty()) {
                 showNoVideos()
             } else {
-                // 启用分镜模式按钮组
+                // 启用分镜模式按钮组（分镜也支持保存到相册）
                 binding.deleteAllButton.visibility = View.VISIBLE
                 binding.deleteCurrentButton.visibility = View.VISIBLE
-                binding.saveFinalButton.visibility = View.GONE
+                binding.saveFinalButton.visibility = View.VISIBLE
                 binding.deleteFinalButton.visibility = View.GONE
                 playAt(0)
             }
@@ -256,9 +256,10 @@ class VideoPlayerActivity : AppCompatActivity() {
 
     // ────────────── 保存到相册 ──────────────
 
-    /** 保存成片到系统相册（Android 10+ 免权限直写；更低版本先申请 WRITE_EXTERNAL_STORAGE）。 */
-    private fun saveFinalToAlbum() {
-        val path = finalVideoPath ?: return
+    /** 保存当前视频（成片或当前分镜）到系统相册（Android 10+ 免权限直写；更低版本先申请 WRITE_EXTERNAL_STORAGE）。 */
+    private fun saveCurrentToAlbum() {
+        // 分镜模式只能保存已落地的本地文件：AlbumSaver 读沙盒路径，远端 URL 需先下载
+        val target = currentSaveTarget() ?: return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
             != PackageManager.PERMISSION_GRANTED
@@ -270,11 +271,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             return
         }
         lifecycleScope.launch {
-            val result = AlbumSaver.saveVideo(
-                this@VideoPlayerActivity,
-                path,
-                finalVideoTitle ?: "final_video"
-            )
+            val result = AlbumSaver.saveVideo(this@VideoPlayerActivity, target.first, target.second)
             Toast.makeText(
                 this@VideoPlayerActivity,
                 if (result.isSuccess) {
@@ -290,6 +287,21 @@ class VideoPlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** 解析当前模式下要保存的 (本地路径, 相册标题)；不可保存时提示并返回 null。 */
+    private fun currentSaveTarget(): Pair<String, String>? {
+        if (isFinalVideoMode) {
+            val path = finalVideoPath ?: return null
+            return path to (finalVideoTitle ?: "final_video")
+        }
+        val shot = playableShots.getOrNull(currentIndex) ?: return null
+        val localPath = shot.videoLocalPath?.takeIf { it.isNotBlank() && File(it).exists() }
+        if (localPath == null) {
+            Toast.makeText(this, R.string.project_shot_video_save_no_local, Toast.LENGTH_SHORT).show()
+            return null
+        }
+        return localPath to getString(R.string.project_shot_video_album_title, shot.shotNumber)
+    }
+
     @Suppress("DEPRECATION")
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -299,7 +311,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_SAVE_TO_ALBUM) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                saveFinalToAlbum()
+                saveCurrentToAlbum()
             } else {
                 Toast.makeText(this, R.string.album_permission_denied, Toast.LENGTH_SHORT).show()
             }
