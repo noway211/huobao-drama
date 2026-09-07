@@ -4,6 +4,7 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMuxer
+import android.util.Log
 import java.io.File
 import java.nio.ByteBuffer
 
@@ -45,7 +46,7 @@ class LocalMp4Composer {
                 outputFile.delete()
                 throw IllegalStateException(throwable.message ?: ERROR_WRITE_FAILED, throwable)
             } finally {
-                runCatching { muxer?.stop() }
+                runCatching { muxer?.stop() }.onFailure { Log.e(TAG, "muxer.stop() failed", it) }
                 runCatching { muxer?.release() }
             }
 
@@ -139,13 +140,16 @@ class LocalMp4Composer {
                 var previousNormalizedTimeUs: Long? = null
                 var estimatedSampleDurationUs = DEFAULT_SAMPLE_DURATION_US
                 var wroteSample = false
+                var samplesRead = 0
 
                 while (true) {
                     buffer.clear()
                     val sampleSize = extractor.readSampleData(buffer, 0)
                     if (sampleSize < 0) break
                     val sampleTimeUs = extractor.sampleTime
-                    if (sampleTimeUs < 0L) break
+                    // 注意：AAC 编码器延迟会让音频首帧 PTS 为负（如 -21333µs = 1024 采样 @48kHz），
+                    // 不能把负 PTS 当作结束，否则整条音频轨 0 样本输出（合并后无声音）。
+                    // 通过 firstSampleTimeUs 归一化，首帧输出到 0。
 
                     val firstTime = firstSampleTimeUs ?: sampleTimeUs.also { firstSampleTimeUs = it }
                     var outputTimeUs = timeOffsetUs + (sampleTimeUs - firstTime)
@@ -163,9 +167,11 @@ class LocalMp4Composer {
                     previousNormalizedTimeUs = outputTimeUs - timeOffsetUs
                     lastOutputTimeUs = outputTimeUs
                     wroteSample = true
+                    samplesRead++
                     extractor.advance()
                 }
 
+                Log.d(TAG, "pass=${inputTrackType} file=${file.name} wrote=$samplesRead samples")
                 if (wroteSample) {
                     timeOffsetUs = lastOutputTimeUs + estimatedSampleDurationUs
                 }
@@ -210,6 +216,7 @@ class LocalMp4Composer {
     }
 
     companion object {
+        private const val TAG = "LocalMp4Composer"
         private const val DEFAULT_BUFFER_SIZE = 1024 * 1024
         private const val DEFAULT_SAMPLE_DURATION_US = 33_333L
         private const val ERROR_MISSING_VIDEO_TRACK = "分镜视频缺少视频轨，无法合成 MP4"
