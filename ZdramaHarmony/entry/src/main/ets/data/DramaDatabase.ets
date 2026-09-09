@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS projects (
   updated_at INTEGER NOT NULL
 )`;
 
-// 建表 SQL：episodes（剧集表），归属于某个 project
+// 建表 SQL：episodes（剧集表），归属于某个 project。
+// 成片列与 Android v12 迁移后的 schema 对齐：每集独立成片。
 const CREATE_EPISODES = `
 CREATE TABLE IF NOT EXISTS episodes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,6 +53,9 @@ CREATE TABLE IF NOT EXISTS episodes (
   content TEXT,
   script_content TEXT,
   episode_status TEXT NOT NULL DEFAULT 'DRAFT',
+  final_video_status TEXT NOT NULL DEFAULT 'PENDING',
+  final_video_local_path TEXT,
+  final_video_error_message TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 )`;
@@ -138,6 +142,10 @@ export class DramaDatabase {
 
     // 兼容已有数据库：storyboards 表可能缺少 character_ids 列
     await DramaDatabase.addColumnIfMissing(store, 'storyboards', 'character_ids', 'TEXT');
+    // 兼容已有数据库：episodes 表可能缺少成片 3 列（多集改造前的库）
+    await DramaDatabase.addColumnIfMissing(store, 'episodes', 'final_video_status', "TEXT NOT NULL DEFAULT 'PENDING'");
+    await DramaDatabase.addColumnIfMissing(store, 'episodes', 'final_video_local_path', 'TEXT');
+    await DramaDatabase.addColumnIfMissing(store, 'episodes', 'final_video_error_message', 'TEXT');
 
     hilog.info(DOMAIN, TAG, 'RDB ready: %{public}s', DB_NAME);
     return store;

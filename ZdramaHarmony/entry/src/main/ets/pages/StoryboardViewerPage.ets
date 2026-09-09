@@ -5,6 +5,7 @@ import { Theme } from '../common/Theme';
 
 interface ViewerParams {
   projectId: number;
+  episodeId?: number;
 }
 
 // 编辑提示词的弹层内边距
@@ -40,12 +41,16 @@ struct StoryboardViewerPage {
   // bindingSummary/BindingAvatarsRow 不重算,显示陈旧数据)
   @State refreshTick: number = 0;
   private projectId: number = 0;
+  private episodeId: number = 0;
 
-  // 组件即将出现：从路由参数中读取项目 ID
+  // 组件即将出现：从路由参数中读取项目 ID 与剧集 ID（后者缺省时回退项目级分镜）
   aboutToAppear(): void {
     const params = router.getParams() as ViewerParams;
     if (params && params.projectId) {
       this.projectId = params.projectId;
+    }
+    if (params && params.episodeId) {
+      this.episodeId = params.episodeId;
     }
   }
 
@@ -54,7 +59,9 @@ struct StoryboardViewerPage {
     this.loading = true;
     const project = await UseCases.getProject(this.projectId);
     this.title = project?.title ?? '分镜';
-    const storyboards = await UseCases.getStoryboards(this.projectId);
+    const storyboards = this.episodeId > 0
+      ? await UseCases.getStoryboardsForEpisode(this.projectId, this.episodeId)
+      : await UseCases.getStoryboards(this.projectId);
     if (storyboards.length === 0) {
       promptAction.showToast({ message: '暂无分镜' });
       router.back();
@@ -106,7 +113,9 @@ struct StoryboardViewerPage {
       promptAction.showToast({ message: `${fieldLabel}提示词保存失败，请重试` });
     }
     // 刷新分镜数据
-    this.shots = await UseCases.getStoryboards(this.projectId);
+    this.shots = this.episodeId > 0
+      ? await UseCases.getStoryboardsForEpisode(this.projectId, this.episodeId)
+      : await UseCases.getStoryboards(this.projectId);
     this.refreshTick++;
   }
 
@@ -197,7 +206,9 @@ struct StoryboardViewerPage {
     } catch (e) {
       promptAction.showToast({ message: '角色绑定保存失败，请重试' });
     }
-    this.shots = await UseCases.getStoryboards(this.projectId);
+    this.shots = this.episodeId > 0
+      ? await UseCases.getStoryboardsForEpisode(this.projectId, this.episodeId)
+      : await UseCases.getStoryboards(this.projectId);
     this.rebuildBindingDisplayMap();
     this.refreshTick++;
   }

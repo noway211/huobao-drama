@@ -8,11 +8,77 @@ interface DetailParams {
   projectId: number;
 }
 
+// 「新增剧集」对话框：标题 + 内容（内容可为空），确认后回调 onConfirm
+@CustomDialog
+struct AddEpisodeDialog {
+  controller: CustomDialogController;
+  onConfirm: (title: string, content: string) => void = () => {
+  };
+  @State title: string = '';
+  @State content: string = '';
+
+  build() {
+    Column() {
+      Text('新增剧集')
+        .fontSize(17)
+        .fontColor(Theme.textPrimary)
+        .fontWeight(FontWeight.Bold)
+        .width('100%')
+        .margin({ bottom: 16 })
+      TextInput({ text: this.title, placeholder: '标题（可为空）' })
+        .fontColor(Theme.textPrimary)
+        .placeholderColor(Theme.textHint)
+        .backgroundColor(Theme.surfaceAlt)
+        .borderRadius(8)
+        .width('100%')
+        .height(44)
+        .onChange((v: string) => this.title = v)
+      TextArea({ text: this.content, placeholder: '剧情内容（可为空）' })
+        .fontColor(Theme.textPrimary)
+        .placeholderColor(Theme.textHint)
+        .backgroundColor(Theme.surfaceAlt)
+        .borderRadius(8)
+        .width('100%')
+        .height(120)
+        .margin({ top: 10 })
+        .onChange((v: string) => this.content = v)
+      Row() {
+        Button('取消')
+          .fontSize(14)
+          .backgroundColor(Theme.surfaceAlt)
+          .fontColor(Theme.textPrimary)
+          .height(40)
+          .layoutWeight(1)
+          .onClick(() => this.controller.close())
+        Button('创建')
+          .fontSize(14)
+          .backgroundColor(Theme.primary)
+          .fontColor(Color.White)
+          .height(40)
+          .layoutWeight(1)
+          .margin({ left: 10 })
+          .onClick(() => {
+            this.onConfirm(this.title.trim(), this.content.trim());
+            this.controller.close();
+          })
+      }
+      .width('100%')
+      .margin({ top: 16 })
+    }
+    .padding(20)
+    .borderRadius(12)
+    .backgroundColor(Theme.bg)
+    .width('86%')
+  }
+}
+
 @Entry
 @Component
 struct ProjectDetailPage {
   @State project: DramaProject | null = null;
+  @State episodes: Episode[] = [];
   @State episode: Episode | null = null;
+  @State currentEpisodeId: number = 0;
   @State busy: boolean = false;
   @State busyLabel: string = '';
   // 阶段进度：阶段名 + 当前/总数 + 正在处理的对象（仅分镜图/视频/角色图三类有 callback）
@@ -29,6 +95,8 @@ struct ProjectDetailPage {
   @State hasVideos: boolean = false;
   @State hasFinalVideo: boolean = false;
   private projectId: number = 0;
+  // 新增剧集对话框（懒初始化：aboutToAppear 时创建，避免成员初始化器不能引用 this）
+  private addEpisodeDialog: CustomDialogController | null = null;
 
   // 组件即将出现：从路由参数中读取项目 ID
   aboutToAppear(): void {
@@ -43,24 +111,33 @@ struct ProjectDetailPage {
     this.reload();
   }
 
-  // 重新拉取项目与剧集数据
+  // 重新拉取项目、剧集与当前集分镜数据
   async reload(): Promise<void> {
     this.project = await UseCases.getProject(this.projectId);
-    this.episode = await UseCases.getEpisode(this.projectId);
-    const storyboards = await UseCases.getStoryboards(this.projectId);
+    const episodes = await UseCases.getEpisodes(this.projectId);
+    this.episodes = episodes;
+    // 当前集不存在（未选择或已删除）时回退到第一集
+    if (episodes.length > 0 &&
+      (this.currentEpisodeId <= 0 || !episodes.some(ep => ep.id === this.currentEpisodeId))) {
+      this.currentEpisodeId = episodes[0].id;
+    }
+    this.episode = episodes.find(ep => ep.id === this.currentEpisodeId) ?? null;
+    const storyboards = this.currentEpisodeId > 0
+      ? await UseCases.getStoryboardsForEpisode(this.projectId, this.currentEpisodeId)
+      : [];
     this.hasStoryboards = storyboards.length > 0;
     this.characters = await UseCases.getCharacters(this.projectId);
     this.hasCharacters = this.characters.length > 0;
     this.hasCharacterImages = this.characters.some(c => c.imageStatus === AssetStatus.COMPLETED);
     this.hasImages = storyboards.some(s => s.imageStatus === AssetStatus.COMPLETED);
     this.hasVideos = storyboards.some(s => s.videoStatus === AssetStatus.COMPLETED);
-    this.hasFinalVideo = this.project?.finalVideoStatus === AssetStatus.COMPLETED &&
-      (this.project?.finalVideoLocalPath?.length ?? 0) > 0;
+    this.hasFinalVideo = this.episode?.finalVideoStatus === AssetStatus.COMPLETED &&
+      (this.episode?.finalVideoLocalPath?.length ?? 0) > 0;
     // 自动修复触发内容审查的提示词
     await UseCases.patchSensitivePrompts(this.projectId);
   }
 
-  // 是否已有脚本（剧集脚本或项目生成脚本任一非空）
+  // 是否已有脚本（当前集脚本或项目生成脚本任一非空）
   private hasScript(): boolean {
     const fromEpisode = this.episode?.scriptContent;
     const fromProject = this.project?.generatedScript;
@@ -68,7 +145,7 @@ struct ProjectDetailPage {
       (!!fromProject && fromProject.trim().length > 0);
   }
 
-  // 是否有可改写的原始内容（剧集 content 非空）
+  // 是否有可改写的原始内容（当前集 content 非空）
   private hasRawContent(): boolean {
     const raw = this.episode?.content;
     return !!raw && raw.trim().length > 0;
@@ -132,7 +209,7 @@ struct ProjectDetailPage {
     this.busyLabel = '创作脚本中…';
     this.stageLabel = '创作脚本';
     const settings = await SettingsStore.load();
-    const result = await UseCases.generateScript(this.projectId, settings);
+    const result = await UseCases.generateScript(this.projectId, this.currentEpisodeId, settings);
     this.busy = false;
     this.clearProgress();
     promptAction.showToast({ message: result.ok ? '脚本已生成' : `失败：${result.error}` });
@@ -149,7 +226,7 @@ struct ProjectDetailPage {
     this.busyLabel = '改写脚本中…';
     this.stageLabel = '改写脚本';
     const settings = await SettingsStore.load();
-    const result = await UseCases.rewriteScript(this.projectId, settings);
+    const result = await UseCases.rewriteScript(this.projectId, this.currentEpisodeId, settings);
     this.busy = false;
     this.clearProgress();
     promptAction.showToast({ message: result.ok ? '脚本已改写' : `失败：${result.error}` });
@@ -180,7 +257,7 @@ struct ProjectDetailPage {
     this.busyLabel = '生成分镜中…';
     this.stageLabel = '生成分镜';
     const settings = await SettingsStore.load();
-    const result = await UseCases.generateStoryboards(this.projectId, settings);
+    const result = await UseCases.generateStoryboards(this.projectId, this.currentEpisodeId, settings);
     this.busy = false;
     this.clearProgress();
     promptAction.showToast({ message: result.ok ? '分镜已生成' : `失败：${result.error}` });
@@ -193,16 +270,16 @@ struct ProjectDetailPage {
       promptAction.showToast({ message: '暂无脚本' });
       return;
     }
-    router.pushUrl({ url: 'pages/ScriptViewerPage', params: { projectId: this.projectId } });
+    router.pushUrl({ url: 'pages/ScriptViewerPage', params: { projectId: this.projectId, episodeId: this.currentEpisodeId } });
   }
 
-  // 执行角色提取：从剧本中提取角色信息
+  // 执行角色提取：从当前集剧本中提取角色信息
   async doExtractCharacters(): Promise<void> {
     this.busy = true;
     this.busyLabel = '提取角色中…';
     this.stageLabel = '提取角色';
     const settings = await SettingsStore.load();
-    const result = await UseCases.extractCharacters(this.projectId, settings);
+    const result = await UseCases.extractCharacters(this.projectId, this.currentEpisodeId, settings);
     this.busy = false;
     this.clearProgress();
     promptAction.showToast({ message: result.ok ? `已提取 ${result.value} 个角色` : `失败：${result.error}` });
@@ -296,7 +373,7 @@ struct ProjectDetailPage {
       promptAction.showToast({ message: '暂无分镜' });
       return;
     }
-    router.pushUrl({ url: 'pages/StoryboardViewerPage', params: { projectId: this.projectId } });
+    router.pushUrl({ url: 'pages/StoryboardViewerPage', params: { projectId: this.projectId, episodeId: this.currentEpisodeId } });
   }
 
   // 执行图片生成：更新 busy 状态，调用用例，提示结果后刷新
@@ -305,7 +382,7 @@ struct ProjectDetailPage {
     this.busyLabel = '生成图片中…';
     this.stageLabel = '生成图片';
     const settings = await SettingsStore.load();
-    const result = await UseCases.generateStoryboardImages(this.projectId, settings, (current, total, shotNumber, phase) => {
+    const result = await UseCases.generateStoryboardImages(this.projectId, this.currentEpisodeId, settings, (current, total, shotNumber, phase) => {
       this.busyLabel = `${phase} ${current}/${total}（分镜 ${shotNumber}）`;
       this.progressCurrent = current;
       this.progressTotal = total;
@@ -344,7 +421,7 @@ struct ProjectDetailPage {
     this.busyLabel = '生成视频中…';
     this.stageLabel = '生成视频';
     const settings = await SettingsStore.load();
-    const result = await UseCases.generateStoryboardVideos(this.projectId, settings, (current, total, shotNumber, phase) => {
+    const result = await UseCases.generateStoryboardVideos(this.projectId, this.currentEpisodeId, settings, (current, total, shotNumber, phase) => {
       this.busyLabel = `${phase} ${current}/${total}（分镜 ${shotNumber}）`;
       this.progressCurrent = current;
       this.progressTotal = total;
@@ -383,7 +460,7 @@ struct ProjectDetailPage {
     this.busyLabel = '合成成片中…';
     this.stageLabel = '合成成片';
     const settings = await SettingsStore.load();
-    const result = await UseCases.composeFinalVideo(this.projectId, settings);
+    const result = await UseCases.composeFinalVideo(this.projectId, this.currentEpisodeId, settings);
     this.busy = false;
     this.clearProgress();
     promptAction.showToast({ message: result.ok ? '成片已生成' : `合成失败：${result.error}` });
@@ -427,6 +504,75 @@ struct ProjectDetailPage {
           router.back();
         }
       }
+    });
+  }
+
+  // ────────────── 集切换器（横向 chips：第 N 集 / ＋新增；长按删除） ──────────────
+
+  // 确认新增剧集：标题与内容都为空时提示失败，否则创建并切换到新集
+  private createEpisode(title: string, content: string): void {
+    if (title.length === 0 && content.length === 0) {
+      promptAction.showToast({ message: '标题和内容不能同时为空' });
+      return;
+    }
+    UseCases.createEpisode(this.projectId, title, content).then(async (id) => {
+      if (id > 0) {
+        this.currentEpisodeId = id;
+        promptAction.showToast({ message: '剧集已创建' });
+        await this.reload();
+      } else {
+        promptAction.showToast({ message: '剧集创建失败' });
+      }
+    }).catch(() => {
+      promptAction.showToast({ message: '剧集创建失败' });
+    });
+  }
+
+  // 新增剧集：弹出输入对话框
+  private showAddEpisodeDialog(): void {
+    if (!this.addEpisodeDialog) {
+      this.addEpisodeDialog = new CustomDialogController({
+        builder: AddEpisodeDialog({
+          onConfirm: (title: string, content: string) => this.createEpisode(title, content)
+        }),
+        autoCancel: true
+      });
+    }
+    this.addEpisodeDialog.open();
+  }
+
+  // 长按删除单集：仅剩一集时提示不可删除，否则二次确认
+  private confirmDeleteEpisode(episode: Episode): void {
+    if (this.episodes.length <= 1) {
+      promptAction.showToast({ message: '至少保留一集' });
+      return;
+    }
+    promptAction.showDialog({
+      title: '删除剧集？',
+      message: `确定删除第 ${episode.episodeNumber} 集？该集的分镜、图片、视频与成片都会被清除。`,
+      buttons: [
+        { text: '取消', color: Theme.textSecondary },
+        { text: '删除', color: Theme.primary }
+      ]
+    }).then((r) => {
+      if (r.index === 1) {
+        this.deleteEpisode(episode);
+      }
+    });
+  }
+
+  // 执行删除单集：删除后 currentEpisodeId 置 0，由 reload 重新选定第一集
+  private deleteEpisode(episode: Episode): void {
+    UseCases.deleteEpisode(episode.id).then(async (ok) => {
+      if (ok) {
+        this.currentEpisodeId = 0;
+        promptAction.showToast({ message: '剧集已删除' });
+        await this.reload();
+      } else {
+        promptAction.showToast({ message: '剧集删除失败' });
+      }
+    }).catch(() => {
+      promptAction.showToast({ message: '剧集删除失败' });
     });
   }
 
@@ -581,6 +727,48 @@ struct ProjectDetailPage {
               .width('100%')
               .margin({ bottom: 16 })
 
+            // 集切换器：第 N 集 chips（点击切换，长按删除）+ 新增 chip
+            if (this.episodes.length > 0) {
+              Scroll() {
+                Row() {
+                  ForEach(this.episodes, (ep: Episode) => {
+                    Text(`第 ${ep.episodeNumber} 集`)
+                      .fontSize(15)
+                      .fontColor(ep.id === this.currentEpisodeId ? Color.White : Theme.primary)
+                      .backgroundColor(ep.id === this.currentEpisodeId ? Theme.primary : Theme.surface)
+                      .borderRadius(16)
+                      .padding({ left: 14, right: 14, top: 7, bottom: 7 })
+                      .margin({ right: 10 })
+                      .onClick(() => {
+                        if (ep.id !== this.currentEpisodeId) {
+                          this.currentEpisodeId = ep.id;
+                          this.reload();
+                        }
+                      })
+                      .gesture(
+                        LongPressGesture()
+                          .onAction(() => {
+                            this.confirmDeleteEpisode(ep);
+                          })
+                      )
+                  }, (ep: Episode) => `${ep.id}`)
+                  Text('＋ 新增')
+                    .fontSize(15)
+                    .fontColor(Theme.primary)
+                    .backgroundColor(Theme.surface)
+                    .fontWeight(FontWeight.Bold)
+                    .borderRadius(16)
+                    .padding({ left: 14, right: 14, top: 7, bottom: 7 })
+                    .onClick(() => this.showAddEpisodeDialog())
+                }
+                .padding({ bottom: 8 })
+              }
+              .scrollable(ScrollDirection.Horizontal)
+              .scrollBar(BarState.Off)
+              .width('100%')
+              .margin({ bottom: 12 })
+            }
+
             Column() {
               this.InfoRow('状态', statusLabel(this.project.status))
               this.InfoRow('当前阶段', stageLabel(this.project.currentStage))
@@ -666,7 +854,7 @@ struct ProjectDetailPage {
               .enabled(this.hasScript())
               .opacity(this.hasScript() ? 1 : 0.5)
               .onClick(() => {
-                router.pushUrl({ url: 'pages/ScriptViewerPage', params: { projectId: this.projectId } });
+                router.pushUrl({ url: 'pages/ScriptViewerPage', params: { projectId: this.projectId, episodeId: this.currentEpisodeId } });
               })
               .margin({ bottom: 10 })
 
@@ -767,7 +955,7 @@ struct ProjectDetailPage {
                 .opacity(this.hasImages ? 1 : 0.5)
                 .margin({ left: 10 })
                 .onClick(() => {
-                  router.pushUrl({ url: 'pages/StoryboardImagePage', params: { projectId: this.projectId } });
+                  router.pushUrl({ url: 'pages/StoryboardImagePage', params: { projectId: this.projectId, episodeId: this.currentEpisodeId } });
                 })
             }
             .width('100%')
@@ -795,7 +983,7 @@ struct ProjectDetailPage {
                 .opacity(this.hasVideos ? 1 : 0.5)
                 .margin({ left: 10 })
                 .onClick(() => {
-                  router.pushUrl({ url: 'pages/VideoViewerPage', params: { projectId: this.projectId } });
+                  router.pushUrl({ url: 'pages/VideoViewerPage', params: { projectId: this.projectId, episodeId: this.currentEpisodeId } });
                 })
             }
             .width('100%')
@@ -823,7 +1011,7 @@ struct ProjectDetailPage {
                 .opacity(this.hasFinalVideo ? 1 : 0.5)
                 .margin({ left: 10 })
                 .onClick(() => {
-                  router.pushUrl({ url: 'pages/FinalVideoPage', params: { projectId: this.projectId } });
+                  router.pushUrl({ url: 'pages/FinalVideoPage', params: { projectId: this.projectId, episodeId: this.currentEpisodeId } });
                 })
             }
             .width('100%')

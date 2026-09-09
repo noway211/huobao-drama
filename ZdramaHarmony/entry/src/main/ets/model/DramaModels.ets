@@ -114,7 +114,8 @@ export interface DramaProject {
   updatedAt: number;
 }
 
-// 剧集实体，隶属于某个短剧项目
+// 剧集实体，隶属于某个短剧项目。成片字段与 Android 多集改造后的 Episode 对齐
+// （成片为每集独立，而非项目级）。
 export interface Episode {
   id: number;
   projectId: number;
@@ -123,6 +124,9 @@ export interface Episode {
   content: string | null;
   scriptContent: string | null;
   status: EpisodeStatus;
+  finalVideoStatus: AssetStatus;
+  finalVideoLocalPath: string | null;
+  finalVideoErrorMessage: string | null;
   createdAt: number;
   updatedAt: number;
 }

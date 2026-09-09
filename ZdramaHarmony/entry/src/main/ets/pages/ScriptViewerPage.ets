@@ -4,6 +4,7 @@ import { Theme } from '../common/Theme';
 
 interface ViewerParams {
   projectId: number;
+  episodeId?: number;
 }
 
 @Entry
@@ -13,23 +14,29 @@ struct ScriptViewerPage {
   @State script: string = '';
   @State loading: boolean = true;
   private projectId: number = 0;
+  private episodeId: number = 0;
 
-  // 组件即将出现：从路由参数中读取项目 ID
+  // 组件即将出现：从路由参数中读取项目 ID 与剧集 ID（后者缺省时回退首集）
   aboutToAppear(): void {
     const params = router.getParams() as ViewerParams;
     if (params && params.projectId) {
       this.projectId = params.projectId;
     }
+    if (params && params.episodeId) {
+      this.episodeId = params.episodeId;
+    }
   }
 
-  // 页面显示时加载脚本内容：优先剧集脚本，无则回退到项目脚本，均无则提示并返回
+  // 页面显示时加载脚本内容：优先指定集脚本，无则回退到项目脚本，均无则提示并返回
   async onPageShow(): Promise<void> {
     this.loading = true;
     const project = await UseCases.getProject(this.projectId);
-    const episode = await UseCases.getEpisode(this.projectId);
+    const episode = this.episodeId > 0
+      ? await UseCases.getEpisodeById(this.episodeId)
+      : await UseCases.getEpisode(this.projectId);
     this.title = project?.title ?? '脚本';
 
-    // 优先使用剧集脚本内容，回退到项目生成的脚本
+    // 优先使用指定集脚本内容，回退到项目生成的脚本
     // Prefer episode.scriptContent, fall back to project.generatedScript.
     const fromEpisode = episode?.scriptContent;
     const fromProject = project?.generatedScript;

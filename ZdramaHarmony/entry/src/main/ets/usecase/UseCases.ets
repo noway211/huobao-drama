@@ -112,9 +112,55 @@ export class UseCases {
     return UseCases.repo.getProject(projectId);
   }
 
-  // 获取项目对应的剧集
+  // 获取项目对应的首个剧集（兼容旧调用，多集请用 getEpisodes）
   static getEpisode(projectId: number): Promise<Episode | null> {
     return UseCases.repo.getEpisodeForProject(projectId);
+  }
+
+  // 获取项目的全部剧集（按集号升序）
+  static getEpisodes(projectId: number): Promise<Episode[]> {
+    return UseCases.repo.getEpisodes(projectId);
+  }
+
+  // 按 id 获取单个剧集，不存在返回 null
+  static getEpisodeById(episodeId: number): Promise<Episode | null> {
+    return UseCases.repo.getEpisodeById(episodeId);
+  }
+
+  /** 创建新剧集：集号自动取当前最大 +1，返回新集 id。 */
+  static createEpisode(projectId: number, title: string, content: string): Promise<number> {
+    return UseCases.repo.createEpisodeForProject(projectId, title, content);
+  }
+
+  /** 删除单集（级联清理该集分镜文件与成片），返回是否删除成功。 */
+  static deleteEpisode(episodeId: number): Promise<boolean> {
+    return UseCases.repo.deleteEpisode(episodeId);
+  }
+
+  /** 软删除某集成片：清状态 + 删本地文件。 */
+  static deleteEpisodeFinalVideo(episodeId: number): Promise<boolean> {
+    return UseCases.repo.deleteEpisodeFinalVideo(episodeId);
+  }
+
+  /** 写入单集成片生成结果。 */
+  static updateEpisodeFinalVideo(
+    episodeId: number,
+    finalVideoStatus: AssetStatus,
+    finalVideoLocalPath: string | null,
+    finalVideoErrorMessage: string | null
+  ): Promise<boolean> {
+    return UseCases.repo.updateEpisodeFinalVideo(
+      episodeId, finalVideoStatus, finalVideoLocalPath, finalVideoErrorMessage);
+  }
+
+  // 获取某集的全部小分镜（按 shotNumber 升序）
+  static getStoryboardsForEpisode(projectId: number, episodeId: number): Promise<StoryboardShot[]> {
+    return UseCases.repo.getStoryboardsForEpisode(projectId, episodeId);
+  }
+
+  /** 启动时执行一次：把 episode_id 为 NULL 的存量分镜回填到所属项目第一集。 */
+  static backfillStoryboardEpisodeIds(): Promise<void> {
+    return UseCases.repo.backfillStoryboardEpisodeIds();
   }
 
   // 获取项目的全部分镜
@@ -180,11 +226,27 @@ export class UseCases {
   }
 
   /**
+   * 批量清空**某集**下所有"已生成分镜图片"（DB 软删除）。语义与
+   * bulkClearShotImagesForProject 相同，只是限定 episode_id（多集下「全部删除」按集隔离）。
+   */
+  static async bulkClearShotImagesForEpisode(projectId: number, episodeId: number): Promise<string[]> {
+    return UseCases.repo.bulkClearShotImagesForEpisode(projectId, episodeId);
+  }
+
+  /**
    * 批量清空某项目下所有"已生成分镜视频"（DB 软删除）。返回被清掉的本地文件路径列表，
    * 调用方需自行 unlink 沙盒文件。语义见 StoryboardLocalDataSource.bulkClearShotVideosForProject。
    */
   static async bulkClearShotVideosForProject(projectId: number): Promise<string[]> {
     return UseCases.repo.bulkClearShotVideosForProject(projectId);
+  }
+
+  /**
+   * 批量清空**某集**下所有"已生成分镜视频"（DB 软删除）。语义与
+   * bulkClearShotVideosForProject 相同，只是限定 episode_id（多集下「全部删除」按集隔离）。
+   */
+  static async bulkClearShotVideosForEpisode(projectId: number, episodeId: number): Promise<string[]> {
+    return UseCases.repo.bulkClearShotVideosForEpisode(projectId, episodeId);
   }
 
   /** 更新项目的成片资产（用于软删除：传 PENDING + nulls,保留项目 status / currentStage）。 */
@@ -257,11 +319,15 @@ export class UseCases {
     }
   }
 
-  /** GenerateProjectScriptUseCase：根据项目提示词生成剧本，并同步更新项目与剧集状态。 */
-  static async generateScript(projectId: number, settings: AgnesSettings): Promise<TextResult> {
+  /** GenerateProjectScriptUseCase：根据项目提示词为目标剧集生成剧本（结果写入该集，并镜像到 project.generatedScript 兼容旧读取方）。 */
+  static async generateScript(projectId: number, episodeId: number, settings: AgnesSettings): Promise<TextResult> {
     const project = await UseCases.repo.getProject(projectId);
     if (!project) {
       return { ok: false, value: '', error: 'Project not found' };
+    }
+    const episode = await UseCases.repo.getEpisodeById(episodeId);
+    if (!episode) {
+      return { ok: false, value: '', error: 'Episode not found' };
     }
 
     await UseCases.repo.updateProjectTextResult(
@@ -269,22 +335,21 @@ export class UseCases {
 
     const result = await UseCases.text.generateScript(settings, project);
     if (result.ok) {
+      await UseCases.repo.updateEpisodeScriptContent(episode.id, result.value, EpisodeStatus.COMPLETED);
       await UseCases.repo.updateProjectTextResult(
         projectId, ProjectStatus.COMPLETED, GenerationStage.TEXT, result.value, null);
-      const episode = await UseCases.repo.getEpisodeForProject(projectId);
-      if (episode) {
-        await UseCases.repo.updateEpisodeScriptContent(episode.id, result.value, EpisodeStatus.COMPLETED);
-      }
     } else {
+      await UseCases.repo.updateEpisodeScriptContent(
+        episode.id, episode.scriptContent ?? '', EpisodeStatus.FAILED);
       await UseCases.repo.updateProjectTextResult(
-        projectId, ProjectStatus.FAILED, GenerationStage.TEXT, project.generatedScript, result.error);
+        projectId, ProjectStatus.FAILED, GenerationStage.TEXT, episode.scriptContent ?? project.generatedScript, result.error);
     }
     return result;
   }
 
-  /** RewriteEpisodeScriptUseCase：将 episode.content 改写为剧本，并同步更新项目与剧集状态。 */
-  static async rewriteScript(projectId: number, settings: AgnesSettings): Promise<TextResult> {
-    const episode = await UseCases.repo.getEpisodeForProject(projectId);
+  /** RewriteEpisodeScriptUseCase：将目标剧集的 content 改写为剧本，并同步更新项目与剧集状态。 */
+  static async rewriteScript(projectId: number, episodeId: number, settings: AgnesSettings): Promise<TextResult> {
+    const episode = await UseCases.repo.getEpisodeById(episodeId) ?? await UseCases.repo.getEpisodeForProject(projectId);
     if (!episode) {
       return { ok: false, value: '', error: 'Episode not found for project' };
     }
@@ -312,15 +377,15 @@ export class UseCases {
     return result;
   }
 
-  /** GenerateStoryboardsUseCase：根据剧本文本生成分镜并保存到数据库。 */
-  static async generateStoryboards(projectId: number, settings: AgnesSettings): Promise<TextResult> {
+  /** GenerateStoryboardsUseCase：根据目标剧集剧本生成该集分镜并保存到数据库。 */
+  static async generateStoryboards(projectId: number, episodeId: number, settings: AgnesSettings): Promise<TextResult> {
     const project = await UseCases.repo.getProject(projectId);
     if (!project) {
       return { ok: false, value: '', error: 'Project not found' };
     }
 
-    // 优先读剧集脚本，无则回退到项目脚本
-    const episode = await UseCases.repo.getEpisodeForProject(projectId);
+    // 优先读目标剧集脚本，无则回退到项目脚本
+    const episode = await UseCases.repo.getEpisodeById(episodeId) ?? await UseCases.repo.getEpisodeForProject(projectId);
     const script = episode?.scriptContent ?? project.generatedScript;
     if (!script || script.trim().length === 0) {
       return { ok: false, value: '', error: '请先创作或改写脚本' };
@@ -333,7 +398,7 @@ export class UseCases {
     if (result.ok) {
       const shots = UseCases.storyboard.parseShots(result.value);
       if (shots.length > 0) {
-        await UseCases.repo.replaceStoryboards(projectId, shots);
+        await UseCases.repo.replaceStoryboardsForEpisode(projectId, episodeId, shots);
       }
       await UseCases.repo.updateProjectTextResult(
         projectId, ProjectStatus.COMPLETED, GenerationStage.STORYBOARD, project.generatedScript, null);
@@ -344,9 +409,10 @@ export class UseCases {
     return result;
   }
 
-  /** GenerateStoryboardImagesUseCase：为每个分镜的 imagePrompt 生成图片并下载到本地。 */
+  /** GenerateStoryboardImagesUseCase：为目标剧集每个分镜的 imagePrompt 生成图片并下载到本地。 */
   static async generateStoryboardImages(
     projectId: number,
+    episodeId: number,
     settings: AgnesSettings,
     onProgress?: GenerationProgressCallback
   ): Promise<TextResult> {
@@ -357,7 +423,7 @@ export class UseCases {
         return { ok: false, value: '', error: 'Project not found' };
       }
 
-      const shots = await UseCases.repo.getStoryboards(projectId);
+      const shots = await UseCases.repo.getStoryboardsForEpisode(projectId, episodeId);
       if (shots.length === 0) {
         return { ok: false, value: '', error: '请先生成分镜' };
       }
@@ -469,9 +535,10 @@ export class UseCases {
     }
   }
 
-  /** GenerateStoryboardVideosUseCase：为每个分镜的 videoPrompt 生成视频并下载到本地。 */
+  /** GenerateStoryboardVideosUseCase：为目标剧集每个分镜的 videoPrompt 生成视频并下载到本地。 */
   static async generateStoryboardVideos(
     projectId: number,
+    episodeId: number,
     settings: AgnesSettings,
     onProgress?: GenerationProgressCallback
   ): Promise<TextResult> {
@@ -482,7 +549,7 @@ export class UseCases {
       return { ok: false, value: '', error: 'Project not found' };
     }
 
-    const shots = await UseCases.repo.getStoryboards(projectId);
+    const shots = await UseCases.repo.getStoryboardsForEpisode(projectId, episodeId);
     if (shots.length === 0) {
       return { ok: false, value: '', error: '请先生成分镜' };
     }
@@ -579,14 +646,14 @@ export class UseCases {
   }
   }
 
-  /** ExtractCharactersUseCase：从剧本文本中提取角色信息。参照 Web 版 extractor agent 流程。 */
-  static async extractCharacters(projectId: number, settings: AgnesSettings): Promise<TextResult> {
+  /** ExtractCharactersUseCase：从目标剧集剧本中提取角色信息。参照 Web 版 extractor agent 流程。 */
+  static async extractCharacters(projectId: number, episodeId: number, settings: AgnesSettings): Promise<TextResult> {
     const project = await UseCases.repo.getProject(projectId);
     if (!project) {
       return { ok: false, value: '', error: 'Project not found' };
     }
 
-    const episode = await UseCases.repo.getEpisodeForProject(projectId);
+    const episode = await UseCases.repo.getEpisodeById(episodeId) ?? await UseCases.repo.getEpisodeForProject(projectId);
     const script = episode?.scriptContent ?? project.generatedScript;
     if (!script || script.trim().length === 0) {
       return { ok: false, value: '', error: '请先创作或改写脚本' };
@@ -965,9 +1032,14 @@ ${script}${existingHint}`;
     }
   }
 
-  /** ComposeFinalVideoUseCase：将全部分镜视频合成为一个成片 MP4。 */
+  /**
+   * ComposeFinalVideoUseCase：将目标剧集的全部分镜视频合成为一个成片 MP4。
+   * 每集独立成片（对齐 Android）：输出到 generated/<projectId>/episode_<episodeId>/final_video.mp4，
+   * 结果与状态写入该集 epiisode 的 3 个成片列（final_video_*），项目级 final_video_* 不再更新。
+   */
   static async composeFinalVideo(
     projectId: number,
+    episodeId: number,
     settings?: AgnesSettings,
     onProgress?: GenerationProgressCallback
   ): Promise<TextResult> {
@@ -975,8 +1047,12 @@ ${script}${existingHint}`;
     if (!project) {
       return { ok: false, value: '', error: '项目不存在' };
     }
+    const episode = await UseCases.repo.getEpisodeById(episodeId);
+    if (!episode) {
+      return { ok: false, value: '', error: '剧集不存在' };
+    }
 
-    const shots = await UseCases.repo.getStoryboards(projectId);
+    const shots = await UseCases.repo.getStoryboardsForEpisode(projectId, episodeId);
     if (shots.length === 0) {
       return { ok: false, value: '', error: '请先生成分镜' };
     }
@@ -987,42 +1063,51 @@ ${script}${existingHint}`;
     );
     if (missing) {
       const msg = '请先生成并下载全部分镜视频后再合成成片';
-      await UseCases.repo.updateProjectFinalVideo(
-        projectId, ProjectStatus.FAILED, GenerationStage.FINAL_VIDEO,
-        AssetStatus.FAILED, null, msg, msg);
+      await UseCases.repo.updateProjectTextResult(
+        projectId, ProjectStatus.FAILED, GenerationStage.FINAL_VIDEO, project.generatedScript, msg);
+      await UseCases.repo.updateEpisodeFinalVideo(episodeId, AssetStatus.FAILED, null, msg);
       return { ok: false, value: '', error: msg };
     }
 
-    hilog.info(DOMAIN, TAG, 'composeFinalVideo start: project=%{public}d shots=%{public}d',
-      projectId, sorted.length);
+    hilog.info(DOMAIN, TAG, 'composeFinalVideo start: project=%{public}d episode=%{public}d shots=%{public}d',
+      projectId, episodeId, sorted.length);
 
-    await UseCases.repo.updateProjectFinalVideo(
-      projectId, ProjectStatus.PROCESSING, GenerationStage.FINAL_VIDEO,
-      AssetStatus.PROCESSING, null, null, null);
+    await UseCases.repo.updateProjectTextResult(
+      projectId, ProjectStatus.PROCESSING, GenerationStage.FINAL_VIDEO, project.generatedScript, null);
+    await UseCases.repo.updateEpisodeFinalVideo(
+      episodeId, AssetStatus.PROCESSING, episode.finalVideoLocalPath, null);
 
     onProgress?.(1, 1, sorted[0].shotNumber, '合成成片');
 
     const filesDir = AppContext.get().filesDir;
-    const outputPath = `${filesDir}/generated/${projectId}/final_video.mp4`;
+    const outputDir = `${filesDir}/generated/${projectId}/episode_${episodeId}`;
+    const outputPath = `${outputDir}/final_video.mp4`;
     const inputPaths = sorted
       .map(s => s.videoLocalPath)
       .filter((p) => !!p && p.length > 0) as string[];
 
     let finalPath = '';
     try {
+      // 确保成片输出目录存在；覆盖合成前清理旧文件，避免残留长度错误的成片
+      fileIo.mkdirSync(outputDir, true);
+      try {
+        fileIo.unlinkSync(outputPath);
+      } catch (e) {
+        // 旧成片不存在时忽略
+      }
       finalPath = await UseCases.mp4Composer.compose(inputPaths, outputPath);
     } catch (e) {
       const msg = `视频合成失败：${(e as Error).message ?? String(e)}`;
       hilog.error(DOMAIN, TAG, 'composeFinalVideo failed: %{public}s', msg);
-      await UseCases.repo.updateProjectFinalVideo(
-        projectId, ProjectStatus.FAILED, GenerationStage.FINAL_VIDEO,
-        AssetStatus.FAILED, null, msg, msg);
+      await UseCases.repo.updateProjectTextResult(
+        projectId, ProjectStatus.FAILED, GenerationStage.FINAL_VIDEO, project.generatedScript, msg);
+      await UseCases.repo.updateEpisodeFinalVideo(episodeId, AssetStatus.FAILED, null, msg);
       return { ok: false, value: '', error: msg };
     }
 
-    await UseCases.repo.updateProjectFinalVideo(
-      projectId, ProjectStatus.COMPLETED, GenerationStage.FINAL_VIDEO,
-      AssetStatus.COMPLETED, finalPath, null, null);
+    await UseCases.repo.updateProjectTextResult(
+      projectId, ProjectStatus.COMPLETED, GenerationStage.FINAL_VIDEO, project.generatedScript, null);
+    await UseCases.repo.updateEpisodeFinalVideo(episodeId, AssetStatus.COMPLETED, finalPath, null);
     hilog.info(DOMAIN, TAG, 'composeFinalVideo OK: path=%{public}s', finalPath);
     return { ok: true, value: finalPath, error: '' };
   }

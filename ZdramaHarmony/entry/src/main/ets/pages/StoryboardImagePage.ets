@@ -7,6 +7,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 
 interface ImagePageParams {
   projectId: number;
+  episodeId?: number;
 }
 
 // 全屏预览手势状态缩放因子取值范围
@@ -39,12 +40,16 @@ struct StoryboardImagePage {
   private baseOffsetX: number = 0;
   private baseOffsetY: number = 0;
   private projectId: number = 0;
+  private episodeId: number = 0;
 
-  // 组件即将出现：从路由参数中读取项目 ID
+  // 组件即将出现：从路由参数中读取项目 ID 与剧集 ID（后者缺省时回退项目级分镜）
   aboutToAppear(): void {
     const params = router.getParams() as ImagePageParams;
     if (params && params.projectId) {
       this.projectId = params.projectId;
+    }
+    if (params && params.episodeId) {
+      this.episodeId = params.episodeId;
     }
   }
 
@@ -53,7 +58,9 @@ struct StoryboardImagePage {
     this.loading = true;
     const project = await UseCases.getProject(this.projectId);
     this.title = project?.title ?? '图片查看';
-    const all = await UseCases.getStoryboards(this.projectId);
+    const all = this.episodeId > 0
+      ? await UseCases.getStoryboardsForEpisode(this.projectId, this.episodeId)
+      : await UseCases.getStoryboards(this.projectId);
 
     const completed: StoryboardShot[] = [];
     for (const s of all) {
@@ -142,7 +149,9 @@ struct StoryboardImagePage {
       this.clearingAll = true;
       try {
         // 1) 一次性 SQL UPDATE 清 DB（只动 COMPLETED 行），返回被清掉的本地路径列表
-        const paths: string[] = await UseCases.bulkClearShotImagesForProject(this.projectId);
+        const paths: string[] = this.episodeId > 0
+          ? await UseCases.bulkClearShotImagesForEpisode(this.projectId, this.episodeId)
+          : await UseCases.bulkClearShotImagesForProject(this.projectId);
         // 2) 容错 unlink 每个本地文件（沙盒里文件可能已不在，不应阻塞）
         let deletedFiles: number = 0;
         for (const p of paths) {

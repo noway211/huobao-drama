@@ -24,6 +24,11 @@ export default class EntryAbility extends UIAbility {
       .catch((e: Object) => {
         hilog.error(DOMAIN, TAG, 'orphan reset failed: %{public}s', JSON.stringify(e));
       });
+    // 多集改造前创建的分镜 episode_id 可能为 NULL（按集查询会漏），启动时兜底回填一次。
+    UseCases.backfillStoryboardEpisodeIds()
+      .catch((e: Object) => {
+        hilog.error(DOMAIN, TAG, 'backfill episode ids failed: %{public}s', JSON.stringify(e));
+      });
   }
 
   // Ability 销毁时回调

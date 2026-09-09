@@ -7,6 +7,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 
 interface VideoPageParams {
   projectId: number;
+  episodeId?: number;
 }
 
 /**
@@ -26,12 +27,16 @@ struct VideoViewerPage {
   @State fullScreenLabel: string = '';
 
   private projectId: number = 0;
+  private episodeId: number = 0;
 
-  // 组件即将出现：从路由参数中读取项目 ID
+  // 组件即将出现：从路由参数中读取项目 ID 与剧集 ID（后者缺省时回退项目级分镜）
   aboutToAppear(): void {
     const params = router.getParams() as VideoPageParams;
     if (params && params.projectId) {
       this.projectId = params.projectId;
+    }
+    if (params && params.episodeId) {
+      this.episodeId = params.episodeId;
     }
   }
 
@@ -40,7 +45,9 @@ struct VideoViewerPage {
     this.loading = true;
     const project = await UseCases.getProject(this.projectId);
     this.title = project?.title ?? '视频查看';
-    const all = await UseCases.getStoryboards(this.projectId);
+    const all = this.episodeId > 0
+      ? await UseCases.getStoryboardsForEpisode(this.projectId, this.episodeId)
+      : await UseCases.getStoryboards(this.projectId);
 
     const completed: StoryboardShot[] = [];
     for (const s of all) {
@@ -145,7 +152,9 @@ struct VideoViewerPage {
       this.clearingAll = true;
       try {
         // 1) 一次性 SQL UPDATE 清 DB（只动 COMPLETED 行），返回被清掉的本地路径列表
-        const paths: string[] = await UseCases.bulkClearShotVideosForProject(this.projectId);
+        const paths: string[] = this.episodeId > 0
+          ? await UseCases.bulkClearShotVideosForEpisode(this.projectId, this.episodeId)
+          : await UseCases.bulkClearShotVideosForProject(this.projectId);
         // 2) 容错 unlink 每个本地文件（沙盒里文件可能已不在，不应阻塞）
         let deletedFiles: number = 0;
         for (const p of paths) {

@@ -8,6 +8,7 @@ import { AlbumSaver } from '../service/AlbumSaver';
 
 interface FinalVideoPageParams {
   projectId: number;
+  episodeId?: number;
 }
 
 /**
@@ -31,8 +32,9 @@ struct FinalVideoPage {
   };
 
   private projectId: number = 0;
+  private episodeId: number = 0;
 
-  // 组件即将出现：从路由参数中读取项目 ID
+  // 组件即将出现：从路由参数中读取项目 ID 与剧集 ID（后者缺省时回退项目级成片）
   aboutToAppear(): void {
     const params = router.getParams() as FinalVideoPageParams;
     if (!params || !params.projectId) {
@@ -41,6 +43,9 @@ struct FinalVideoPage {
       return;
     }
     this.projectId = params.projectId;
+    if (params.episodeId) {
+      this.episodeId = params.episodeId;
+    }
     this.loadFinalVideo();
   }
 
@@ -52,13 +57,18 @@ struct FinalVideoPage {
         return;
       }
       this.title = project.title;
-      if (!project.finalVideoLocalPath || project.finalVideoLocalPath.length === 0) {
+      // 多集下读当前集成片；episodeId 缺省时回退项目级字段（旧数据兼容）
+      const episode = this.episodeId > 0 ? await UseCases.getEpisodeById(this.episodeId) : null;
+      const localPath = episode
+        ? (episode.finalVideoLocalPath ?? project.finalVideoLocalPath)
+        : project.finalVideoLocalPath;
+      if (!localPath || localPath.length === 0) {
         this.errorText = '成片视频不存在';
         return;
       }
-      this.videoSrc = project.finalVideoLocalPath.startsWith('file://')
-        ? project.finalVideoLocalPath
-        : `file://${project.finalVideoLocalPath}`;
+      this.videoSrc = localPath.startsWith('file://')
+        ? localPath
+        : `file://${localPath}`;
     } catch (e) {
       this.errorText = `加载成片失败：${(e as Error).message ?? String(e)}`;
     } finally {
@@ -79,7 +89,23 @@ struct FinalVideoPage {
       if (r.index !== 1) {
         return;
       }
-      // 重新读取项目以拿到当前 status / currentStage / finalVideoLocalPath
+      // 多集：走剧集级删除（内部完成 unlink + 置 PENDING）
+      if (this.episodeId > 0) {
+        try {
+          const ok = await UseCases.deleteEpisodeFinalVideo(this.episodeId);
+          if (!ok) {
+            promptAction.showToast({ message: '删除失败: 剧集不存在' });
+            return;
+          }
+        } catch (e) {
+          promptAction.showToast({ message: '删除失败:' + ((e as Error).message ?? String(e)) });
+          return;
+        }
+        promptAction.showToast({ message: '已删除' });
+        await this.loadFinalVideo();
+        return;
+      }
+      // 兼容旧路径：重新读取项目以拿到当前 status / currentStage / finalVideoLocalPath
       let project: DramaProject | null = null;
       try {
         project = await UseCases.getProject(this.projectId);

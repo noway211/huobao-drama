@@ -2,6 +2,8 @@ import { ProjectLocalDataSource } from './ProjectLocalDataSource';
 import { EpisodeLocalDataSource } from './EpisodeLocalDataSource';
 import { StoryboardLocalDataSource } from './StoryboardLocalDataSource';
 import { CharacterLocalDataSource } from './CharacterLocalDataSource';
+import { fileIo } from '@kit.CoreFileKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
   DramaProject,
   Episode,
@@ -12,6 +14,24 @@ import {
   Character,
   AssetStatus
 } from '../model/DramaModels';
+
+// 删除单集时清理本地文件的日志 tag
+const DOMAIN = 0x0001;
+const TAG = 'DramaRepository';
+
+// 删除本地文件（容错：不存在或失败均不抛出）
+function unlinkIfExists(path: string | null, what: string): void {
+  if (!path || path.trim().length === 0) {
+    return;
+  }
+  try {
+    fileIo.unlinkSync(path);
+  } catch (e) {
+    // 文件可能已不存在，容错
+    hilog.warn(DOMAIN, TAG, 'unlink %{public}s failed for %{public}s: %{public}s',
+      what, path, JSON.stringify(e));
+  }
+}
 
 /**
  * Ports com.huobao.zdrama.data.repository.DramaRepository (MVP subset).
@@ -72,14 +92,48 @@ export class DramaRepository {
     return this.episodes.getEpisodeForProject(projectId);
   }
 
-  // 全量替换项目的分镜记录，先删后插
+  // 按 id 获取单个剧集，不存在返回 null
+  getEpisodeById(episodeId: number): Promise<Episode | null> {
+    return this.episodes.getEpisodeById(episodeId);
+  }
+
+  // 获取项目的全部剧集（按集号升序），多集支持的主查询路径
+  getEpisodes(projectId: number): Promise<Episode[]> {
+    return this.episodes.getEpisodes(projectId);
+  }
+
+  // 全量替换项目的分镜记录，先删后插（项目级视图，兼容旧调用）
   replaceStoryboards(projectId: number, shots: StoryboardShot[]): Promise<void> {
     return this.storyboards.replaceStoryboards(projectId, shots);
   }
 
-  // 获取项目的全部分镜（按 shotNumber 升序）
+  // 按集全量替换分镜记录，先删后插（多集支持的主写入路径）
+  replaceStoryboardsForEpisode(
+    projectId: number,
+    episodeId: number,
+    shots: StoryboardShot[]
+  ): Promise<void> {
+    return this.storyboards.replaceStoryboardsForEpisode(projectId, episodeId, shots);
+  }
+
+  // 获取项目的全部分镜（按 shotNumber 升序，项目级视图）
   getStoryboards(projectId: number): Promise<StoryboardShot[]> {
     return this.storyboards.getStoryboards(projectId);
+  }
+
+  // 获取某集的全部小分镜（按 shotNumber 升序，多集支持的主查询路径）
+  getStoryboardsForEpisode(projectId: number, episodeId: number): Promise<StoryboardShot[]> {
+    return this.storyboards.getStoryboardsForEpisode(projectId, episodeId);
+  }
+
+  // 删除某集的全部分镜记录（删除单集时的级联清理）
+  deleteStoryboardsForEpisode(projectId: number, episodeId: number): Promise<number> {
+    return this.storyboards.deleteStoryboardsForEpisode(projectId, episodeId);
+  }
+
+  /** 历史数据修复：episode_id 为 NULL 的存量分镜回填到所属项目第一集。 */
+  backfillStoryboardEpisodeIds(): Promise<void> {
+    return this.storyboards.backfillEpisodeIds();
   }
 
   // 更新单个分镜的图片提示词
@@ -129,22 +183,37 @@ export class DramaRepository {
     return this.storyboards.bulkClearShotImagesForProject(projectId);
   }
 
+  // 批量软删除**某集**下所有已生成分镜图片：DB 一次性 UPDATE，返回被清掉的 imageLocalPath 列表
+  async bulkClearShotImagesForEpisode(projectId: number, episodeId: number): Promise<string[]> {
+    return this.storyboards.bulkClearShotImagesForEpisode(projectId, episodeId);
+  }
+
   // 批量软删除某项目下所有已生成分镜视频：DB 一次性 UPDATE，返回被清掉的 videoLocalPath 列表
   async bulkClearShotVideosForProject(projectId: number): Promise<string[]> {
     return this.storyboards.bulkClearShotVideosForProject(projectId);
   }
 
-  // 为项目创建一集（默认第 1 集、DRAFT 草稿状态），返回新剧集 id
+  // 批量软删除**某集**下所有已生成分镜视频：DB 一次性 UPDATE，返回被清掉的 videoLocalPath 列表
+  async bulkClearShotVideosForEpisode(projectId: number, episodeId: number): Promise<string[]> {
+    return this.storyboards.bulkClearShotVideosForEpisode(projectId, episodeId);
+  }
+
+  // 为项目创建一集（集号取当前最大 +1，DRAFT 草稿状态），返回新剧集 id
   async createEpisodeForProject(projectId: number, title: string, content: string): Promise<number> {
     const now = Date.now();
+    const episodes = await this.episodes.getEpisodes(projectId);
+    const nextNumber = episodes.length === 0 ? 1 : (episodes[episodes.length - 1].episodeNumber + 1);
     const episode: Episode = {
       id: 0,
       projectId,
-      episodeNumber: 1,
+      episodeNumber: nextNumber,
       title,
       content,
       scriptContent: null,
       status: EpisodeStatus.DRAFT,
+      finalVideoStatus: AssetStatus.PENDING,
+      finalVideoLocalPath: null,
+      finalVideoErrorMessage: null,
       createdAt: now,
       updatedAt: now
     };
@@ -165,6 +234,63 @@ export class DramaRepository {
   async updateEpisodeContent(episodeId: number, content: string): Promise<boolean> {
     const rows = await this.episodes.updateEpisodeContent(episodeId, content);
     return rows > 0;
+  }
+
+  // 更新单集成片生成结果（状态、本地路径、错误信息），返回是否有行被更新
+  async updateEpisodeFinalVideo(
+    episodeId: number,
+    finalVideoStatus: AssetStatus,
+    finalVideoLocalPath: string | null,
+    finalVideoErrorMessage: string | null
+  ): Promise<boolean> {
+    const rows = await this.episodes.updateEpisodeFinalVideo(
+      episodeId, finalVideoStatus, finalVideoLocalPath, finalVideoErrorMessage);
+    return rows > 0;
+  }
+
+  /**
+   * 删除单集：级联删除该集分镜（含其图片/视频文件）、成片与成片目录，再删集记录。
+   * 对齐 Android DramaRepository.deleteEpisode。
+   */
+  async deleteEpisode(episodeId: number): Promise<boolean> {
+    const episode = await this.episodes.getEpisodeById(episodeId);
+    if (!episode) {
+      return false;
+    }
+    // 分镜媒体按 generated/<projectId>/shot_<id>_* 平铺存放，不在成片目录内：
+    // 必须在删除分镜行之前先取路径，否则行删掉后再也找不到这些文件。
+    const shots = await this.storyboards.getStoryboardsForEpisode(episode.projectId, episodeId);
+    for (const shot of shots) {
+      unlinkIfExists(shot.imageLocalPath, `shot image #${shot.id}`);
+      unlinkIfExists(shot.videoLocalPath, `shot video #${shot.id}`);
+    }
+    await this.storyboards.deleteStoryboardsForEpisode(episode.projectId, episodeId);
+    unlinkIfExists(episode.finalVideoLocalPath, `episode final video #${episodeId}`);
+    const dbOk = (await this.episodes.deleteEpisode(episodeId)) > 0;
+    // 清理该集成片目录（此时目录内文件已删，rmdirSync 兜底清掉中间产物如 concat_list.txt）
+    if (episode.finalVideoLocalPath && episode.finalVideoLocalPath.trim().length > 0) {
+      const dir = episode.finalVideoLocalPath.substring(0, episode.finalVideoLocalPath.lastIndexOf('/'));
+      if (dir.length > 0) {
+        try {
+          fileIo.rmdirSync(dir);
+        } catch (e) {
+          hilog.warn(DOMAIN, TAG, 'delete episode dir failed for #%{public}d: %{public}s',
+            episodeId, JSON.stringify(e));
+        }
+      }
+    }
+    return dbOk;
+  }
+
+  /** 软删除某集成片：DB 清状态（保留成片本地路径便于失败提示）+ 删本地文件。 */
+  async deleteEpisodeFinalVideo(episodeId: number): Promise<boolean> {
+    const episode = await this.episodes.getEpisodeById(episodeId);
+    if (!episode) {
+      return false;
+    }
+    unlinkIfExists(episode.finalVideoLocalPath, `episode final video #${episodeId}`);
+    return (await this.episodes.updateEpisodeFinalVideo(
+      episodeId, AssetStatus.PENDING, null, null)) > 0;
   }
 
   /** 级联删除：先删分镜和剧集和角色，再删项目行。 */
