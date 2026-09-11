@@ -242,6 +242,14 @@ class DramaRepository(context: Context) {
         characterLocalDataSource.replaceCharacters(projectId, characters)
     }
 
+    /**
+     * 增量写入角色：同名已有行 UPDATE（保留 id/立绘），新角色 INSERT。
+     * 本集未提到的已有角色不删除。对齐 backend save_dedup_characters。
+     */
+    suspend fun upsertCharacters(projectId: Long, characters: List<Character>) = withContext(Dispatchers.IO) {
+        characterLocalDataSource.upsertCharacters(projectId, characters)
+    }
+
     suspend fun getCharacters(projectId: Long): List<Character> = withContext(Dispatchers.IO) {
         characterLocalDataSource.getCharacters(projectId)
     }

@@ -53,7 +53,10 @@ function mapRow(rs: relationalStore.ResultSet): Character {
 
 /** 角色数据本地数据源，参照 StoryboardLocalDataSource 模式。 */
 export class CharacterLocalDataSource {
-  // 全量替换项目的角色记录：删除旧记录后批量插入新记录
+  /**
+   * 全量替换项目的角色记录：删除旧记录后批量插入新记录。
+   * 仅用于需要清空重建的场景（当前提取角色已改走 upsertCharacters）。
+   */
   async replaceCharacters(projectId: number, characters: Character[]): Promise<void> {
     const store = await DramaDatabase.getStore();
     // 先删除该项目的所有旧角色
@@ -80,6 +83,48 @@ export class CharacterLocalDataSource {
         'updated_at': now
       };
       await store.insert(TABLE, values);
+    }
+  }
+
+  /**
+   * 增量写入角色（对齐 backend save_dedup_characters / Android upsertCharacters）：
+   * - id > 0：UPDATE 文字字段，保留主键 / 立绘 / createdAt / episodeId
+   * - id == 0：INSERT 新行
+   * 本集未提到的已有角色**不删除**。
+   */
+  async upsertCharacters(projectId: number, characters: Character[]): Promise<void> {
+    const store = await DramaDatabase.getStore();
+    const now = Date.now();
+    for (const ch of characters) {
+      if (ch.id > 0) {
+        const values: relationalStore.ValuesBucket = {
+          'role': ch.role,
+          'description': ch.description,
+          'appearance': ch.appearance,
+          'personality': ch.personality,
+          'updated_at': now
+        };
+        const predicates = new relationalStore.RdbPredicates(TABLE);
+        predicates.equalTo('id', ch.id);
+        await store.update(values, predicates);
+      } else {
+        const values: relationalStore.ValuesBucket = {
+          'project_id': projectId,
+          'episode_id': ch.episodeId,
+          'name': ch.name,
+          'role': ch.role,
+          'description': ch.description,
+          'appearance': ch.appearance,
+          'personality': ch.personality,
+          'image_status': ch.imageStatus,
+          'image_url': ch.imageUrl,
+          'image_local_path': ch.imageLocalPath,
+          'image_error_message': ch.imageErrorMessage,
+          'created_at': now,
+          'updated_at': now
+        };
+        await store.insert(TABLE, values);
+      }
     }
   }
 

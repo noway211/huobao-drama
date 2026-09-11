@@ -123,8 +123,9 @@ $script$existingHint"""
             return Result.failure(IllegalStateException("未从剧本中提取到角色"))
         }
 
-        dramaRepository.replaceCharacters(projectId, characters)
-        Log.i(TAG, "extractCharacters: project=$projectId count=${characters.size}")
+        // 增量写入：同名 UPDATE 保留 id/立绘；新角色 INSERT；本集未出现的老角色不删。
+        dramaRepository.upsertCharacters(projectId, characters)
+        Log.i(TAG, "extractCharacters: project=$projectId upserted=${characters.size}")
         return Result.success(characters.size)
     }
 

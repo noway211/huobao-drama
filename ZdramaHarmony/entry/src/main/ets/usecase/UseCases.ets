@@ -759,8 +759,8 @@ ${script}${existingHint}`;
       return { ok: false, value: '', error: '未从剧本中提取到角色' };
     }
 
-    await UseCases.repo.replaceCharacters(projectId, characters);
-    hilog.info(DOMAIN, TAG, 'extractCharacters: project=%{public}d count=%{public}d', projectId, characters.length);
+    await UseCases.repo.upsertCharacters(projectId, characters);
+    hilog.info(DOMAIN, TAG, 'extractCharacters: project=%{public}d upserted=%{public}d', projectId, characters.length);
     return { ok: true, value: `${characters.length}`, error: '' };
   }
 

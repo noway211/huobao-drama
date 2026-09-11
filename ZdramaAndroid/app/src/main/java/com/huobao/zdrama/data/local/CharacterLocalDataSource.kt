@@ -9,6 +9,9 @@ import com.huobao.zdrama.domain.model.Character
 class CharacterLocalDataSource(context: Context) {
     private val database = DramaLocalDatabase(context)
 
+    /**
+     * 全量替换项目角色：先删后插。仅用于需要清空重建的场景（当前提取角色已改走 [upsertCharacters]）。
+     */
     fun replaceCharacters(projectId: Long, characters: List<Character>) {
         val db = database.writableDatabase
         db.beginTransaction()
@@ -24,6 +27,48 @@ class CharacterLocalDataSource(context: Context) {
         } finally {
             db.endTransaction()
         }
+    }
+
+    /**
+     * 增量写入角色（对齐 backend save_dedup_characters）：
+     * - id > 0：UPDATE 文字字段，保留主键 / 立绘 / createdAt（分镜 characterIds 数字绑定不失效）
+     * - id == 0：INSERT 新行
+     * 本集未提到的已有角色**不删除**。
+     */
+    fun upsertCharacters(projectId: Long, characters: List<Character>) {
+        val db = database.writableDatabase
+        db.beginTransaction()
+        try {
+            val now = System.currentTimeMillis()
+            characters.forEach { ch ->
+                val withProject = ch.copy(projectId = projectId, updatedAt = now)
+                if (withProject.id > 0L) {
+                    updateCharacterText(db, withProject)
+                } else {
+                    insertCharacter(db, withProject.copy(createdAt = now))
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** 更新角色文字字段（role/description/appearance/personality），不动立绘 / 主键 / episodeId。 */
+    private fun updateCharacterText(db: android.database.sqlite.SQLiteDatabase, ch: Character) {
+        val values = ContentValues().apply {
+            put(DramaLocalDatabase.COL_CHARACTER_ROLE, ch.role)
+            put(DramaLocalDatabase.COL_CHARACTER_DESCRIPTION, ch.description)
+            put(DramaLocalDatabase.COL_CHARACTER_APPEARANCE, ch.appearance)
+            put(DramaLocalDatabase.COL_CHARACTER_PERSONALITY, ch.personality)
+            put(DramaLocalDatabase.COL_UPDATED_AT, ch.updatedAt)
+        }
+        db.update(
+            DramaLocalDatabase.TABLE_CHARACTERS,
+            values,
+            "${DramaLocalDatabase.COL_ID} = ?",
+            arrayOf(ch.id.toString())
+        )
     }
 
     fun getCharacters(projectId: Long): List<Character> {

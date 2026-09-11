@@ -304,9 +304,17 @@ export class DramaRepository {
 
   // ---------- 角色操作 ----------
 
-  // 全量替换项目的角色记录，先删后插
+  // 全量替换项目的角色记录，先删后插（仅清空重建场景）
   replaceCharacters(projectId: number, characters: Character[]): Promise<void> {
     return this.characters.replaceCharacters(projectId, characters);
+  }
+
+  /**
+   * 增量写入角色：同名已有行 UPDATE（保留 id/立绘），新角色 INSERT。
+   * 本集未提到的已有角色不删除。对齐 backend save_dedup_characters。
+   */
+  upsertCharacters(projectId: number, characters: Character[]): Promise<void> {
+    return this.characters.upsertCharacters(projectId, characters);
   }
 
   // 获取项目的所有角色
