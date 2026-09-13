@@ -14,12 +14,21 @@ class GenerateSingleCharacterImageUseCase(
     private val agnesImageRepository: AgnesImageRepository,
     private val mediaDownloadRepository: MediaDownloadRepository
 ) {
-    suspend fun execute(projectId: Long, characterId: Long, settings: AgnesSettings): Result<String> {
+    suspend fun execute(
+        projectId: Long,
+        characterId: Long,
+        settings: AgnesSettings,
+        forceRegenerate: Boolean = true
+    ): Result<String> {
         val characters = dramaRepository.getCharacters(projectId)
         val ch = characters.firstOrNull { it.id == characterId }
             ?: return Result.failure(IllegalArgumentException("角色不存在"))
 
-        if (ch.imageStatus == AssetStatus.COMPLETED && isExistingLocalFile(ch.imageLocalPath)) {
+        // 角色列表点「生成图片」是显式动作，默认强制重画；批量任务才跳过已完成项。
+        if (!forceRegenerate &&
+            ch.imageStatus == AssetStatus.COMPLETED &&
+            isExistingLocalFile(ch.imageLocalPath)
+        ) {
             Log.i(TAG, "character ${ch.name} image already completed, skip")
             return Result.success(ch.imageLocalPath ?: "")
         }

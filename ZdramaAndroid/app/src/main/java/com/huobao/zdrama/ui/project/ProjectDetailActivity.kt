@@ -54,6 +54,7 @@ class ProjectDetailActivity : AppCompatActivity() {
     private var promptExpanded = false
     private var boundPrompt: String? = null
     private var cachedCharacterCount: Int = 0
+    private var cachedHasCompletedCharacterImages: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -140,23 +141,25 @@ class ProjectDetailActivity : AppCompatActivity() {
                 val episode = loadedEpisodes.firstOrNull { it.id == currentEpisodeId }
                 val characters = getCharactersUseCase.execute(projectId)
                 cachedCharacterCount = characters.size
+                hasCompletedCharacterImages(characters)
                 bindProject(project, episode, storyboards, characters)
             }
         }
     }
 
     /**
-     * 每集注册一次 WorkManager LiveData 观察（用 observedWorkNames 去重）。
-     * 其他集/本集的生成任务都会触发 handleWorkInfos → 刷新按钮状态 + 重载当前集数据。
+     * 每集注册一次 WorkManager LiveData 观察（用 observedWorkNames 去重），
+     * 另外单独观察项目级角色图任务（unique work 不含 episodeId）。
      */
     private fun observeGenerationWork(projectId: Long, episodes: List<Episode>) {
-        episodes.forEach { episode ->
-            GenerationWorker.workNamesForEpisode(projectId, episode.id).forEach { workName ->
-                if (observedWorkNames.add(workName)) {
-                    WorkManager.getInstance(this)
-                        .getWorkInfosForUniqueWorkLiveData(workName)
-                        .observe(this) { workInfos -> handleWorkInfos(workName, workInfos) }
-                }
+        val workNames = episodes.flatMap { episode ->
+            GenerationWorker.workNamesForEpisode(projectId, episode.id)
+        } + GenerationWorker.workNameForCharacterImages(projectId)
+        workNames.forEach { workName ->
+            if (observedWorkNames.add(workName)) {
+                WorkManager.getInstance(this)
+                    .getWorkInfosForUniqueWorkLiveData(workName)
+                    .observe(this) { workInfos -> handleWorkInfos(workName, workInfos) }
             }
         }
     }
@@ -228,14 +231,14 @@ class ProjectDetailActivity : AppCompatActivity() {
             val storyboards = getCurrentEpisodeStoryboards()
             val warningMessageRes = regenerationWarningMessageRes(stage, project, episode, storyboards)
             if (warningMessageRes == null) {
-                enqueueGeneration(stage, queuedMessageRes)
+                enqueueGeneration(stage, queuedMessageRes, forceRegenerate = false)
             } else {
                 AlertDialog.Builder(this@ProjectDetailActivity)
                     .setTitle(R.string.project_regenerate_title)
                     .setMessage(warningMessageRes)
                     .setNegativeButton(R.string.project_regenerate_cancel, null)
                     .setPositiveButton(R.string.project_regenerate_confirm) { _, _ ->
-                        enqueueGeneration(stage, queuedMessageRes)
+                        enqueueGeneration(stage, queuedMessageRes, forceRegenerate = true)
                     }
                     .show()
             }
@@ -277,7 +280,7 @@ class ProjectDetailActivity : AppCompatActivity() {
                 if (cachedCharacterCount > 0) R.string.project_regenerate_characters_message else null
             }
             GenerationWorker.STAGE_CHARACTER_IMAGE -> {
-                if (cachedCharacterCount > 0) R.string.project_regenerate_character_images_message else null
+                if (hasCompletedCharacterImages()) R.string.project_regenerate_character_images_message else null
             }
             else -> null
         }
@@ -294,8 +297,8 @@ class ProjectDetailActivity : AppCompatActivity() {
             isExistingFile(episode?.finalVideoLocalPath)
     }
 
-    private fun enqueueGeneration(stage: String, messageRes: Int) {
-        if (hasActiveGenerationWork) {
+    private fun enqueueGeneration(stage: String, messageRes: Int, forceRegenerate: Boolean = false) {
+        if (hasActiveGenerationWork && !forceRegenerate) {
             Toast.makeText(this, R.string.project_generation_running, Toast.LENGTH_SHORT).show()
             return
         }
@@ -306,7 +309,13 @@ class ProjectDetailActivity : AppCompatActivity() {
         lifecycleScope.launch {
             when (val preflight = checkGenerationPreflight(stage)) {
                 is GenerationPreflight.Ready -> {
-                    GenerationWorker.enqueue(this@ProjectDetailActivity, projectId, currentEpisodeId, stage)
+                    GenerationWorker.enqueue(
+                        this@ProjectDetailActivity,
+                        projectId,
+                        currentEpisodeId,
+                        stage,
+                        forceRegenerate = forceRegenerate
+                    )
                     Toast.makeText(this@ProjectDetailActivity, messageRes, Toast.LENGTH_SHORT).show()
                     loadProject(projectId)
                 }
@@ -354,8 +363,7 @@ class ProjectDetailActivity : AppCompatActivity() {
                 }
             }
             GenerationWorker.STAGE_STORYBOARD -> {
-                val hasScript = !episode?.scriptContent.isNullOrBlank() || !project.generatedScript.isNullOrBlank()
-                if (!hasScript) {
+                if (episode?.scriptContent.isNullOrBlank()) {
                     GenerationPreflight.Blocked(R.string.project_generation_missing_script)
                 } else {
                     GenerationPreflight.Ready
@@ -387,8 +395,7 @@ class ProjectDetailActivity : AppCompatActivity() {
                 }
             }
             GenerationWorker.STAGE_CHARACTER_EXTRACT -> {
-                val hasScript = !episode?.scriptContent.isNullOrBlank() || !project.generatedScript.isNullOrBlank()
-                if (!hasScript) {
+                if (episode?.scriptContent.isNullOrBlank()) {
                     GenerationPreflight.Blocked(R.string.project_generation_missing_script)
                 } else {
                     GenerationPreflight.Ready
@@ -409,9 +416,8 @@ class ProjectDetailActivity : AppCompatActivity() {
     private fun cancelGeneration() {
         if (currentEpisodeId > 0L) {
             GenerationWorker.cancelEpisode(this, projectId, currentEpisodeId)
-        } else {
-            GenerationWorker.cancelEpisode(this, projectId, 0L)
         }
+        GenerationWorker.cancelCharacterImages(this, projectId)
         binding.cancelGenerationButton.visibility = View.GONE
         binding.workStatusText.visibility = View.VISIBLE
         binding.workStatusText.setText(R.string.project_generation_cancelled)
@@ -574,9 +580,11 @@ class ProjectDetailActivity : AppCompatActivity() {
 
     private fun deleteProject() {
         lifecycleScope.launch {
-            dramaRepository.getEpisodes(projectId).forEach {
-                GenerationWorker.cancelEpisode(this@ProjectDetailActivity, projectId, it.id)
-            }
+            GenerationWorker.cancelProject(
+                this@ProjectDetailActivity,
+                projectId,
+                dramaRepository.getEpisodes(projectId).map { it.id }
+            )
             val deleted = dramaRepository.deleteProject(projectId)
             if (deleted) {
                 Toast.makeText(this@ProjectDetailActivity, R.string.project_deleted, Toast.LENGTH_SHORT).show()
@@ -610,7 +618,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         binding.statusText.text = getString(R.string.project_status_label) + "：${project.status.toDisplayText()}\n" +
             getString(R.string.project_stage_label) + "：${project.currentStage.toDisplayText()}"
         bindProgressCard(project, storyboards, characters)
-        bindPrompt(project.prompt)
+        bindPrompt(episode?.content?.takeIf { it.isNotBlank() } ?: project.prompt)
         binding.metaText.text = buildString {
             append(getString(R.string.project_style_label)).append("：").append(project.style).append('\n')
             append(getString(R.string.project_audience_label)).append("：").append(project.targetAudience).append('\n')
@@ -719,7 +727,7 @@ class ProjectDetailActivity : AppCompatActivity() {
             if (characters.isNotEmpty()) R.string.project_regenerate_characters else R.string.project_extract_characters
         )
         binding.generateCharacterImagesButton.setText(
-            if (characters.any { isExistingFile(it.imageLocalPath) }) {
+            if (hasCompletedCharacterImages(characters)) {
                 R.string.project_regenerate_character_images
             } else {
                 R.string.project_generate_character_images
@@ -850,6 +858,12 @@ class ProjectDetailActivity : AppCompatActivity() {
      * GenerationStage 枚举不含 REWRITE，所以需要走 workName 反查。返回 null 表示无活跃任务。
      */
     private fun activeStageFromWorkNames(): String? {
+        val characterImageName = GenerationWorker.workNameForCharacterImages(projectId)
+        generationWorkInfosByName[characterImageName]?.let { infos ->
+            if (infos.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }) {
+                return GenerationWorker.STAGE_CHARACTER_IMAGE
+            }
+        }
         if (currentEpisodeId <= 0L) return null
         val prefix = "generation-$projectId-$currentEpisodeId-"
         generationWorkInfosByName.forEach { (name, infos) ->
@@ -858,6 +872,17 @@ class ProjectDetailActivity : AppCompatActivity() {
             if (isActive) return name.removePrefix(prefix)
         }
         return null
+    }
+
+    private fun hasCompletedCharacterImages(
+        characters: List<com.huobao.zdrama.domain.model.Character>? = null
+    ): Boolean {
+        if (characters != null) {
+            cachedHasCompletedCharacterImages = characters.any {
+                it.imageStatus == AssetStatus.COMPLETED || isExistingFile(it.imageLocalPath)
+            }
+        }
+        return cachedHasCompletedCharacterImages
     }
 
     private data class ProgressInfo(

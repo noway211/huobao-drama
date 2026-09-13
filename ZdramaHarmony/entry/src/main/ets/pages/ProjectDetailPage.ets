@@ -137,12 +137,10 @@ struct ProjectDetailPage {
     await UseCases.patchSensitivePrompts(this.projectId);
   }
 
-  // 是否已有脚本（当前集脚本或项目生成脚本任一非空）
+  // 是否已有当前集脚本（不把别的集镜像到 project.generatedScript 算进来）
   private hasScript(): boolean {
     const fromEpisode = this.episode?.scriptContent;
-    const fromProject = this.project?.generatedScript;
-    return (!!fromEpisode && fromEpisode.trim().length > 0) ||
-      (!!fromProject && fromProject.trim().length > 0);
+    return !!fromEpisode && fromEpisode.trim().length > 0;
   }
 
   // 是否有可改写的原始内容（当前集 content 非空）
@@ -151,15 +149,21 @@ struct ProjectDetailPage {
     return !!raw && raw.trim().length > 0;
   }
 
+  /** 当前集故事提示词：优先 episode.content，空则回退项目级 prompt。 */
+  private currentStoryPrompt(): string {
+    const fromEpisode = this.episode?.content;
+    if (fromEpisode && fromEpisode.trim().length > 0) {
+      return fromEpisode;
+    }
+    return this.project?.prompt ?? '';
+  }
+
   /**
    * 估算提示词是否超过 6 行，用于决定是否显示展开/收起按钮，对齐 Android 端逻辑。
    * ArkUI 无直接获取行数的 API，故按换行符与文本长度估算（窄屏每行约 24 字符）。
-   * Heuristic mirror of Android's "only show toggle when prompt exceeds 6 lines".
-   * ArkUI has no direct line-count API, so estimate from newlines and length
-   * (~24 chars per line on a narrow phone column).
    */
   private promptOverflows(): boolean {
-    const text = this.project?.prompt ?? '';
+    const text = this.currentStoryPrompt();
     if (text.length === 0) {
       return false;
     }
@@ -289,6 +293,10 @@ struct ProjectDetailPage {
   // 点击”提取角色”
   onExtractCharactersClick() {
     this.runWithGuard(async () => {
+      if (!this.hasScript()) {
+        promptAction.showToast({ message: '请先为本集创作或改写脚本' });
+        return;
+      }
       if (this.hasCharacters) {
         const r = await promptAction.showDialog({
           title: '重新提取？',
@@ -308,7 +316,7 @@ struct ProjectDetailPage {
   }
 
   // 执行角色图生成
-  async doGenerateCharacterImages(): Promise<void> {
+  async doGenerateCharacterImages(forceRegenerate: boolean = false): Promise<void> {
     this.busy = true;
     this.busyLabel = '生成角色图中…';
     this.stageLabel = '生成角色图';
@@ -318,7 +326,7 @@ struct ProjectDetailPage {
       this.progressCurrent = current;
       this.progressTotal = total;
       this.progressEntity = `角色 #${shotNumber}`;
-    });
+    }, forceRegenerate);
     this.busy = false;
     this.clearProgress();
     promptAction.showToast({ message: result.ok ? '角色图已生成' : `失败：${result.error}` });
@@ -338,10 +346,10 @@ struct ProjectDetailPage {
           ]
         });
         if (r.index === 1) {
-          this.doGenerateCharacterImages();
+          this.doGenerateCharacterImages(true);
         }
       } else {
-        this.doGenerateCharacterImages();
+        this.doGenerateCharacterImages(false);
       }
     });
   }
@@ -349,6 +357,10 @@ struct ProjectDetailPage {
   // 点击“生成分镜”：校验 Key，有已有分镜时确认后生成
   onGenerateStoryboardClick() {
     this.runWithGuard(async () => {
+      if (!this.hasScript()) {
+        promptAction.showToast({ message: '请先为本集创作或改写脚本' });
+        return;
+      }
       if (this.hasStoryboards) {
         const r = await promptAction.showDialog({
           title: '重新生成？',
@@ -798,7 +810,7 @@ struct ProjectDetailPage {
                 .fontColor(Theme.textSecondary)
                 .width('100%')
                 .margin({ bottom: 8 })
-              Text(this.project.prompt)
+              Text(this.currentStoryPrompt())
                 .fontSize(14)
                 .fontColor(Theme.textPrimary)
                 .width('100%')

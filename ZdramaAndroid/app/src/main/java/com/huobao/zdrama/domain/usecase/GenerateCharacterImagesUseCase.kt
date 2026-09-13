@@ -14,7 +14,11 @@ class GenerateCharacterImagesUseCase(
     private val agnesImageRepository: AgnesImageRepository,
     private val mediaDownloadRepository: MediaDownloadRepository
 ) {
-    suspend fun execute(projectId: Long, settings: AgnesSettings): Result<Int> {
+    suspend fun execute(
+        projectId: Long,
+        settings: AgnesSettings,
+        forceRegenerate: Boolean = false
+    ): Result<Int> {
         if (dramaRepository.getProject(projectId) == null) {
             return Result.failure(IllegalArgumentException("Project not found"))
         }
@@ -24,15 +28,21 @@ class GenerateCharacterImagesUseCase(
             return Result.failure(IllegalArgumentException("请先提取角色"))
         }
 
-        Log.i(TAG, "generateCharacterImages start: project=$projectId characters=${characters.size}")
+        Log.i(
+            TAG,
+            "generateCharacterImages start: project=$projectId characters=${characters.size} force=$forceRegenerate"
+        )
 
         var completed = 0
         var generated = 0
         var firstError: Throwable? = null
 
         for (ch in characters) {
-            // 同步 2026-08-08 修复：跳过已完成的角色要打日志
-            if (ch.imageStatus == AssetStatus.COMPLETED && isExistingLocalFile(ch.imageLocalPath)) {
+            // 用户确认覆盖时不跳过；否则保留已完成立绘。
+            if (!forceRegenerate &&
+                ch.imageStatus == AssetStatus.COMPLETED &&
+                isExistingLocalFile(ch.imageLocalPath)
+            ) {
                 Log.i(TAG, "character ${ch.name} image already completed, skip")
                 completed += 1
                 continue

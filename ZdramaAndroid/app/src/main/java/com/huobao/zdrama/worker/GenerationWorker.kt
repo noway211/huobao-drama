@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
@@ -48,6 +49,7 @@ class GenerationWorker(
         val projectId = inputData.getLong(KEY_PROJECT_ID, 0L)
         val episodeId = inputData.getLong(KEY_EPISODE_ID, 0L)
         val stage = inputData.getString(KEY_STAGE).orEmpty()
+        val forceRegenerate = inputData.getBoolean(KEY_FORCE_REGENERATE, false)
         if (projectId <= 0L || stage.isBlank()) return androidx.work.ListenableWorker.Result.failure()
 
         setForeground(createForegroundInfo(projectId, stage))
@@ -63,7 +65,9 @@ class GenerationWorker(
             STAGE_VIDEO -> runVideos(projectId, episodeId, settings, dramaRepository, mediaDownloadRepository)
             STAGE_FINAL_VIDEO -> runFinalVideo(projectId, episodeId, dramaRepository)
             STAGE_CHARACTER_EXTRACT -> runCharacterExtract(projectId, episodeId, settings, dramaRepository)
-            STAGE_CHARACTER_IMAGE -> runCharacterImages(projectId, settings, dramaRepository, mediaDownloadRepository)
+            STAGE_CHARACTER_IMAGE -> runCharacterImages(
+                projectId, settings, dramaRepository, mediaDownloadRepository, forceRegenerate
+            )
             STAGE_FULL -> runFullPipeline(projectId, episodeId, settings, dramaRepository, mediaDownloadRepository)
             else -> return androidx.work.ListenableWorker.Result.failure()
         }
@@ -186,13 +190,14 @@ class GenerationWorker(
         projectId: Long,
         settings: AgnesSettings,
         dramaRepository: DramaRepository,
-        mediaDownloadRepository: MediaDownloadRepository
+        mediaDownloadRepository: MediaDownloadRepository,
+        forceRegenerate: Boolean
     ): KotlinResult<Unit> {
         return GenerateCharacterImagesUseCase(
             dramaRepository,
             AgnesImageRepository(),
             mediaDownloadRepository
-        ).execute(projectId, settings).map { Unit }
+        ).execute(projectId, settings, forceRegenerate).map { Unit }
     }
 
     private fun createForegroundInfo(projectId: Long, stage: String): ForegroundInfo {
@@ -207,7 +212,16 @@ class GenerationWorker(
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .build()
-        return ForegroundInfo(notificationIdForProject(projectId), notification)
+        val notificationId = notificationIdForProject(projectId)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(
+                notificationId,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            ForegroundInfo(notificationId, notification)
+        }
     }
 
     private fun notificationIdForProject(projectId: Long): Int {
@@ -268,24 +282,38 @@ class GenerationWorker(
         private const val KEY_PROJECT_ID = "project_id"
         private const val KEY_EPISODE_ID = "episode_id"
         private const val KEY_STAGE = "stage"
+        private const val KEY_FORCE_REGENERATE = "force_regenerate"
         private const val CHANNEL_ID = "generation"
         private const val NOTIFICATION_ID_BASE = 1000
         private const val NOTIFICATION_ID_PROJECT_RANGE = 100000
 
-        /** 入队一个作用于 (projectId, episodeId, stage) 的生成任务；episodeId 参与唯一键，多集可并行。 */
-        fun enqueue(context: Context, projectId: Long, episodeId: Long, stage: String) {
+        /**
+         * 入队生成任务。
+         * - 普通 STAGE：唯一键含 episodeId，多集可并行
+         * - [STAGE_CHARACTER_IMAGE]：项目级唯一键（角色立绘跨集共享），忽略 episodeId
+         * - [forceRegenerate]：角色图确认覆盖时为 true，REPLACE 掉进行中的 skip 任务并真正重画
+         */
+        fun enqueue(
+            context: Context,
+            projectId: Long,
+            episodeId: Long,
+            stage: String,
+            forceRegenerate: Boolean = false
+        ) {
             val request = OneTimeWorkRequestBuilder<GenerationWorker>()
                 .setInputData(
                     workDataOf(
                         KEY_PROJECT_ID to projectId,
                         KEY_EPISODE_ID to episodeId,
-                        KEY_STAGE to stage
+                        KEY_STAGE to stage,
+                        KEY_FORCE_REGENERATE to forceRegenerate
                     )
                 )
                 .build()
+            val policy = if (forceRegenerate) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP
             WorkManager.getInstance(context).enqueueUniqueWork(
                 uniqueWorkName(projectId, episodeId, stage),
-                ExistingWorkPolicy.KEEP,
+                policy,
                 request
             )
         }
@@ -295,6 +323,15 @@ class GenerationWorker(
             workNamesForEpisode(projectId, episodeId).forEach { workName ->
                 workManager.cancelUniqueWork(workName)
             }
+        }
+
+        fun cancelCharacterImages(context: Context, projectId: Long) {
+            WorkManager.getInstance(context).cancelUniqueWork(workNameForCharacterImages(projectId))
+        }
+
+        fun cancelProject(context: Context, projectId: Long, episodeIds: List<Long>) {
+            episodeIds.forEach { episodeId -> cancelEpisode(context, projectId, episodeId) }
+            cancelCharacterImages(context, projectId)
         }
 
         fun workNamesForEpisode(projectId: Long, episodeId: Long): List<String> {
@@ -310,7 +347,15 @@ class GenerationWorker(
             ).map { stage -> uniqueWorkName(projectId, episodeId, stage) }
         }
 
+        /** 角色立绘是项目级资产，唯一键不含 episodeId，详情页必须单独观察这条。 */
+        fun workNameForCharacterImages(projectId: Long): String {
+            return "generation-$projectId-$STAGE_CHARACTER_IMAGE"
+        }
+
         private fun uniqueWorkName(projectId: Long, episodeId: Long, stage: String): String {
+            if (stage == STAGE_CHARACTER_IMAGE) {
+                return workNameForCharacterImages(projectId)
+            }
             return "generation-$projectId-$episodeId-$stage"
         }
     }

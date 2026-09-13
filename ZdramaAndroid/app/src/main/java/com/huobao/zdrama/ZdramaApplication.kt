@@ -1,7 +1,6 @@
 package com.huobao.zdrama
 
 import android.app.Application
-import androidx.work.WorkManager
 import com.huobao.zdrama.data.repository.DramaRepository
 import com.huobao.zdrama.domain.model.ProjectStatus
 import com.huobao.zdrama.worker.GenerationWorker
@@ -40,16 +39,15 @@ class ZdramaApplication : Application() {
     }
 
     private fun resetOrphanGenerationJobs() {
-        val workManager = WorkManager.getInstance(this)
         val repository = DramaRepository(this)
         scope.launch {
             val projects = repository.getProjects()
             projects.filter { it.status == ProjectStatus.PROCESSING }.forEach { project ->
-                repository.getEpisodes(project.id).forEach { episode ->
-                    GenerationWorker.workNamesForEpisode(project.id, episode.id).forEach { workName ->
-                        workManager.cancelUniqueWork(workName)
-                    }
-                }
+                GenerationWorker.cancelProject(
+                    this@ZdramaApplication,
+                    project.id,
+                    repository.getEpisodes(project.id).map { it.id }
+                )
                 repository.updateProjectTextResult(
                     projectId = project.id,
                     status = ProjectStatus.FAILED,

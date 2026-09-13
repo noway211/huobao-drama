@@ -10,11 +10,11 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.huobao.zdrama.R
 import com.huobao.zdrama.data.repository.AgnesImageRepository
-import com.huobao.zdrama.data.repository.AgnesTextRepository
 import com.huobao.zdrama.data.repository.DramaRepository
 import com.huobao.zdrama.data.repository.MediaDownloadRepository
 import com.huobao.zdrama.data.settings.AgnesSettingsStore
 import com.huobao.zdrama.databinding.ActivityCharacterListBinding
+import com.huobao.zdrama.domain.model.AssetStatus
 import com.huobao.zdrama.domain.model.Character
 import com.huobao.zdrama.domain.usecase.GenerateCharacterImagesUseCase
 import com.huobao.zdrama.domain.usecase.GenerateSingleCharacterImageUseCase
@@ -178,23 +178,32 @@ class CharacterListActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.project_generation_missing_api_key, Toast.LENGTH_SHORT).show()
             return
         }
-        val anyCompleted = cachedCharacters.any { it.imageLocalPath.isNullOrBlank().not() }
-        val messageRes = if (anyCompleted) R.string.project_regenerate_character_images_message else 0
-        if (messageRes != 0) {
+        val anyCompleted = cachedCharacters.any {
+            it.imageStatus == AssetStatus.COMPLETED || !it.imageLocalPath.isNullOrBlank()
+        }
+        if (anyCompleted) {
             AlertDialog.Builder(this)
                 .setTitle(R.string.project_regenerate_title)
-                .setMessage(messageRes)
+                .setMessage(R.string.project_regenerate_character_images_message)
                 .setNegativeButton(R.string.project_regenerate_cancel, null)
-                .setPositiveButton(R.string.project_regenerate_confirm) { _, _ -> enqueueGenerateAll() }
+                .setPositiveButton(R.string.project_regenerate_confirm) { _, _ ->
+                    enqueueGenerateAll(forceRegenerate = true)
+                }
                 .show()
         } else {
-            enqueueGenerateAll()
+            enqueueGenerateAll(forceRegenerate = false)
         }
     }
 
-    private fun enqueueGenerateAll() {
-        // 角色图是项目级资产（对齐 backend drama 级 characters），episodeId 传 0 占位
-        GenerationWorker.enqueue(this, projectId, 0L, GenerationWorker.STAGE_CHARACTER_IMAGE)
+    private fun enqueueGenerateAll(forceRegenerate: Boolean) {
+        // 角色图是项目级资产（对齐 backend drama 级 characters），unique work 不含 episodeId。
+        GenerationWorker.enqueue(
+            this,
+            projectId,
+            0L,
+            GenerationWorker.STAGE_CHARACTER_IMAGE,
+            forceRegenerate = forceRegenerate
+        )
         Toast.makeText(this, R.string.project_character_image_queued, Toast.LENGTH_SHORT).show()
         finish()
     }

@@ -319,7 +319,7 @@ export class UseCases {
     }
   }
 
-  /** GenerateProjectScriptUseCase：根据项目提示词为目标剧集生成剧本（结果写入该集，并镜像到 project.generatedScript 兼容旧读取方）。 */
+  /** GenerateProjectScriptUseCase：按当前集原文（episode.content，空则回退 project.prompt）为目标剧集生成剧本；结果写入该集，并镜像到 project.generatedScript。 */
   static async generateScript(projectId: number, episodeId: number, settings: AgnesSettings): Promise<TextResult> {
     const project = await UseCases.repo.getProject(projectId);
     if (!project) {
@@ -333,7 +333,10 @@ export class UseCases {
     await UseCases.repo.updateProjectTextResult(
       projectId, ProjectStatus.PROCESSING, GenerationStage.TEXT, project.generatedScript, null);
 
-    const result = await UseCases.text.generateScript(settings, project);
+    const storyPrompt = (episode.content && episode.content.trim().length > 0)
+      ? episode.content
+      : project.prompt;
+    const result = await UseCases.text.generateScript(settings, project, storyPrompt);
     if (result.ok) {
       await UseCases.repo.updateEpisodeScriptContent(episode.id, result.value, EpisodeStatus.COMPLETED);
       await UseCases.repo.updateProjectTextResult(
@@ -384,11 +387,14 @@ export class UseCases {
       return { ok: false, value: '', error: 'Project not found' };
     }
 
-    // 优先读目标剧集脚本，无则回退到项目脚本
-    const episode = await UseCases.repo.getEpisodeById(episodeId) ?? await UseCases.repo.getEpisodeForProject(projectId);
-    const script = episode?.scriptContent ?? project.generatedScript;
+    // 只使用当前集脚本，禁止回退 project.generatedScript（那通常是别的集）。
+    const episode = await UseCases.repo.getEpisodeById(episodeId);
+    if (!episode) {
+      return { ok: false, value: '', error: 'Episode not found' };
+    }
+    const script = episode.scriptContent;
     if (!script || script.trim().length === 0) {
-      return { ok: false, value: '', error: '请先创作或改写脚本' };
+      return { ok: false, value: '', error: '请先为本集创作或改写脚本' };
     }
 
     await UseCases.repo.updateProjectTextResult(
@@ -653,10 +659,14 @@ export class UseCases {
       return { ok: false, value: '', error: 'Project not found' };
     }
 
-    const episode = await UseCases.repo.getEpisodeById(episodeId) ?? await UseCases.repo.getEpisodeForProject(projectId);
-    const script = episode?.scriptContent ?? project.generatedScript;
+    // 只从当前集脚本提取，禁止回退 project.generatedScript（那通常是别的集）。
+    const episode = await UseCases.repo.getEpisodeById(episodeId);
+    if (!episode) {
+      return { ok: false, value: '', error: 'Episode not found' };
+    }
+    const script = episode.scriptContent;
     if (!script || script.trim().length === 0) {
-      return { ok: false, value: '', error: '请先创作或改写脚本' };
+      return { ok: false, value: '', error: '请先为本集创作或改写脚本' };
     }
 
     // 读取已有角色，传给 LLM 做去重参考
@@ -741,7 +751,7 @@ ${script}${existingHint}`;
       characters.push({
         id: existing ? existing.id : 0,
         projectId: projectId,
-        episodeId: episode?.id ?? null,
+        episodeId: episode.id,
         name: name,
         role: role || (existing ? existing.role : ''),
         description: description || (existing ? existing.description : ''),
@@ -768,7 +778,8 @@ ${script}${existingHint}`;
   static async generateCharacterImages(
     projectId: number,
     settings: AgnesSettings,
-    onProgress?: GenerationProgressCallback
+    onProgress?: GenerationProgressCallback,
+    forceRegenerate: boolean = false
   ): Promise<TextResult> {
     const project = await UseCases.repo.getProject(projectId);
     if (!project) {
@@ -780,7 +791,8 @@ ${script}${existingHint}`;
       return { ok: false, value: '', error: '请先提取角色' };
     }
 
-    hilog.info(DOMAIN, TAG, 'generateCharacterImages start: project=%{public}d characters=%{public}d', projectId, characters.length);
+    hilog.info(DOMAIN, TAG, 'generateCharacterImages start: project=%{public}d characters=%{public}d force=%{public}s',
+      projectId, characters.length, forceRegenerate);
 
     let completed = 0;
     let generated = 0;
@@ -791,7 +803,7 @@ ${script}${existingHint}`;
       current++;
       onProgress?.(current, characters.length, current, '检查角色图');
 
-      if (ch.imageStatus === AssetStatus.COMPLETED && UseCases.hasNonEmptyLocalFile(ch.imageLocalPath)) {
+      if (!forceRegenerate && ch.imageStatus === AssetStatus.COMPLETED && UseCases.hasNonEmptyLocalFile(ch.imageLocalPath)) {
         hilog.info(DOMAIN, TAG, 'character %{public}s image already completed, skip', ch.name);
         completed++;
         continue;
@@ -847,11 +859,7 @@ ${script}${existingHint}`;
       return { ok: false, value: '', error: '角色不存在' };
     }
 
-    // 跳过已完成且有本地文件的
-    if (ch.imageStatus === AssetStatus.COMPLETED && UseCases.hasNonEmptyLocalFile(ch.imageLocalPath)) {
-      hilog.info(DOMAIN, TAG, 'character %{public}s image already completed, skip', ch.name);
-      return { ok: true, value: '已存在', error: '' };
-    }
+    // 角色列表点「生成图片」是显式动作，始终重画；批量任务才跳过已完成项。
 
     await UseCases.repo.updateCharacterImage(
       ch.id, AssetStatus.PROCESSING, ch.imageUrl, ch.imageLocalPath, null);
