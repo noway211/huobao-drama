@@ -3,6 +3,7 @@ package com.huobao.zdrama.data.local
 import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
+import android.util.Log
 import com.huobao.zdrama.domain.model.AssetStatus
 import com.huobao.zdrama.domain.model.Character
 
@@ -44,8 +45,10 @@ class CharacterLocalDataSource(context: Context) {
                 val withProject = ch.copy(projectId = projectId, updatedAt = now)
                 if (withProject.id > 0L) {
                     updateCharacterText(db, withProject)
+                    Log.i(TAG, "upsert UPDATE id=${withProject.id} name=${withProject.name}")
                 } else {
-                    insertCharacter(db, withProject.copy(createdAt = now))
+                    val newId = insertCharacter(db, withProject.copy(createdAt = now))
+                    Log.i(TAG, "upsert INSERT name=${withProject.name} newId=$newId")
                 }
             }
             db.setTransactionSuccessful()
@@ -200,5 +203,9 @@ class CharacterLocalDataSource(context: Context) {
     private fun Cursor.getLongOrNull(index: Int): Long? {
         if (isNull(index)) return null
         return getLong(index)
+    }
+
+    companion object {
+        private const val TAG = "CharacterLocalDS"
     }
 }

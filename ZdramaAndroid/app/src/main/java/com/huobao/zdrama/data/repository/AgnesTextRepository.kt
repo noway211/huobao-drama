@@ -13,7 +13,14 @@ import com.huobao.zdrama.domain.model.DramaProject
 class AgnesTextRepository(
     private val clientFactory: AgnesClientFactory = AgnesClientFactory()
 ) {
-    suspend fun generateScript(settings: AgnesSettings, project: DramaProject): Result<String> {
+    /**
+     * 按当前集原文创作剧本。storyPrompt 优先用 episode.content，空则回退 project.prompt。
+     */
+    suspend fun generateScript(
+        settings: AgnesSettings,
+        project: DramaProject,
+        storyPrompt: String
+    ): Result<String> {
         if (settings.apiKey.isBlank()) {
             return Result.failure(IllegalArgumentException("Agnes API Key is required"))
         }
@@ -28,7 +35,7 @@ class AgnesTextRepository(
                     model = settings.textModel,
                     messages = listOf(
                         ChatMessage(role = "system", content = PromptResolver.resolve(settings.customScriptCreatePrompt, PromptDefaults.SCRIPT_CREATE_PROMPT)),
-                        ChatMessage(role = "user", content = buildUserPrompt(project))
+                        ChatMessage(role = "user", content = buildUserPrompt(project, storyPrompt))
                     ),
                     temperature = 0.7,
                     max_tokens = 4000
@@ -40,11 +47,11 @@ class AgnesTextRepository(
         }
     }
 
-    private fun buildUserPrompt(project: DramaProject): String {
+    private fun buildUserPrompt(project: DramaProject, storyPrompt: String): String {
         return """请根据以下项目信息创作一部短视频短剧剧本。
 
 项目标题：${project.title}
-故事提示词：${project.prompt}
+故事提示词：${storyPrompt}
 风格：${project.style}
 目标受众：${project.targetAudience}
 画幅比例：${project.aspectRatio}

@@ -21,11 +21,13 @@ class ExtractCharactersUseCase(
         val project = dramaRepository.getProject(projectId)
             ?: return Result.failure(IllegalArgumentException("Project not found"))
 
-        // 多集支持：从指定集脚本提取；角色仍挂项目级（对齐 backend drama 级 characters + save_dedup_characters）
-        val episode = dramaRepository.getEpisodeById(episodeId) ?: dramaRepository.getEpisodeForProject(projectId)
-        val script = episode?.scriptContent ?: project.generatedScript
+        // 多集支持：只从当前集脚本提取，禁止回退 project.generatedScript（那通常是别的集）。
+        // 角色仍挂项目级（对齐 backend drama 级 characters + save_dedup_characters）。
+        val episode = dramaRepository.getEpisodeById(episodeId)
+            ?: return Result.failure(IllegalArgumentException("Episode not found"))
+        val script = episode.scriptContent
         if (script.isNullOrBlank()) {
-            return Result.failure(IllegalArgumentException("请先创作或改写脚本"))
+            return Result.failure(IllegalArgumentException("请先为本集创作或改写脚本"))
         }
 
         // 读取已有角色，传给 LLM 做去重参考
@@ -93,7 +95,14 @@ $script$existingHint"""
 
         val now = System.currentTimeMillis()
         val nameToExisting = existingChars.associateBy { it.name }
+        Log.i(
+            TAG,
+            "extractCharacters start: project=$projectId episode=${episode.id} " +
+                "existing=${existingChars.size} [${existingChars.joinToString { it.name }}] parsed=${items.size}"
+        )
 
+        var merged = 0
+        var inserted = 0
         val characters: List<Character> = items.mapNotNull { item ->
             val name = (item["name"] as? String)?.trim().orEmpty()
             if (name.isEmpty()) return@mapNotNull null
@@ -102,10 +111,17 @@ $script$existingHint"""
             val appearance = (item["appearance"] as? String).orEmpty()
             val personality = (item["personality"] as? String).orEmpty()
             val existing = nameToExisting[name]
+            if (existing != null) {
+                merged += 1
+                Log.i(TAG, "merge character name=$name id=${existing.id} keepImage=${existing.imageStatus}")
+            } else {
+                inserted += 1
+                Log.i(TAG, "insert character name=$name")
+            }
             Character(
                 id = existing?.id ?: 0L,
                 projectId = projectId,
-                episodeId = episode?.id,
+                episodeId = episode.id,
                 name = name,
                 role = role.ifBlank { existing?.role.orEmpty() },
                 description = description.ifBlank { existing?.description.orEmpty() },
@@ -125,7 +141,11 @@ $script$existingHint"""
 
         // 增量写入：同名 UPDATE 保留 id/立绘；新角色 INSERT；本集未出现的老角色不删。
         dramaRepository.upsertCharacters(projectId, characters)
-        Log.i(TAG, "extractCharacters: project=$projectId upserted=${characters.size}")
+        Log.i(
+            TAG,
+            "extractCharacters done: project=$projectId episode=${episode.id} " +
+                "upserted=${characters.size} merged=$merged inserted=$inserted"
+        )
         return Result.success(characters.size)
     }
 

@@ -30,7 +30,8 @@ class GenerateProjectScriptUseCase(
             errorMessage = null
         )
 
-        val result = agnesTextRepository.generateScript(settings, project)
+        val storyPrompt = episode.content?.takeIf { it.isNotBlank() } ?: project.prompt
+        val result = agnesTextRepository.generateScript(settings, project, storyPrompt)
         result.onSuccess { script ->
             dramaRepository.updateEpisodeScriptContent(
                 episodeId = episode.id,

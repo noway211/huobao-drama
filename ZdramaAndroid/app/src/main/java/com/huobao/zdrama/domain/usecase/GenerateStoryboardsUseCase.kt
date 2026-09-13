@@ -15,11 +15,12 @@ class GenerateStoryboardsUseCase(
         val project = dramaRepository.getProject(projectId)
             ?: return Result.failure(IllegalArgumentException("Project not found"))
 
-        // Prefer episode's scriptContent, fall back to project.generatedScript
-        val episode = dramaRepository.getEpisodeById(episodeId) ?: dramaRepository.getEpisodeForProject(projectId)
-        val script = episode?.scriptContent ?: project.generatedScript
+        // 只使用当前集脚本，禁止回退 project.generatedScript（那通常是别的集）。
+        val episode = dramaRepository.getEpisodeById(episodeId)
+            ?: return Result.failure(IllegalArgumentException("Episode not found"))
+        val script = episode.scriptContent
         if (script.isNullOrBlank()) {
-            return Result.failure(IllegalArgumentException("Generate script before storyboard"))
+            return Result.failure(IllegalArgumentException("请先为本集创作或改写脚本"))
         }
 
         dramaRepository.updateProjectTextResult(

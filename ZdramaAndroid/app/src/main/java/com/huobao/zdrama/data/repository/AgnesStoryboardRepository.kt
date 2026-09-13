@@ -27,9 +27,9 @@ class AgnesStoryboardRepository(
         if (settings.textModel.isBlank()) {
             return Result.failure(IllegalArgumentException("Text model is required"))
         }
-        val scriptToUse = script ?: project.generatedScript.orEmpty()
+        val scriptToUse = script.orEmpty()
         if (scriptToUse.isBlank()) {
-            return Result.failure(IllegalArgumentException("Generate script before storyboard"))
+            return Result.failure(IllegalArgumentException("请先为本集创作或改写脚本"))
         }
 
         return runCatching {

@@ -65,8 +65,15 @@ function joinBaseUrl(baseUrl: string, path: string): string {
  *（等价于 AgnesAuthInterceptor + ApiLogInterceptor）。
  */
 export class AgnesTextRepository {
-  // 根据项目信息创作短剧剧本（使用 ## S 场景格式）
-  async generateScript(settings: AgnesSettings, project: DramaProject): Promise<TextResult> {
+  /**
+   * 按当前集原文创作短剧剧本（使用 ## S 场景格式）。
+   * storyPrompt 优先用 episode.content，空则回退 project.prompt。
+   */
+  async generateScript(
+    settings: AgnesSettings,
+    project: DramaProject,
+    storyPrompt: string
+  ): Promise<TextResult> {
     if (settings.apiKey.trim().length === 0) {
       return fail('Agnes API Key is required');
     }
@@ -76,7 +83,7 @@ export class AgnesTextRepository {
     const systemPrompt = (settings.customScriptCreatePrompt ?? '').trim() || SCRIPT_CREATE_PROMPT;
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: this.buildUserPrompt(project) }
+      { role: 'user', content: this.buildUserPrompt(project, storyPrompt) }
     ];
     return this.chatCompletion(settings, messages, 0.7, 4000, '未返回脚本文本');
   }
@@ -100,12 +107,12 @@ export class AgnesTextRepository {
     return this.chatCompletion(settings, messages, 0.7, 6000, '未返回改写内容');
   }
 
-  // 根据项目信息构建生成剧本的用户提示词
-  private buildUserPrompt(project: DramaProject): string {
+  // 根据项目信息 + 当前集故事提示词构建生成剧本的用户提示词
+  private buildUserPrompt(project: DramaProject, storyPrompt: string): string {
     return `请根据以下项目信息创作一部短视频短剧剧本。
 
 项目标题：${project.title}
-故事提示词：${project.prompt}
+故事提示词：${storyPrompt}
 风格：${project.style}
 目标受众：${project.targetAudience}
 画幅比例：${project.aspectRatio}

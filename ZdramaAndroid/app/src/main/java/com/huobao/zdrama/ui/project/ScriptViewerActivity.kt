@@ -45,9 +45,12 @@ class ScriptViewerActivity : AppCompatActivity() {
                 finishWithMessage(R.string.project_missing)
                 return@launch
             }
-            // Prefer target episode's scriptContent, fall back to project.generatedScript
-            val episode = dramaRepository.getEpisodeById(episodeId) ?: dramaRepository.getEpisodeForProject(projectId)
-            val script = episode?.scriptContent ?: project.generatedScript.orEmpty()
+            val episode = if (episodeId > 0L) {
+                dramaRepository.getEpisodeById(episodeId)
+            } else {
+                dramaRepository.getEpisodeForProject(projectId)
+            }
+            val script = episode?.scriptContent.orEmpty()
             if (script.isBlank()) {
                 finishWithMessage(R.string.project_no_script)
                 return@launch

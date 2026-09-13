@@ -27,7 +27,7 @@ struct ScriptViewerPage {
     }
   }
 
-  // 页面显示时加载脚本内容：优先指定集脚本，无则回退到项目脚本，均无则提示并返回
+  // 页面显示时加载当前集脚本；没有则提示并返回（不回退别的集镜像脚本）
   async onPageShow(): Promise<void> {
     this.loading = true;
     const project = await UseCases.getProject(this.projectId);
@@ -36,13 +36,7 @@ struct ScriptViewerPage {
       : await UseCases.getEpisode(this.projectId);
     this.title = project?.title ?? '脚本';
 
-    // 优先使用指定集脚本内容，回退到项目生成的脚本
-    // Prefer episode.scriptContent, fall back to project.generatedScript.
-    const fromEpisode = episode?.scriptContent;
-    const fromProject = project?.generatedScript;
-    const content = (fromEpisode && fromEpisode.trim().length > 0)
-      ? fromEpisode
-      : (fromProject ?? '');
+    const content = episode?.scriptContent ?? '';
     this.script = content;
     this.loading = false;
 
