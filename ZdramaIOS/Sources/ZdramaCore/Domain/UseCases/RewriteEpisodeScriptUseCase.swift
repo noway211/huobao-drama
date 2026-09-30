@@ -53,6 +53,8 @@ public struct RewriteEpisodeScriptUseCase {
                 errorMessage: nil
             )
             return scriptContent
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             try repository.updateEpisodeScriptContent(
                 episodeId: episode.id,

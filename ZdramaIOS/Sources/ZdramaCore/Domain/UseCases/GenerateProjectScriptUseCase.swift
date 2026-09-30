@@ -53,6 +53,8 @@ public struct GenerateProjectScriptUseCase {
                 errorMessage: nil
             )
             return script
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             try repository.updateEpisodeScriptContent(
                 episodeId: episode.id,

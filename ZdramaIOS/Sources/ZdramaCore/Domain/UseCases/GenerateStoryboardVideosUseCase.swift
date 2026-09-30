@@ -75,6 +75,8 @@ public struct GenerateStoryboardVideosUseCase {
                     videoLocalPath: localPath,
                     videoErrorMessage: nil
                 )
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 try repository.updateShotVideo(
                     shotId: shot.id,

@@ -83,6 +83,8 @@ public struct ComposeFinalVideoUseCase {
                 finalVideoErrorMessage: nil
             )
             return outputPath
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             try markFailed(projectId: projectId, episodeId: episode.id, message: error.localizedDescription)
             throw error

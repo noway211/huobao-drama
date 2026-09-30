@@ -67,6 +67,10 @@ public actor GenerationCoordinator {
         stage: String,
         forceRegenerate: Bool
     ) async {
+        guard let episode = try? repository.getEpisodeById(episodeId),
+              episode.projectId == projectId
+        else { return }
+
         let episodeKey = EpisodeKey(projectId: projectId, episodeId: episodeId)
         guard !cancellingEpisodes.contains(episodeKey) else { return }
 
@@ -98,6 +102,10 @@ public actor GenerationCoordinator {
     }
 
     public func cancel(projectId: Int64, episodeId: Int64) async {
+        guard let episode = try? repository.getEpisodeById(episodeId),
+              episode.projectId == projectId
+        else { return }
+
         let episodeKey = EpisodeKey(projectId: projectId, episodeId: episodeId)
         guard !cancellingEpisodes.contains(episodeKey) else { return }
         cancellingEpisodes.insert(episodeKey)

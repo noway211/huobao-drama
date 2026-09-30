@@ -64,6 +64,8 @@ public struct GenerateStoryboardImagesUseCase {
                     imageLocalPath: localPath,
                     imageErrorMessage: nil
                 )
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 try repository.updateShotImage(
                     shotId: shot.id,

@@ -203,6 +203,27 @@ final class GenerationCoordinatorTests: XCTestCase {
         XCTAssertEqual(http.requestCount, 0)
     }
 
+    func testMismatchedEpisodeDoesNotStartJobOrChangeProject() async throws {
+        let first = try seedProject()
+        let second = try seedProject()
+        let http = WaitingAgnesHTTPClient()
+        let coordinator = makeCoordinator(http: http)
+
+        await coordinator.enqueue(
+            projectId: first.projectId,
+            episodeId: second.episodeId,
+            stage: GenerationStageKey.text,
+            forceRegenerate: false
+        )
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertEqual(http.requestCount, 0)
+        let running = await coordinator.isRunning(projectId: first.projectId, episodeId: second.episodeId)
+        XCTAssertFalse(running)
+        XCTAssertEqual(try repository.getProject(first.projectId)?.status, .draft)
+        XCTAssertEqual(try repository.getProject(second.projectId)?.status, .draft)
+    }
+
     // MARK: - Helpers
 
     private struct Seeded {

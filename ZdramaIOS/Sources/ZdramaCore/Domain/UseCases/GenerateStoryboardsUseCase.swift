@@ -43,6 +43,8 @@ public struct GenerateStoryboardsUseCase {
                 errorMessage: nil
             )
             return shots
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             try repository.updateProjectTextResult(
                 projectId: projectId,
