@@ -62,7 +62,7 @@ final class AgnesSettingsStoreTests: XCTestCase {
     func testSaveLoadRoundTripsApiKey() throws {
         var settings = AgnesSettings.defaults()
         settings.apiKey = "sk-test-key"
-        store.save(settings)
+        try store.save(settings)
 
         XCTAssertEqual(store.load().apiKey, "sk-test-key")
         XCTAssertEqual(try keychain.get("api_key"), "sk-test-key")
@@ -92,15 +92,15 @@ final class AgnesSettingsStoreTests: XCTestCase {
         )
     }
 
-    func testSaveNormalizesBaseURLWithoutSlash() {
+    func testSaveNormalizesBaseURLWithoutSlash() throws {
         var settings = AgnesSettings.defaults()
         settings.baseUrl = "https://custom.example.com"
-        store.save(settings)
+        try store.save(settings)
         XCTAssertEqual(store.load().baseUrl, "https://custom.example.com/")
         XCTAssertEqual(defaults.string(forKey: "base_url"), "https://custom.example.com/")
     }
 
-    func testBlankCustomPromptLoadsAsNil() {
+    func testBlankCustomPromptLoadsAsNil() throws {
         let settings = AgnesSettings(
             apiKey: "k",
             baseUrl: AgnesSettings.defaultBaseURL,
@@ -113,7 +113,7 @@ final class AgnesSettingsStoreTests: XCTestCase {
             customCharacterExtractPrompt: " keep me ",
             customStoryboardPrompt: nil
         )
-        store.save(settings)
+        try store.save(settings)
 
         let loaded = store.load()
         XCTAssertNil(loaded.customScriptCreatePrompt)
@@ -139,10 +139,10 @@ final class AgnesSettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.hasApiKey())
     }
 
-    func testSaveAlwaysWritesDefaultTimeout() {
+    func testSaveAlwaysWritesDefaultTimeout() throws {
         var settings = AgnesSettings.defaults()
         settings.requestTimeoutSeconds = 30
-        store.save(settings)
+        try store.save(settings)
 
         XCTAssertEqual(store.load().requestTimeoutSeconds, AgnesSettings.defaultTimeoutSeconds)
         XCTAssertEqual(defaults.integer(forKey: "timeout_seconds"), 120)
@@ -154,7 +154,7 @@ final class AgnesSettingsStoreTests: XCTestCase {
         settings.textModel = "  text-model  "
         settings.imageModel = "  image-model  "
         settings.videoModel = "  video-model  "
-        store.save(settings)
+        try store.save(settings)
 
         let loaded = store.load()
         XCTAssertEqual(loaded.apiKey, "sk-trim")

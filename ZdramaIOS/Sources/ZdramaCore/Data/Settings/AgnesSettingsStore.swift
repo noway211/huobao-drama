@@ -98,8 +98,8 @@ public final class AgnesSettingsStore: @unchecked Sendable {
         )
     }
 
-    public func save(_ settings: AgnesSettings) {
-        try? keychain.set(Keys.apiKey, value: settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines))
+    public func save(_ settings: AgnesSettings) throws {
+        try keychain.set(Keys.apiKey, value: settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines))
         defaults.set(Self.normalizeBaseURL(settings.baseUrl), forKey: Keys.baseURL)
         defaults.set(settings.textModel.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Keys.textModel)
         defaults.set(settings.imageModel.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Keys.imageModel)

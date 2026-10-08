@@ -71,9 +71,14 @@ struct SettingsView: View {
     }
 
     private func save() {
-        container.settingsStore.save(currentSettings())
-        feedbackIsError = false
-        feedback = "已保存"
+        do {
+            try container.settingsStore.save(currentSettings())
+            feedbackIsError = false
+            feedback = "已保存"
+        } catch {
+            feedbackIsError = true
+            feedback = "保存失败：\(error.localizedDescription)"
+        }
     }
 
     private func testPing() {

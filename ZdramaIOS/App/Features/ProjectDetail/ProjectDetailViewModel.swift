@@ -214,7 +214,7 @@ final class ProjectDetailViewModel: ObservableObject {
         PreflightInput(
             apiKey: settingsStore.load().apiKey,
             episodeContent: episode.content,
-            scriptContent: episode.scriptContent ?? project.generatedScript,
+            scriptContent: episode.scriptContent,
             shots: shots,
             fileExists: { FileManager.default.fileExists(atPath: $0) }
         )

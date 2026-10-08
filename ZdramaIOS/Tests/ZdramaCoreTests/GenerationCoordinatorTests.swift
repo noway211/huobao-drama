@@ -20,7 +20,7 @@ final class GenerationCoordinatorTests: XCTestCase {
         defaults = UserDefaults(suiteName: suiteName)
         XCTAssertNotNil(defaults)
         settingsStore = AgnesSettingsStore(defaults: defaults, keychain: InMemoryKeychainStore())
-        settingsStore.save(
+        try settingsStore.save(
             AgnesSettings(
                 apiKey: "sk-test",
                 baseUrl: "https://apihub.agnes-ai.com",

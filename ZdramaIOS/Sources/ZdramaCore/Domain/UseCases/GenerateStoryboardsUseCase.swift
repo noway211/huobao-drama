@@ -34,6 +34,8 @@ public struct GenerateStoryboardsUseCase {
                 project: project,
                 script: script
             )
+            // 替换前旧 shotId 的本地媒体文件将不再被引用，替换成功后清理。
+            let oldShots = try repository.getStoryboards(projectId: projectId, episodeId: episodeId)
             try repository.replaceStoryboards(projectId: projectId, episodeId: episodeId, shots: shots)
             try repository.updateProjectTextResult(
                 projectId: projectId,
@@ -42,6 +44,7 @@ public struct GenerateStoryboardsUseCase {
                 generatedScript: project.generatedScript,
                 errorMessage: nil
             )
+            removeOrphanedMedia(oldShots)
             return shots
         } catch is CancellationError {
             throw CancellationError()
@@ -54,6 +57,17 @@ public struct GenerateStoryboardsUseCase {
                 errorMessage: error.localizedDescription
             )
             throw error
+        }
+    }
+
+    /// 删除被替换镜头遗留的本地媒体文件（仅当文件仍存在时；清理失败不应影响生成结果）。
+    private func removeOrphanedMedia(_ oldShots: [StoryboardShot]) {
+        let fileManager = FileManager.default
+        for shot in oldShots {
+            for path in [shot.imageLocalPath, shot.videoLocalPath] {
+                guard let path, !path.isEmpty, fileManager.fileExists(atPath: path) else { continue }
+                try? fileManager.removeItem(atPath: path)
+            }
         }
     }
 }

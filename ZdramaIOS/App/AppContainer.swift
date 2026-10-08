@@ -146,8 +146,7 @@ final class AppContainer: ObservableObject {
         if let episode = try? repository.getEpisodeForProject(projectId) {
             await coordinator.cancel(projectId: projectId, episodeId: episode.id)
         }
-        let deleted = try repository.deleteProject(projectId)
-        try? downloadRepository.deleteGeneratedMedia(projectId: projectId)
-        return deleted
+        // DramaRepository.deleteProject 已连媒体目录一并删除，无需重复清理。
+        return try repository.deleteProject(projectId)
     }
 }

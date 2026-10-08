@@ -38,6 +38,7 @@ struct ManagePromptsView: View {
     @State private var leavingTab: PromptTab?
     @State private var isReverting = false
     @State private var savedFlash = false
+    @State private var saveError: String?
 
     init(container: AppContainer) {
         self.container = container
@@ -131,6 +132,14 @@ struct ManagePromptsView: View {
             }
         }
         .padding()
+        .alert("保存失败", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("好", role: .cancel) { saveError = nil }
+        } message: {
+            Text(saveError ?? "")
+        }
     }
 
     private func draftBinding(_ tab: PromptTab) -> Binding<String> {
@@ -155,14 +164,20 @@ struct ManagePromptsView: View {
         case .storyboard:
             settings.customStoryboardPrompt = value
         }
-        container.settingsStore.save(settings)
-        saved = Self.resolvedPrompts(container.settingsStore.load())
-        // 清空保存等价于恢复默认：回填解析后的文案，避免保存后仍被判定为"已修改"
-        drafts[tab.rawValue] = saved[tab.rawValue]
-        savedFlash = true
-        Task {
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
+        do {
+            try container.settingsStore.save(settings)
+            saveError = nil
+            saved = Self.resolvedPrompts(container.settingsStore.load())
+            // 清空保存等价于恢复默认：回填解析后的文案，避免保存后仍被判定为"已修改"
+            drafts[tab.rawValue] = saved[tab.rawValue]
+            savedFlash = true
+            Task {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                savedFlash = false
+            }
+        } catch {
             savedFlash = false
+            saveError = "保存失败：\(error.localizedDescription)"
         }
     }
 }

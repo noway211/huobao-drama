@@ -6,6 +6,7 @@ options:
 settings:
   base:
     PRODUCT_NAME: 火宝短剧
+    PRODUCT_BUNDLE_IDENTIFIER: com.huobao.zdrama
     SWIFT_VERSION: "5.9"
 packages:
   ZdramaCore:

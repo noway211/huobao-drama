@@ -220,6 +220,12 @@ public struct LocalMp4Composer: Sendable {
         return normalized < 0 ? normalized + 360 : normalized
     }
 
+    /// 让非 Sendable 值（如 AVAssetExportSession）可被 @Sendable 取消回调安全捕获；
+    /// 仅在单一 cancelExport() 调用场景下使用，值本身不被并发修改。
+    private struct UncheckedSendableBox<Value>: @unchecked Sendable {
+        let value: Value
+    }
+
     private func createParentDirectory(for outputURL: URL) throws {
         let parent = outputURL.deletingLastPathComponent()
         do {
@@ -249,14 +255,23 @@ public struct LocalMp4Composer: Sendable {
         session.outputURL = outputURL
         session.outputFileType = .mp4
 
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            session.exportAsynchronously {
-                continuation.resume()
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                session.exportAsynchronously {
+                    switch session.status {
+                    case .completed:
+                        continuation.resume()
+                    case .cancelled:
+                        continuation.resume(throwing: CancellationError())
+                    default:
+                        continuation.resume(throwing: LocalMp4ComposerError.writeFailed)
+                    }
+                }
             }
-        }
-
-        guard session.status == .completed else {
-            throw LocalMp4ComposerError.writeFailed
+        } onCancel: {
+            // AVAssetExportSession 非 Sendable，经 @unchecked 包装后仅在取消回调内只读使用。
+            UncheckedSendableBox(value: session).value.cancelExport()
         }
     }
 }
