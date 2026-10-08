@@ -39,7 +39,7 @@ import ZdramaCore
 
 @main
 struct ZdramaApp: App {
-    @State private var container = AppContainer.bootstrap()
+    @StateObject private var container = AppContainer.bootstrap()
 
     var body: some Scene {
         WindowGroup {

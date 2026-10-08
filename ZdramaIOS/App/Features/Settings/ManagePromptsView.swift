@@ -157,6 +157,8 @@ struct ManagePromptsView: View {
         }
         container.settingsStore.save(settings)
         saved = Self.resolvedPrompts(container.settingsStore.load())
+        // 清空保存等价于恢复默认：回填解析后的文案，避免保存后仍被判定为"已修改"
+        drafts[tab.rawValue] = saved[tab.rawValue]
         savedFlash = true
         Task {
             try? await Task.sleep(nanoseconds: 1_500_000_000)

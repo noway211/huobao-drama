@@ -44,8 +44,10 @@ struct CreateProjectView: View {
             }
             Section("拍摄参数") {
                 TextField("镜头数", text: $shotCount)
+                    .keyboardType(.numberPad)
                     .autocorrectionDisabled()
                 TextField("单镜头时长（秒）", text: $duration)
+                    .keyboardType(.numberPad)
                     .autocorrectionDisabled()
             }
             Section {

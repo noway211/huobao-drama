@@ -10,6 +10,7 @@ struct ProjectListView: View {
     @State private var projects: [DramaProject] = []
     @State private var loadError: String?
     @State private var pendingDelete: DramaProject?
+    @State private var deleteError: String?
 
     var body: some View {
         Group {
@@ -53,6 +54,17 @@ struct ProjectListView: View {
         } message: { project in
             Text("将删除「\(project.title)」及其全部数据，此操作不可恢复。")
         }
+        .alert(
+            "删除失败",
+            isPresented: Binding(
+                get: { deleteError != nil },
+                set: { if !$0 { deleteError = nil } }
+            )
+        ) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(deleteError ?? "")
+        }
     }
 
     private var deleteDialogPresented: Binding<Bool> {
@@ -95,11 +107,12 @@ struct ProjectListView: View {
 
     private func delete(_ project: DramaProject) {
         Task {
-            defer { reload() }
             do {
                 _ = try await container.deleteProject(project.id)
+                reload()
             } catch {
-                loadError = "删除失败：\(error.localizedDescription)"
+                // 失败时保留列表原状，仅弹出错误提示（不 reload，避免覆盖错误文案）
+                deleteError = "删除失败：\(error.localizedDescription)"
             }
         }
     }
