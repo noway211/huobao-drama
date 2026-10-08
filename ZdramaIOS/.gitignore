@@ -1,0 +1,9 @@
+# XcodeGen 生成物（由 project.yml 自动生成，运行 `xcodegen generate` 可重建）
+Zdrama.xcodeproj/
+
+# Xcode / SPM 本地状态
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.swiftpm/
