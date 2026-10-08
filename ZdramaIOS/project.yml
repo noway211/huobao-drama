@@ -1,0 +1,29 @@
+name: Zdrama
+options:
+  bundleIdPrefix: com.huobao
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    PRODUCT_NAME: 火宝短剧
+    SWIFT_VERSION: "5.9"
+packages:
+  ZdramaCore:
+    path: .
+targets:
+  Zdrama:
+    type: application
+    platform: iOS
+    sources:
+      - App
+    dependencies:
+      - package: ZdramaCore
+        product: ZdramaCore
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: 火宝短剧
+        CFBundleIdentifier: com.huobao.zdrama
+        UILaunchScreen: {}
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
