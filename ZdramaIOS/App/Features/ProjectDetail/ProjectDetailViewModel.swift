@@ -228,7 +228,7 @@ final class ProjectDetailViewModel: ObservableObject {
         case .missingRawContent, .missingScript:
             return "请先为本集创作或改写剧本"
         case .missingStoryboards:
-            return "请先点击「剧本」或「全部生成」，完成剧本后再生成 分镜"
+            return "请先点击「剧本」或「全部生成」，完成剧本后再生成分镜"
         case .missingImages:
             return "请先生成分镜图"
         case .missingLocalVideos:
