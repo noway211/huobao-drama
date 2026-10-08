@@ -11,6 +11,8 @@ struct ProjectDetailView: View {
 
     @State private var showDeleteConfirm = false
     @State private var deleteError: String?
+    /// 视图是否在前台：压入子页面（播放器/分镜/图库等）时暂停定时刷新，返回时恢复。
+    @State private var isForeground = true
 
     private let refreshTimer = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
 
@@ -56,8 +58,15 @@ struct ProjectDetailView: View {
                 .tint(.red)
             }
         }
-        .onAppear { viewModel.refresh() }
-        .onReceive(refreshTimer) { _ in viewModel.refresh() }
+        .onAppear {
+            isForeground = true
+            viewModel.refresh()
+        }
+        .onDisappear { isForeground = false }
+        .onReceive(refreshTimer) { _ in
+            guard isForeground else { return }
+            viewModel.refresh()
+        }
         .alert(
             "提示",
             isPresented: Binding(
@@ -163,7 +172,7 @@ struct ProjectDetailView: View {
                 .padding(.bottom, 4)
             if viewModel.hasScript {
                 linkRow("查看剧本", systemImage: "doc.text") {
-                    ScriptViewerView(episode: viewModel.episode)
+                    ScriptViewerView(episode: viewModel.episode, project: viewModel.project)
                 }
             } else {
                 unavailableRow("查看剧本", systemImage: "doc.text")

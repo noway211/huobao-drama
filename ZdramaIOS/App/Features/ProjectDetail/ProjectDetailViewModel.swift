@@ -37,7 +37,6 @@ final class ProjectDetailViewModel: ObservableObject {
     var progress: ProjectProgress {
         ProjectGenerationLogic.progress(
             stage: project?.currentStage ?? .none,
-            episode: episode,
             shots: shots
         )
     }
@@ -115,27 +114,33 @@ final class ProjectDetailViewModel: ObservableObject {
 
     // MARK: - 分镜提示词
 
-    /// 保存指定镜头的图片提示词，并同步本地镜头快照。
-    func saveImagePrompt(shotId: Int64, prompt: String) {
+    /// 保存指定镜头的图片提示词，并同步本地镜头快照。返回是否成功（失败时 alertMessage 已填充）。
+    @discardableResult
+    func saveImagePrompt(shotId: Int64, prompt: String) -> Bool {
         do {
             try repository.updateShotImagePrompt(shotId: shotId, newPrompt: prompt)
             if let index = shots.firstIndex(where: { $0.id == shotId }) {
                 shots[index].imagePrompt = prompt
             }
+            return true
         } catch {
             alertMessage = "保存图片提示词失败：\(error.localizedDescription)"
+            return false
         }
     }
 
-    /// 保存指定镜头的视频提示词，并同步本地镜头快照。
-    func saveVideoPrompt(shotId: Int64, prompt: String) {
+    /// 保存指定镜头的视频提示词，并同步本地镜头快照。返回是否成功（失败时 alertMessage 已填充）。
+    @discardableResult
+    func saveVideoPrompt(shotId: Int64, prompt: String) -> Bool {
         do {
             try repository.updateShotVideoPrompt(shotId: shotId, newPrompt: prompt)
             if let index = shots.firstIndex(where: { $0.id == shotId }) {
                 shots[index].videoPrompt = prompt
             }
+            return true
         } catch {
             alertMessage = "保存视频提示词失败：\(error.localizedDescription)"
+            return false
         }
     }
 
@@ -192,6 +197,8 @@ final class ProjectDetailViewModel: ObservableObject {
 
     private func enqueue(stage: String, forceRegenerate: Bool) {
         guard let project, let episode else { return }
+        // 乐观置位：避免首击后、轮询刷新前的短窗口内重复点击（重复点击会以 REPLACE 取消重跑首个任务）
+        isGenerating = true
         Task {
             await coordinator.enqueue(
                 projectId: project.id,

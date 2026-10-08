@@ -39,7 +39,7 @@ struct VideoPlayerView: View {
 
     @ViewBuilder
     private var playerArea: some View {
-        if currentURL != nil {
+        if let player {
             VideoPlayer(player: player)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {

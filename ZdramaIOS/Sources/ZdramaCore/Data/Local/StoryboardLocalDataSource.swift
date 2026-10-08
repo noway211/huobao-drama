@@ -100,6 +100,9 @@ public final class StoryboardLocalDataSource {
                     """,
                 arguments: [newPrompt, LocalClock.nowMillis(), shotId]
             )
+            guard db.changesCount > 0 else {
+                throw LocalizedMessageError("镜头不存在或已被替换")
+            }
         }
     }
 
@@ -113,6 +116,9 @@ public final class StoryboardLocalDataSource {
                     """,
                 arguments: [newPrompt, LocalClock.nowMillis(), shotId]
             )
+            guard db.changesCount > 0 else {
+                throw LocalizedMessageError("镜头不存在或已被替换")
+            }
         }
     }
 

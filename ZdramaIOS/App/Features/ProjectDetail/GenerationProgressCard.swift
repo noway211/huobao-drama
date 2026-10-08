@@ -14,9 +14,12 @@ struct GenerationProgressCard: View {
                 Text(statusText)
                     .font(.subheadline)
                 Spacer()
-                Text(project.currentStage.displayName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                // 生成中时 statusText 已含阶段名（如“出图 3/8”），避免重复展示
+                if project.status != .processing {
+                    Text(project.currentStage.displayName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             if project.status == .processing, isProgressStage {
                 ProgressView(value: progress.fraction)

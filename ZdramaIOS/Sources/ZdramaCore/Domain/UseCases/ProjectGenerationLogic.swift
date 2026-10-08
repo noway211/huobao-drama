@@ -36,7 +36,6 @@ public enum ProjectGenerationLogic {
     /// 并标注正在生成的镜头号。
     public static func progress(
         stage: GenerationStage,
-        episode: Episode?,
         shots: [StoryboardShot]
     ) -> ProjectProgress {
         switch stage {
@@ -100,7 +99,7 @@ public struct ProjectProgress: Equatable, Sendable {
         case .text:
             return "正在生成剧本…"
         case .storyboard:
-            return "正在生成 分镜…"
+            return "正在生成分镜…"
         case .finalVideo:
             return "正在合成成片…"
         case .none:

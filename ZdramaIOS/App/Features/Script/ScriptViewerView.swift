@@ -1,12 +1,17 @@
 import SwiftUI
 import ZdramaCore
 
-/// 剧本查看页：只读展示剧集脚本内容，可滚动。
+/// 剧本查看页：只读展示剧集脚本内容（无剧集脚本时回退项目脚本），可滚动。
 struct ScriptViewerView: View {
     let script: String
 
-    init(episode: Episode?) {
-        self.script = episode?.scriptContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    init(episode: Episode?, project: DramaProject?) {
+        let episodeScript = episode?.scriptContent?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let episodeScript, !episodeScript.isEmpty {
+            self.script = episodeScript
+        } else {
+            self.script = project?.generatedScript?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
     }
 
     var body: some View {

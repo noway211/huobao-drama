@@ -167,7 +167,7 @@ final class ProjectDetailLogicTests: XCTestCase {
             makeShot(shotNumber: 7, imageStatus: .pending),
             makeShot(shotNumber: 8, imageStatus: .pending)
         ]
-        let progress = ProjectGenerationLogic.progress(stage: .image, episode: nil, shots: shots)
+        let progress = ProjectGenerationLogic.progress(stage: .image, shots: shots)
         XCTAssertEqual(progress.completedCount, 3)
         XCTAssertEqual(progress.totalCount, 8)
         XCTAssertEqual(progress.processingShotNumber, 4)
@@ -186,7 +186,7 @@ final class ProjectDetailLogicTests: XCTestCase {
             makeShot(shotNumber: 7, videoStatus: .pending),
             makeShot(shotNumber: 8, videoStatus: .pending)
         ]
-        let progress = ProjectGenerationLogic.progress(stage: .video, episode: nil, shots: shots)
+        let progress = ProjectGenerationLogic.progress(stage: .video, shots: shots)
         XCTAssertEqual(progress.completedCount, 5)
         XCTAssertEqual(progress.totalCount, 8)
         XCTAssertNil(progress.processingShotNumber)
@@ -194,13 +194,13 @@ final class ProjectDetailLogicTests: XCTestCase {
     }
 
     func testNonMediaStageProgressText() {
-        let progress = ProjectGenerationLogic.progress(stage: .storyboard, episode: nil, shots: [])
-        XCTAssertEqual(progress.displayText, "正在生成 分镜…")
+        let progress = ProjectGenerationLogic.progress(stage: .storyboard, shots: [])
+        XCTAssertEqual(progress.displayText, "正在生成分镜…")
         XCTAssertEqual(progress.fraction, 0)
     }
 
     func testFinalVideoProgressText() {
-        let progress = ProjectGenerationLogic.progress(stage: .finalVideo, episode: nil, shots: [])
+        let progress = ProjectGenerationLogic.progress(stage: .finalVideo, shots: [])
         XCTAssertEqual(progress.displayText, "正在合成成片…")
     }
 

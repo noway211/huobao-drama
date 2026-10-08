@@ -4,8 +4,8 @@ import ZdramaCore
 /// 分镜查看页：卡片列表，每张卡片展示镜头信息，并提供图片/视频提示词的编辑与保存。
 struct StoryboardViewerView: View {
     let shots: [StoryboardShot]
-    let saveImagePrompt: (Int64, String) -> Void
-    let saveVideoPrompt: (Int64, String) -> Void
+    let saveImagePrompt: (Int64, String) -> Bool
+    let saveVideoPrompt: (Int64, String) -> Bool
 
     var body: some View {
         ScrollView {
@@ -30,8 +30,8 @@ struct StoryboardViewerView: View {
 /// 单张分镜卡片：镜头信息 + 图片提示词 + 视频提示词（各有独立保存按钮）。
 private struct StoryboardShotCard: View {
     let shot: StoryboardShot
-    let saveImagePrompt: (Int64, String) -> Void
-    let saveVideoPrompt: (Int64, String) -> Void
+    let saveImagePrompt: (Int64, String) -> Bool
+    let saveVideoPrompt: (Int64, String) -> Bool
 
     @State private var imagePrompt: String
     @State private var videoPrompt: String
@@ -39,8 +39,8 @@ private struct StoryboardShotCard: View {
 
     init(
         shot: StoryboardShot,
-        saveImagePrompt: @escaping (Int64, String) -> Void,
-        saveVideoPrompt: @escaping (Int64, String) -> Void
+        saveImagePrompt: @escaping (Int64, String) -> Bool,
+        saveVideoPrompt: @escaping (Int64, String) -> Bool
     ) {
         self.shot = shot
         self.saveImagePrompt = saveImagePrompt
@@ -61,8 +61,9 @@ private struct StoryboardShotCard: View {
                 .lineLimit(3...6)
                 .textFieldStyle(.roundedBorder)
             Button {
-                saveImagePrompt(shot.id, imagePrompt)
-                savedMessage = "图片提示词已保存"
+                if saveImagePrompt(shot.id, imagePrompt) {
+                    savedMessage = "图片提示词已保存"
+                }
             } label: {
                 Text("保存图片提示词")
                     .frame(maxWidth: .infinity)
@@ -73,8 +74,9 @@ private struct StoryboardShotCard: View {
                 .lineLimit(3...6)
                 .textFieldStyle(.roundedBorder)
             Button {
-                saveVideoPrompt(shot.id, videoPrompt)
-                savedMessage = "视频提示词已保存"
+                if saveVideoPrompt(shot.id, videoPrompt) {
+                    savedMessage = "视频提示词已保存"
+                }
             } label: {
                 Text("保存视频提示词")
                     .frame(maxWidth: .infinity)

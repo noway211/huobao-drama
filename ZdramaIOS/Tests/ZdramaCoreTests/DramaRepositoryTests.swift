@@ -259,6 +259,34 @@ final class DramaRepositoryTests: XCTestCase {
         XCTAssertEqual(shot.videoPrompt, "new video")
     }
 
+    /// 回归：分镜被替换后旧 shotId 已失效，更新应抛错而非静默成功（防止 UI 假"已保存"）。
+    func testUpdatePromptForMissingShotThrows() throws {
+        let projectId = try repository.createProject(makeProject(title: "Show"))
+        let episodeId = try repository.createEpisodeForProject(
+            projectId: projectId,
+            title: "Ep1",
+            content: "content"
+        )
+        try repository.replaceStoryboards(
+            projectId: projectId,
+            episodeId: episodeId,
+            shots: [makeShot(projectId: projectId, episodeId: episodeId, shotNumber: 1, scene: "s")]
+        )
+
+        let stored = try repository.getStoryboards(projectId: projectId, episodeId: episodeId)
+        XCTAssertEqual(stored.count, 1)
+        try repository.updateShotImagePrompt(shotId: stored[0].id, newPrompt: "new image")
+        try repository.updateShotVideoPrompt(shotId: stored[0].id, newPrompt: "new video")
+        XCTAssertEqual(try repository.getStoryboards(projectId: projectId, episodeId: episodeId)[0].imagePrompt, "new image")
+
+        XCTAssertThrowsError(
+            try repository.updateShotImagePrompt(shotId: stored[0].id + 999, newPrompt: "x")
+        )
+        XCTAssertThrowsError(
+            try repository.updateShotVideoPrompt(shotId: stored[0].id + 999, newPrompt: "x")
+        )
+    }
+
     // MARK: - Helpers
 
     private func makeProject(
