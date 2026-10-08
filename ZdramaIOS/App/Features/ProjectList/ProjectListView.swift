@@ -122,15 +122,3 @@ struct ProjectListView: View {
             .formatted(date: .abbreviated, time: .shortened)
     }
 }
-
-private extension ProjectStatus {
-    var displayName: String {
-        switch self {
-        case .draft: return "草稿"
-        case .processing: return "生成中"
-        case .completed: return "已完成"
-        case .failed: return "失败"
-        case .cancelled: return "已取消"
-        }
-    }
-}

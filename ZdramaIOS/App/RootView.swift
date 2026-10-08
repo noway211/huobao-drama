@@ -24,8 +24,7 @@ struct RootView: View {
                     case .projects:
                         ProjectListView(container: container, path: $path)
                     case .detail(let id):
-                        Text("detail \(id)")
-                            .navigationTitle("详情")
+                        ProjectDetailView(container: container, projectId: id, path: $path)
                     }
                 }
         }
