@@ -49,7 +49,7 @@ final class AgnesSettingsStoreTests: XCTestCase {
         XCTAssertEqual(loaded, AgnesSettings.defaults())
         XCTAssertEqual(AgnesSettings.defaults().apiKey, "")
         XCTAssertEqual(AgnesSettings.defaults().baseUrl, "https://apihub.agnes-ai.com/")
-        XCTAssertEqual(AgnesSettings.defaults().textModel, "")
+        XCTAssertEqual(AgnesSettings.defaults().textModel, "agnes-2.0-flash")
         XCTAssertEqual(AgnesSettings.defaults().imageModel, "agnes-image-2.0-flash")
         XCTAssertEqual(AgnesSettings.defaults().videoModel, "agnes-video-v2.0")
         XCTAssertEqual(AgnesSettings.defaults().requestTimeoutSeconds, 120)

@@ -7,7 +7,7 @@ struct HomeView: View {
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
-            Text("火宝短剧")
+            Text("视频短剧")
                 .font(.system(size: 36, weight: .bold))
             Text("AI 驱动的短剧创作工具")
                 .font(.subheadline)

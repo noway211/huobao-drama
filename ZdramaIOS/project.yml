@@ -5,7 +5,7 @@ options:
     iOS: "17.0"
 settings:
   base:
-    PRODUCT_NAME: 火宝短剧
+    PRODUCT_NAME: 视频短剧
     PRODUCT_BUNDLE_IDENTIFIER: com.huobao.zdrama
     SWIFT_VERSION: "5.9"
 packages:
@@ -23,7 +23,7 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: 火宝短剧
+        CFBundleDisplayName: 视频短剧
         CFBundleIdentifier: com.huobao.zdrama
         UILaunchScreen: {}
         LSRequiresIPhoneOS: true

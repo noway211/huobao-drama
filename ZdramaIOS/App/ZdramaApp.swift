@@ -1,5 +1,5 @@
 // ============================================================================
-// 火宝短剧 iOS 应用入口
+// 视频短剧 iOS 应用入口
 // ============================================================================
 // 【README —— 如何在 Xcode 中打开本应用】
 //
@@ -27,7 +27,7 @@
 //    Swift 版本设为 5.9（与 Package.swift 保持一致）。
 // 6. 配置 Info.plist（xcodegen 会按 project.yml 的 info.properties 自动生成；
 //    手工创建时需包含）：
-//      - CFBundleDisplayName: 火宝短剧
+//      - CFBundleDisplayName: 视频短剧
 //      - CFBundleIdentifier:  com.huobao.zdrama
 //      - UILaunchScreen:     {}（空字典）
 //      - NSAppTransportSecurity.NSAllowsLocalNetworking: true

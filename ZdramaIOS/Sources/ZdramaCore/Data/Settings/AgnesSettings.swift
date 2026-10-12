@@ -11,6 +11,7 @@ public struct AgnesSettings: Equatable, Sendable {
     public var customStoryboardPrompt: String?
 
     public static let defaultBaseURL = "https://apihub.agnes-ai.com/"
+    public static let defaultTextModel = "agnes-2.0-flash"
     public static let defaultImageModel = "agnes-image-2.0-flash"
     public static let defaultVideoModel = "agnes-video-v2.0"
     public static let defaultTimeoutSeconds = 120
@@ -43,7 +44,7 @@ public struct AgnesSettings: Equatable, Sendable {
         AgnesSettings(
             apiKey: "",
             baseUrl: defaultBaseURL,
-            textModel: "",
+            textModel: defaultTextModel,
             imageModel: defaultImageModel,
             videoModel: defaultVideoModel,
             requestTimeoutSeconds: defaultTimeoutSeconds
