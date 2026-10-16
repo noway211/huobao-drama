@@ -72,12 +72,17 @@ static void ZDBindText(sqlite3_stmt *stmt, int index, NSString *value) {
     project.currentStage = ZDGenerationStageFromPersisted([NSString stringWithUTF8String:(const char *)sqlite3_column_text(stmt, 9)]);
     const char *script = (const char *)sqlite3_column_text(stmt, 10);
     project.generatedScript = script ? [NSString stringWithUTF8String:script] : nil;
-    project.updatedAt = sqlite3_column_int64(stmt, 11);
+    const char *errorMessage = (const char *)sqlite3_column_text(stmt, 11);
+    project.errorMessage = errorMessage ? [NSString stringWithUTF8String:errorMessage] : nil;
+    project.finalVideoStatus = ZDAssetStatusFromPersisted([NSString stringWithUTF8String:(const char *)sqlite3_column_text(stmt, 12)]);
+    const char *finalError = (const char *)sqlite3_column_text(stmt, 13);
+    project.finalVideoErrorMessage = finalError ? [NSString stringWithUTF8String:finalError] : nil;
+    project.updatedAt = sqlite3_column_int64(stmt, 14);
     return project;
 }
 
 - (NSArray<ZDDramaProject *> *)getProjects {
-    const char *sql = "SELECT id, title, prompt, style, target_audience, aspect_ratio, shot_count, shot_duration_seconds, status, current_stage, generated_script, updated_at FROM projects ORDER BY updated_at DESC";
+    const char *sql = "SELECT id, title, prompt, style, target_audience, aspect_ratio, shot_count, shot_duration_seconds, status, current_stage, generated_script, error_message, final_video_status, final_video_error_message, updated_at FROM projects ORDER BY updated_at DESC";
     sqlite3_stmt *stmt = NULL;
     sqlite3_prepare_v2(self.db, sql, -1, &stmt, NULL);
     NSMutableArray *projects = [NSMutableArray array];
@@ -89,7 +94,7 @@ static void ZDBindText(sqlite3_stmt *stmt, int index, NSString *value) {
 }
 
 - (ZDDramaProject *)getProject:(int64_t)projectId {
-    const char *sql = "SELECT id, title, prompt, style, target_audience, aspect_ratio, shot_count, shot_duration_seconds, status, current_stage, generated_script, updated_at FROM projects WHERE id = ?";
+    const char *sql = "SELECT id, title, prompt, style, target_audience, aspect_ratio, shot_count, shot_duration_seconds, status, current_stage, generated_script, error_message, final_video_status, final_video_error_message, updated_at FROM projects WHERE id = ?";
     sqlite3_stmt *stmt = NULL;
     sqlite3_prepare_v2(self.db, sql, -1, &stmt, NULL);
     sqlite3_bind_int64(stmt, 1, projectId);
@@ -283,6 +288,61 @@ static void ZDBindText(sqlite3_stmt *stmt, int index, NSString *value) {
         [NSFileManager.defaultManager removeItemAtURL:dir error:nil];
     }
     return [self getProject:projectId] == nil;
+}
+
+- (BOOL)updateFinalVideoStatus:(NSString *)status projectId:(int64_t)projectId episodeId:(int64_t)episodeId errorMessage:(NSString *)errorMessage localPath:(NSString *)localPath {
+    sqlite3_stmt *project = NULL;
+    sqlite3_prepare_v2(self.db, "UPDATE projects SET final_video_status = ?, final_video_error_message = ?, final_video_local_path = ?, updated_at = ? WHERE id = ?", -1, &project, NULL);
+    ZDBindText(project, 1, status ?: @"PENDING");
+    ZDBindText(project, 2, errorMessage);
+    ZDBindText(project, 3, localPath);
+    sqlite3_bind_int64(project, 4, ZDNow());
+    sqlite3_bind_int64(project, 5, projectId);
+    sqlite3_step(project);
+    sqlite3_finalize(project);
+    sqlite3_stmt *episode = NULL;
+    sqlite3_prepare_v2(self.db, "UPDATE episodes SET final_video_status = ?, final_video_error_message = ?, final_video_local_path = ?, updated_at = ? WHERE id = ?", -1, &episode, NULL);
+    ZDBindText(episode, 1, status ?: @"PENDING");
+    ZDBindText(episode, 2, errorMessage);
+    ZDBindText(episode, 3, localPath);
+    sqlite3_bind_int64(episode, 4, ZDNow());
+    sqlite3_bind_int64(episode, 5, episodeId);
+    BOOL ok = sqlite3_step(episode) == SQLITE_DONE;
+    sqlite3_finalize(episode);
+    return ok;
+}
+
+- (NSInteger)failInterruptedWorkWithMessage:(NSString *)message {
+    int64_t now = ZDNow();
+    sqlite3_stmt *projects = NULL;
+    sqlite3_prepare_v2(self.db, "UPDATE projects SET status = 'FAILED', error_message = ?, updated_at = ? WHERE status = 'PROCESSING'", -1, &projects, NULL);
+    ZDBindText(projects, 1, message);
+    sqlite3_bind_int64(projects, 2, now);
+    sqlite3_step(projects);
+    int changes = sqlite3_changes(self.db);
+    sqlite3_finalize(projects);
+
+    sqlite3_stmt *finals = NULL;
+    sqlite3_prepare_v2(self.db, "UPDATE projects SET final_video_status = 'FAILED', final_video_error_message = ?, updated_at = ? WHERE final_video_status = 'PROCESSING'", -1, &finals, NULL);
+    ZDBindText(finals, 1, message);
+    sqlite3_bind_int64(finals, 2, now);
+    sqlite3_step(finals);
+    sqlite3_finalize(finals);
+
+    sqlite3_stmt *images = NULL;
+    sqlite3_prepare_v2(self.db, "UPDATE storyboards SET image_status = 'FAILED', image_error_message = ?, updated_at = ? WHERE image_status = 'PROCESSING'", -1, &images, NULL);
+    ZDBindText(images, 1, message);
+    sqlite3_bind_int64(images, 2, now);
+    sqlite3_step(images);
+    sqlite3_finalize(images);
+
+    sqlite3_stmt *videos = NULL;
+    sqlite3_prepare_v2(self.db, "UPDATE storyboards SET video_status = 'FAILED', video_error_message = ?, updated_at = ? WHERE video_status = 'PROCESSING'", -1, &videos, NULL);
+    ZDBindText(videos, 1, message);
+    sqlite3_bind_int64(videos, 2, now);
+    sqlite3_step(videos);
+    sqlite3_finalize(videos);
+    return changes;
 }
 
 @end

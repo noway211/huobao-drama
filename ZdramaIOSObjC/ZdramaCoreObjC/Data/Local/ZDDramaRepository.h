@@ -17,6 +17,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)updateShotVideoId:(int64_t)shotId status:(NSString *)status localPath:(nullable NSString *)path url:(nullable NSString *)url taskId:(nullable NSString *)taskId errorMessage:(nullable NSString *)errorMessage;
 - (BOOL)replaceStoryboards:(NSArray<ZDStoryboardShot *> *)shots forEpisodeId:(int64_t)episodeId;
 - (BOOL)deleteProject:(int64_t)projectId;
+- (BOOL)updateFinalVideoStatus:(NSString *)status projectId:(int64_t)projectId episodeId:(int64_t)episodeId errorMessage:(nullable NSString *)errorMessage localPath:(nullable NSString *)localPath;
+- (NSInteger)failInterruptedWorkWithMessage:(NSString *)message;
 @end
 
 NS_ASSUME_NONNULL_END
