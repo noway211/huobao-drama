@@ -1,5 +1,7 @@
 #import "ZDHomeViewController.h"
 #import "ZDSettingsViewController.h"
+#import "ZDCreateProjectViewController.h"
+#import "ZDProjectListViewController.h"
 
 @implementation ZDHomeViewController
 
@@ -41,6 +43,14 @@
 - (void)openPlaceholder:(UIButton *)sender {
     if ([sender.currentTitle isEqualToString:@"设置"]) {
         [self.navigationController pushViewController:[ZDSettingsViewController new] animated:YES];
+        return;
+    }
+    if ([sender.currentTitle isEqualToString:@"新建"]) {
+        [self.navigationController pushViewController:[ZDCreateProjectViewController new] animated:YES];
+        return;
+    }
+    if ([sender.currentTitle isEqualToString:@"项目"]) {
+        [self.navigationController pushViewController:[ZDProjectListViewController new] animated:YES];
         return;
     }
     UIViewController *placeholder = [UIViewController new];

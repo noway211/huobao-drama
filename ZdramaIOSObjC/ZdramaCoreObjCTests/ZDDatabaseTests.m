@@ -2,6 +2,7 @@
 #import "ZDDramaModels.h"
 #import "ZDDramaRepository.h"
 #import "ZDGenerationCoordinator.h"
+#import "ZDCreateDramaUseCase.h"
 
 @interface ZDDatabaseTests : XCTestCase
 @end
@@ -63,6 +64,25 @@
     XCTAssertEqualObjects(failedShot.imageStatus, @"FAILED");
     XCTAssertEqualObjects(failedShot.imageErrorMessage, @"生成任务中断（应用被关闭），请重新开始");
     XCTAssertEqualObjects([repo getProject:cancelledId].status, @"CANCELLED");
+}
+
+- (void)testCreateDramaRejectsEmptyTitle {
+    NSString *root = [NSTemporaryDirectory() stringByAppendingPathComponent:[[NSUUID UUID] UUIDString]];
+    [NSFileManager.defaultManager createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:nil];
+    ZDDramaRepository *repo = [ZDDramaRepository repositoryWithDatabasePath:[root stringByAppendingPathComponent:@"zdrama.db"] filesRoot:root];
+    ZDCreateDramaUseCase *useCase = [[ZDCreateDramaUseCase alloc] initWithRepository:repo];
+    NSError *error = nil;
+    int64_t empty = [useCase execute:[ZDCreateDramaInput inputWithTitle:@"  " prompt:@"雨" style:@"现代短剧" targetAudience:@"大众受众" aspectRatio:@"9:16" shotCount:4 shotDurationSeconds:5] error:&error];
+    XCTAssertEqual(empty, 0);
+    XCTAssertEqualObjects(error.localizedDescription, @"请填写标题");
+    XCTAssertEqual([repo getProjects].count, 0);
+
+    error = nil;
+    int64_t created = [useCase execute:[ZDCreateDramaInput inputWithTitle:@"雨夜" prompt:@"雨" style:@"现代短剧" targetAudience:@"大众受众" aspectRatio:@"9:16" shotCount:4 shotDurationSeconds:5] error:&error];
+    XCTAssertNil(error);
+    XCTAssertGreaterThan(created, 0);
+    XCTAssertEqual([repo getProjects].count, 1);
+    XCTAssertEqual([repo getEpisodeForProject:created].episodeNumber, 1);
 }
 
 @end
