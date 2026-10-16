@@ -1,13 +1,13 @@
 #import "ZDAppDelegate.h"
+#import "ZDAppContainer.h"
+#import "ZDHomeViewController.h"
 
 @implementation ZDAppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+    (void)ZDAppContainer.shared;
     self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
-    UIViewController *root = [[UIViewController alloc] init];
-    root.title = @"视频短剧";
-    root.view.backgroundColor = UIColor.systemBackgroundColor;
-    self.window.rootViewController = [[UINavigationController alloc] initWithRootViewController:root];
+    self.window.rootViewController = [[UINavigationController alloc] initWithRootViewController:[ZDHomeViewController new]];
     [self.window makeKeyAndVisible];
     return YES;
 }
