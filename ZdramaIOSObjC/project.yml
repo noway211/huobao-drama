@@ -1,0 +1,67 @@
+name: ZdramaObjC
+settings:
+  base:
+    CLANG_ENABLE_OBJC_ARC: YES
+targets:
+  ZdramaCoreObjC:
+    type: library.static
+    platform: iOS
+    sources:
+      - ZdramaCoreObjC
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.huobao.zdrama.objc.core
+        DEFINES_MODULE: YES
+    dependencies:
+      - sdk: sqlite3.tbd
+      - sdk: Security.framework
+      - sdk: AVFoundation.framework
+  ZdramaObjC:
+    type: application
+    platform: iOS
+    sources:
+      - ZdramaObjC
+    dependencies:
+      - target: ZdramaCoreObjC
+        embed: false
+        link: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.huobao.zdrama.objc
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: ZdramaObjC/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: 视频短剧
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        CODE_SIGNING_ALLOWED: NO
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "-force_load"
+          - "$(BUILT_PRODUCTS_DIR)/libZdramaCoreObjC.a"
+    info:
+      path: ZdramaObjC/Info.plist
+      properties:
+        CFBundleDisplayName: 视频短剧
+        CFBundleIdentifier: com.huobao.zdrama.objc
+        UILaunchScreen: {}
+        LSRequiresIPhoneOS: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+  ZdramaCoreObjCTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - ZdramaCoreObjCTests
+    dependencies:
+      - target: ZdramaCoreObjC
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.huobao.zdrama.objc.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: ""
+        BUNDLE_LOADER: ""
+options:
+  bundleIdPrefix: com.huobao
+  deploymentTarget:
+    iOS: "17.0"
