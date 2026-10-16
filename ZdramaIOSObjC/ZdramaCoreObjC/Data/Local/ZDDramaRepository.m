@@ -70,12 +70,14 @@ static void ZDBindText(sqlite3_stmt *stmt, int index, NSString *value) {
     project.shotDurationSeconds = sqlite3_column_int(stmt, 7);
     project.status = ZDProjectStatusFromPersisted([NSString stringWithUTF8String:(const char *)sqlite3_column_text(stmt, 8)]);
     project.currentStage = ZDGenerationStageFromPersisted([NSString stringWithUTF8String:(const char *)sqlite3_column_text(stmt, 9)]);
-    project.updatedAt = sqlite3_column_int64(stmt, 10);
+    const char *script = (const char *)sqlite3_column_text(stmt, 10);
+    project.generatedScript = script ? [NSString stringWithUTF8String:script] : nil;
+    project.updatedAt = sqlite3_column_int64(stmt, 11);
     return project;
 }
 
 - (NSArray<ZDDramaProject *> *)getProjects {
-    const char *sql = "SELECT id, title, prompt, style, target_audience, aspect_ratio, shot_count, shot_duration_seconds, status, current_stage, updated_at FROM projects ORDER BY updated_at DESC";
+    const char *sql = "SELECT id, title, prompt, style, target_audience, aspect_ratio, shot_count, shot_duration_seconds, status, current_stage, generated_script, updated_at FROM projects ORDER BY updated_at DESC";
     sqlite3_stmt *stmt = NULL;
     sqlite3_prepare_v2(self.db, sql, -1, &stmt, NULL);
     NSMutableArray *projects = [NSMutableArray array];
@@ -87,7 +89,7 @@ static void ZDBindText(sqlite3_stmt *stmt, int index, NSString *value) {
 }
 
 - (ZDDramaProject *)getProject:(int64_t)projectId {
-    const char *sql = "SELECT id, title, prompt, style, target_audience, aspect_ratio, shot_count, shot_duration_seconds, status, current_stage, updated_at FROM projects WHERE id = ?";
+    const char *sql = "SELECT id, title, prompt, style, target_audience, aspect_ratio, shot_count, shot_duration_seconds, status, current_stage, generated_script, updated_at FROM projects WHERE id = ?";
     sqlite3_stmt *stmt = NULL;
     sqlite3_prepare_v2(self.db, sql, -1, &stmt, NULL);
     sqlite3_bind_int64(stmt, 1, projectId);
@@ -137,12 +139,85 @@ static void ZDBindText(sqlite3_stmt *stmt, int index, NSString *value) {
     return episode;
 }
 
+- (BOOL)updateEpisodeScriptContent:(NSString *)script episodeId:(int64_t)episodeId status:(NSString *)status {
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_prepare_v2(self.db, "UPDATE episodes SET script_content = ?, episode_status = ?, updated_at = ? WHERE id = ?", -1, &stmt, NULL);
+    ZDBindText(stmt, 1, script);
+    ZDBindText(stmt, 2, status ?: @"DRAFT");
+    sqlite3_bind_int64(stmt, 3, ZDNow());
+    sqlite3_bind_int64(stmt, 4, episodeId);
+    BOOL ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return ok;
+}
+
+- (BOOL)updateProjectTextResult:(int64_t)projectId status:(NSString *)status stage:(NSString *)stage generatedScript:(NSString *)script errorMessage:(NSString *)errorMessage {
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_prepare_v2(self.db, "UPDATE projects SET status = ?, current_stage = ?, generated_script = ?, error_message = ?, updated_at = ? WHERE id = ?", -1, &stmt, NULL);
+    ZDBindText(stmt, 1, status ?: @"DRAFT");
+    ZDBindText(stmt, 2, stage ?: @"NONE");
+    ZDBindText(stmt, 3, script);
+    ZDBindText(stmt, 4, errorMessage);
+    sqlite3_bind_int64(stmt, 5, ZDNow());
+    sqlite3_bind_int64(stmt, 6, projectId);
+    BOOL ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return ok;
+}
+
+- (ZDStoryboardShot *)shotFromStatement:(sqlite3_stmt *)stmt {
+    ZDStoryboardShot *shot = [ZDStoryboardShot new];
+    shot.id = sqlite3_column_int64(stmt, 0);
+    shot.projectId = sqlite3_column_int64(stmt, 1);
+    shot.episodeIdIsNull = sqlite3_column_type(stmt, 2) == SQLITE_NULL;
+    shot.episodeId = shot.episodeIdIsNull ? 0 : sqlite3_column_int64(stmt, 2);
+    shot.shotNumber = sqlite3_column_int(stmt, 3);
+    const char *scene = (const char *)sqlite3_column_text(stmt, 4);
+    shot.scene = scene ? [NSString stringWithUTF8String:scene] : @"";
+    return shot;
+}
+
+- (NSArray<ZDStoryboardShot *> *)getStoryboardsForEpisode:(int64_t)episodeId {
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_prepare_v2(self.db, "SELECT id, project_id, episode_id, shot_number, scene FROM storyboards WHERE episode_id = ? ORDER BY shot_number ASC", -1, &stmt, NULL);
+    sqlite3_bind_int64(stmt, 1, episodeId);
+    NSMutableArray *shots = [NSMutableArray array];
+    while (sqlite3_step(stmt) == SQLITE_ROW) [shots addObject:[self shotFromStatement:stmt]];
+    sqlite3_finalize(stmt);
+    return shots;
+}
+
 - (BOOL)replaceStoryboards:(NSArray<ZDStoryboardShot *> *)shots forEpisodeId:(int64_t)episodeId {
     sqlite3_stmt *stmt = NULL;
     sqlite3_prepare_v2(self.db, "DELETE FROM storyboards WHERE episode_id = ?", -1, &stmt, NULL);
     sqlite3_bind_int64(stmt, 1, episodeId);
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
+    int64_t now = ZDNow();
+    const char *insert =
+        "INSERT INTO storyboards (project_id, episode_id, shot_number, scene, action, dialogue, camera, image_prompt, video_prompt, duration_seconds, character_names, character_ids, image_status, video_status, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'PENDING', ?, ?)";
+    for (ZDStoryboardShot *shot in shots) {
+        sqlite3_stmt *row = NULL;
+        sqlite3_prepare_v2(self.db, insert, -1, &row, NULL);
+        sqlite3_bind_int64(row, 1, shot.projectId);
+        sqlite3_bind_int64(row, 2, shot.episodeId > 0 ? shot.episodeId : episodeId);
+        sqlite3_bind_int(row, 3, (int)shot.shotNumber);
+        ZDBindText(row, 4, shot.scene ?: @"");
+        ZDBindText(row, 5, shot.action ?: @"");
+        ZDBindText(row, 6, shot.dialogue ?: @"");
+        ZDBindText(row, 7, shot.camera ?: @"");
+        ZDBindText(row, 8, shot.imagePrompt ?: @"");
+        ZDBindText(row, 9, shot.videoPrompt ?: @"");
+        sqlite3_bind_int(row, 10, (int)shot.durationSeconds);
+        NSData *names = shot.characterNames ? [NSJSONSerialization dataWithJSONObject:shot.characterNames options:0 error:nil] : nil;
+        ZDBindText(row, 11, names ? [[NSString alloc] initWithData:names encoding:NSUTF8StringEncoding] : nil);
+        ZDBindText(row, 12, shot.characterIds);
+        sqlite3_bind_int64(row, 13, now);
+        sqlite3_bind_int64(row, 14, now);
+        sqlite3_step(row);
+        sqlite3_finalize(row);
+    }
     return YES;
 }
 
