@@ -1,4 +1,5 @@
 #import "ZDHomeViewController.h"
+#import "ZDSettingsViewController.h"
 
 @implementation ZDHomeViewController
 
@@ -38,6 +39,10 @@
 }
 
 - (void)openPlaceholder:(UIButton *)sender {
+    if ([sender.currentTitle isEqualToString:@"设置"]) {
+        [self.navigationController pushViewController:[ZDSettingsViewController new] animated:YES];
+        return;
+    }
     UIViewController *placeholder = [UIViewController new];
     placeholder.title = sender.currentTitle;
     placeholder.view.backgroundColor = UIColor.systemBackgroundColor;

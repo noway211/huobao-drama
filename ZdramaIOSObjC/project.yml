@@ -40,6 +40,8 @@ targets:
         HEADER_SEARCH_PATHS:
           - "$(SRCROOT)/ZdramaCoreObjC"
           - "$(SRCROOT)/ZdramaCoreObjC/**"
+          - "$(SRCROOT)/ZdramaObjC"
+          - "$(SRCROOT)/ZdramaObjC/**"
         OTHER_LDFLAGS:
           - "$(inherited)"
           - "-force_load"
