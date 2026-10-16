@@ -4,6 +4,10 @@
 #import "ZDGeneratedMediaPaths.h"
 #import "ZDChatResponseTextExtractor.h"
 #import "ZDStoryboardJSONParser.h"
+#import "ZDAgnesSettings.h"
+#import "ZDPromptDefaults.h"
+#import "ZDPromptResolver.h"
+#import "ZDGenerationPreflight.h"
 
 @interface ZDLogicTests : XCTestCase
 @end
@@ -48,6 +52,21 @@
     NSError *error = nil;
     XCTAssertNil(ZDParseStoryboardJSON(@"no array", &error));
     XCTAssertNotNil(error);
+}
+
+- (void)testDefaultsAndPreflight {
+    ZDAgnesSettings *settings = ZDAgnesSettingsDefaults();
+    XCTAssertEqualObjects(settings.textModel, @"agnes-2.0-flash");
+    XCTAssertEqualObjects(settings.baseUrl, @"https://apihub.agnes-ai.com/");
+    XCTAssertEqualObjects(ZDResolvePrompt(@"  ", ZDPromptDefaults.scriptCreatePrompt), ZDPromptDefaults.scriptCreatePrompt);
+    NSError *error = ZDPreflightStage(@"final_video", @"", nil, nil, @[], ^BOOL(NSString *path) { return NO; });
+    XCTAssertEqualObjects(error.localizedDescription, @"请先生成分镜");
+    ZDStoryboardShot *shot = [ZDStoryboardShot new];
+    shot.videoLocalPath = @"/missing.mp4";
+    error = ZDPreflightStage(@"final_video", @"", nil, nil, @[shot], ^BOOL(NSString *path) { return NO; });
+    XCTAssertEqualObjects(error.localizedDescription, @"请先生成并下载全部分镜视频后再合成成片");
+    error = ZDPreflightStage(@"text", @"  ", nil, nil, @[], ^BOOL(NSString *path) { return NO; });
+    XCTAssertEqualObjects(error.localizedDescription, @"Agnes API Key is required");
 }
 
 @end
