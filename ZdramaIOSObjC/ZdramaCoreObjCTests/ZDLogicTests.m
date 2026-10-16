@@ -8,6 +8,7 @@
 #import "ZDPromptDefaults.h"
 #import "ZDPromptResolver.h"
 #import "ZDGenerationPreflight.h"
+#import "ZDLocalMp4Composer.h"
 
 @interface ZDLogicTests : XCTestCase
 @end
@@ -67,6 +68,15 @@
     XCTAssertEqualObjects(error.localizedDescription, @"请先生成并下载全部分镜视频后再合成成片");
     error = ZDPreflightStage(@"text", @"  ", nil, nil, @[], ^BOOL(NSString *path) { return NO; });
     XCTAssertEqualObjects(error.localizedDescription, @"Agnes API Key is required");
+}
+
+- (void)testComposeRejectsEmptyAndMissing {
+    NSError *error = nil;
+    XCTAssertFalse(ZDValidateComposeInputs(@[], &error));
+    XCTAssertEqualObjects(error.localizedDescription, @"请先生成并下载全部分镜视频后再合成成片");
+    error = nil;
+    XCTAssertFalse(ZDValidateComposeInputs(@[@"/tmp/does-not-exist-shot.mp4"], &error));
+    XCTAssertEqualObjects(error.localizedDescription, @"分镜 #1 的本地视频不存在，请重新生成视频");
 }
 
 @end
