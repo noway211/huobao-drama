@@ -195,12 +195,18 @@ static void ZDBindText(sqlite3_stmt *stmt, int index, NSString *value) {
     shot.videoLocalPath = videoPath ? [NSString stringWithUTF8String:videoPath] : nil;
     const char *imageUrl = (const char *)sqlite3_column_text(stmt, 10);
     shot.imageUrl = imageUrl ? [NSString stringWithUTF8String:imageUrl] : nil;
+    const char *imagePrompt = (const char *)sqlite3_column_text(stmt, 11);
+    shot.imagePrompt = imagePrompt ? [NSString stringWithUTF8String:imagePrompt] : @"";
+    const char *videoPrompt = (const char *)sqlite3_column_text(stmt, 12);
+    shot.videoPrompt = videoPrompt ? [NSString stringWithUTF8String:videoPrompt] : @"";
+    const char *videoUrl = (const char *)sqlite3_column_text(stmt, 13);
+    shot.videoUrl = videoUrl ? [NSString stringWithUTF8String:videoUrl] : nil;
     return shot;
 }
 
 - (NSArray<ZDStoryboardShot *> *)getStoryboardsForEpisode:(int64_t)episodeId {
     sqlite3_stmt *stmt = NULL;
-    sqlite3_prepare_v2(self.db, "SELECT id, project_id, episode_id, shot_number, scene, image_status, image_local_path, image_error_message, video_status, video_local_path, image_url FROM storyboards WHERE episode_id = ? ORDER BY shot_number ASC", -1, &stmt, NULL);
+    sqlite3_prepare_v2(self.db, "SELECT id, project_id, episode_id, shot_number, scene, image_status, image_local_path, image_error_message, video_status, video_local_path, image_url, image_prompt, video_prompt, video_url FROM storyboards WHERE episode_id = ? ORDER BY shot_number ASC", -1, &stmt, NULL);
     sqlite3_bind_int64(stmt, 1, episodeId);
     NSMutableArray *shots = [NSMutableArray array];
     while (sqlite3_step(stmt) == SQLITE_ROW) [shots addObject:[self shotFromStatement:stmt]];
@@ -270,6 +276,18 @@ static void ZDBindText(sqlite3_stmt *stmt, int index, NSString *value) {
         sqlite3_finalize(row);
     }
     return YES;
+}
+
+- (BOOL)updateShotPromptsForShotId:(int64_t)shotId imagePrompt:(NSString *)imagePrompt videoPrompt:(NSString *)videoPrompt {
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_prepare_v2(self.db, "UPDATE storyboards SET image_prompt = ?, video_prompt = ?, updated_at = ? WHERE id = ?", -1, &stmt, NULL);
+    ZDBindText(stmt, 1, imagePrompt ?: @"");
+    ZDBindText(stmt, 2, videoPrompt ?: @"");
+    sqlite3_bind_int64(stmt, 3, ZDNow());
+    sqlite3_bind_int64(stmt, 4, shotId);
+    BOOL ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return ok;
 }
 
 - (BOOL)deleteProject:(int64_t)projectId {

@@ -1,6 +1,10 @@
 #import "ZDProjectDetailViewController.h"
 #import "ZDAppContainer.h"
 #import "ZDGenerationPreflight.h"
+#import "ZDScriptViewController.h"
+#import "ZDStoryboardViewController.h"
+#import "ZDImageGalleryViewController.h"
+#import "ZDVideoPlayerViewController.h"
 
 @implementation ZDProjectDetailViewController {
     int64_t _projectId;
@@ -106,7 +110,16 @@
         return;
     }
     NSString *stage = [self stageForTitle:sender.currentTitle];
-    if (!stage) return;
+    if (!stage) {
+        UIViewController *viewer = nil;
+        if ([sender.currentTitle isEqualToString:@"查看剧本"]) viewer = [[ZDScriptViewController alloc] initWithProjectId:_projectId];
+        else if ([sender.currentTitle isEqualToString:@"查看分镜"]) viewer = [[ZDStoryboardViewController alloc] initWithProjectId:_projectId];
+        else if ([sender.currentTitle isEqualToString:@"图库"]) viewer = [[ZDImageGalleryViewController alloc] initWithProjectId:_projectId];
+        else if ([sender.currentTitle isEqualToString:@"镜头视频"]) viewer = [[ZDVideoPlayerViewController alloc] initWithProjectId:_projectId finalVideo:NO];
+        else if ([sender.currentTitle isEqualToString:@"播放成片"]) viewer = [[ZDVideoPlayerViewController alloc] initWithProjectId:_projectId finalVideo:YES];
+        if (viewer) [self.navigationController pushViewController:viewer animated:YES];
+        return;
+    }
     ZDDramaProject *project = [ZDAppContainer.shared.repository getProject:_projectId];
     ZDEpisode *episode = [ZDAppContainer.shared.repository getEpisodeForProject:_projectId];
     NSArray *shots = [ZDAppContainer.shared.repository getStoryboardsForEpisode:episode.id];
