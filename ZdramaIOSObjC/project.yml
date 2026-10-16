@@ -12,6 +12,10 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.huobao.zdrama.objc.core
         DEFINES_MODULE: YES
+        PUBLIC_HEADERS_FOLDER_PATH: include/ZdramaCoreObjC
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/ZdramaCoreObjC"
+          - "$(SRCROOT)/ZdramaCoreObjC/**"
     dependencies:
       - sdk: sqlite3.tbd
       - sdk: Security.framework
@@ -59,6 +63,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.huobao.zdrama.objc.tests
         GENERATE_INFOPLIST_FILE: YES
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/ZdramaCoreObjC"
+          - "$(SRCROOT)/ZdramaCoreObjC/**"
         TEST_HOST: ""
         BUNDLE_LOADER: ""
 options:
