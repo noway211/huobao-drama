@@ -7,11 +7,14 @@
 #import "ZDAgnesImageRepository.h"
 #import "ZDAgnesVideoRepository.h"
 #import "ZDMediaDownloadRepository.h"
+#import "ZDGenerateStoryboardImagesUseCase.h"
+#import "ZDGenerateStoryboardVideosUseCase.h"
 
 @interface ZDStubURLProtocol : NSURLProtocol
 @property (class, nonatomic, copy) NSURLRequest *lastRequest;
 @property (class, nonatomic, copy) NSArray<NSURLRequest *> *requests;
 @property (class, nonatomic) NSInteger statusCode;
+@property (class, nonatomic, copy) NSArray<NSNumber *> *statusCodes;
 @property (class, nonatomic, copy) NSData *body;
 @property (class, nonatomic, copy) NSArray<NSData *> *bodies;
 @end
@@ -21,6 +24,7 @@
 static NSURLRequest *ZDStubLastRequest;
 static NSMutableArray<NSURLRequest *> *ZDStubRequests;
 static NSInteger ZDStubStatusCode = 200;
+static NSArray<NSNumber *> *ZDStubStatusCodes;
 static NSData *ZDStubBody;
 static NSArray<NSData *> *ZDStubBodies;
 
@@ -30,6 +34,8 @@ static NSArray<NSData *> *ZDStubBodies;
 + (void)setRequests:(NSArray<NSURLRequest *> *)requests { ZDStubRequests = [requests mutableCopy]; }
 + (NSInteger)statusCode { return ZDStubStatusCode; }
 + (void)setStatusCode:(NSInteger)statusCode { ZDStubStatusCode = statusCode; }
++ (NSArray<NSNumber *> *)statusCodes { return ZDStubStatusCodes; }
++ (void)setStatusCodes:(NSArray<NSNumber *> *)statusCodes { ZDStubStatusCodes = [statusCodes copy]; }
 + (NSData *)body { return ZDStubBody; }
 + (void)setBody:(NSData *)body { ZDStubBody = [body copy]; }
 + (NSArray<NSData *> *)bodies { return ZDStubBodies; }
@@ -54,13 +60,17 @@ static NSArray<NSData *> *ZDStubBodies;
     ZDStubURLProtocol.lastRequest = recorded;
     if (!ZDStubRequests) ZDStubRequests = [NSMutableArray array];
     [ZDStubRequests addObject:recorded];
+    NSInteger status = ZDStubURLProtocol.statusCode;
     NSData *body = ZDStubURLProtocol.body;
+    NSUInteger index = ZDStubRequests.count - 1;
     if (ZDStubURLProtocol.bodies.count > 0) {
-        NSUInteger index = ZDStubRequests.count - 1;
         body = index < ZDStubURLProtocol.bodies.count ? ZDStubURLProtocol.bodies[index] : ZDStubURLProtocol.bodies.lastObject;
     }
+    if (ZDStubURLProtocol.statusCodes.count > 0) {
+        status = (index < ZDStubURLProtocol.statusCodes.count ? ZDStubURLProtocol.statusCodes[index] : ZDStubURLProtocol.statusCodes.lastObject).integerValue;
+    }
     NSHTTPURLResponse *response = [[NSHTTPURLResponse alloc] initWithURL:self.request.URL
-                                                               statusCode:ZDStubURLProtocol.statusCode
+                                                               statusCode:status
                                                               HTTPVersion:@"HTTP/1.1"
                                                              headerFields:@{@"Content-Type": @"application/json"}];
     [self.client URLProtocol:self didReceiveResponse:response cacheStoragePolicy:NSURLCacheStorageNotAllowed];
@@ -74,6 +84,14 @@ static NSArray<NSData *> *ZDStubBodies;
 @end
 
 @implementation ZDGenerationTests
+
+- (void)setUp {
+    ZDStubURLProtocol.requests = @[];
+    ZDStubURLProtocol.body = nil;
+    ZDStubURLProtocol.bodies = @[];
+    ZDStubURLProtocol.statusCode = 200;
+    ZDStubURLProtocol.statusCodes = @[];
+}
 
 - (NSURLSession *)stubSession {
     NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
@@ -228,6 +246,132 @@ static NSArray<NSData *> *ZDStubBodies;
     }];
     [self waitForExpectations:@[download] timeout:2];
     XCTAssertNil([ZDStubURLProtocol.lastRequest valueForHTTPHeaderField:@"Authorization"]);
+}
+
+- (void)testImageUseCaseStopsAndSkipsCompletedFile {
+    NSString *root = [NSTemporaryDirectory() stringByAppendingPathComponent:[[NSUUID UUID] UUIDString]];
+    [NSFileManager.defaultManager createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:nil];
+    ZDDramaRepository *repository = [ZDDramaRepository repositoryWithDatabasePath:[root stringByAppendingPathComponent:@"zdrama.db"] filesRoot:root];
+    int64_t projectId = [repository createProjectFromInput:[ZDCreateDramaInput inputWithTitle:@"雨夜" prompt:@"雨" style:@"写实" targetAudience:@"青年" aspectRatio:@"9:16" shotCount:2 shotDurationSeconds:5]];
+    ZDEpisode *episode = [repository getEpisodeForProject:projectId];
+    ZDStoryboardShot *first = [ZDStoryboardShot new];
+    first.projectId = projectId;
+    first.episodeId = episode.id;
+    first.shotNumber = 1;
+    first.scene = @"一";
+    first.imagePrompt = @"one";
+    ZDStoryboardShot *second = [ZDStoryboardShot new];
+    second.projectId = projectId;
+    second.episodeId = episode.id;
+    second.shotNumber = 2;
+    second.scene = @"二";
+    second.imagePrompt = @"two";
+    [repository replaceStoryboards:@[first, second] forEpisodeId:episode.id];
+    NSArray<ZDStoryboardShot *> *stored = [repository getStoryboardsForEpisode:episode.id];
+
+    ZDStubURLProtocol.requests = @[];
+    ZDStubURLProtocol.statusCode = 200;
+    ZDStubURLProtocol.statusCodes = @[@200, @200, @500];
+    ZDStubURLProtocol.bodies = @[
+        [@"{\"data\":[{\"url\":\"https://cdn.example/one.jpg\"}]}" dataUsingEncoding:NSUTF8StringEncoding],
+        [@"bytes-1" dataUsingEncoding:NSUTF8StringEncoding],
+        [@"fail" dataUsingEncoding:NSUTF8StringEncoding]
+    ];
+    ZDGenerateStoryboardImagesUseCase *useCase = [[ZDGenerateStoryboardImagesUseCase alloc] initWithRepository:repository session:[self stubSession] filesRoot:root];
+    XCTestExpectation *firstRun = [self expectationWithDescription:@"first images"];
+    __block NSError *error = nil;
+    [useCase executeProjectId:projectId episodeId:episode.id settings:[self settings] completion:^(NSError *useCaseError) {
+        error = useCaseError;
+        [firstRun fulfill];
+    }];
+    [self waitForExpectations:@[firstRun] timeout:2];
+    XCTAssertTrue([error.localizedDescription containsString:@"HTTP 500"]);
+    stored = [repository getStoryboardsForEpisode:episode.id];
+    XCTAssertEqualObjects(stored[0].imageStatus, @"COMPLETED");
+    XCTAssertTrue([NSFileManager.defaultManager fileExistsAtPath:stored[0].imageLocalPath]);
+    XCTAssertEqualObjects(stored[1].imageStatus, @"FAILED");
+
+    ZDStubURLProtocol.requests = @[];
+    ZDStubURLProtocol.statusCodes = @[@200, @200];
+    ZDStubURLProtocol.bodies = @[
+        [@"{\"data\":[{\"url\":\"https://cdn.example/two.jpg\"}]}" dataUsingEncoding:NSUTF8StringEncoding],
+        [@"bytes-2" dataUsingEncoding:NSUTF8StringEncoding]
+    ];
+    XCTestExpectation *secondRun = [self expectationWithDescription:@"retry second"];
+    [useCase executeProjectId:projectId episodeId:episode.id settings:[self settings] completion:^(NSError *useCaseError) {
+        error = useCaseError;
+        [secondRun fulfill];
+    }];
+    [self waitForExpectations:@[secondRun] timeout:2];
+    XCTAssertNil(error);
+    NSUInteger imagePosts = 0;
+    for (NSURLRequest *request in ZDStubURLProtocol.requests) {
+        if ([request.URL.absoluteString containsString:@"images/generations"]) imagePosts += 1;
+    }
+    XCTAssertEqual(imagePosts, 1);
+}
+
+- (void)testVideoUseCaseStopsAndSkipsCompletedFile {
+    NSString *root = [NSTemporaryDirectory() stringByAppendingPathComponent:[[NSUUID UUID] UUIDString]];
+    [NSFileManager.defaultManager createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:nil];
+    ZDDramaRepository *repository = [ZDDramaRepository repositoryWithDatabasePath:[root stringByAppendingPathComponent:@"zdrama.db"] filesRoot:root];
+    int64_t projectId = [repository createProjectFromInput:[ZDCreateDramaInput inputWithTitle:@"雨夜" prompt:@"雨" style:@"写实" targetAudience:@"青年" aspectRatio:@"9:16" shotCount:2 shotDurationSeconds:5]];
+    ZDEpisode *episode = [repository getEpisodeForProject:projectId];
+    ZDStoryboardShot *first = [ZDStoryboardShot new];
+    first.projectId = projectId;
+    first.episodeId = episode.id;
+    first.shotNumber = 1;
+    first.scene = @"一";
+    first.videoPrompt = @"one";
+    first.imageUrl = @"https://cdn.example/one.jpg";
+    ZDStoryboardShot *second = [ZDStoryboardShot new];
+    second.projectId = projectId;
+    second.episodeId = episode.id;
+    second.shotNumber = 2;
+    second.scene = @"二";
+    second.videoPrompt = @"two";
+    second.imageUrl = @"https://cdn.example/two.jpg";
+    [repository replaceStoryboards:@[first, second] forEpisodeId:episode.id];
+
+    ZDStubURLProtocol.requests = @[];
+    ZDStubURLProtocol.statusCodes = @[@200, @200, @500];
+    ZDStubURLProtocol.bodies = @[
+        [@"{\"status\":\"completed\",\"metadata\":{\"url\":\"https://cdn.example/one.mp4\"}}" dataUsingEncoding:NSUTF8StringEncoding],
+        [@"bytes-1" dataUsingEncoding:NSUTF8StringEncoding],
+        [@"fail" dataUsingEncoding:NSUTF8StringEncoding]
+    ];
+    ZDGenerateStoryboardVideosUseCase *useCase = [[ZDGenerateStoryboardVideosUseCase alloc] initWithRepository:repository session:[self stubSession] filesRoot:root];
+    XCTestExpectation *firstRun = [self expectationWithDescription:@"first videos"];
+    __block NSError *error = nil;
+    [useCase executeProjectId:projectId episodeId:episode.id settings:[self settings] completion:^(NSError *useCaseError) {
+        error = useCaseError;
+        [firstRun fulfill];
+    }];
+    [self waitForExpectations:@[firstRun] timeout:2];
+    XCTAssertTrue([error.localizedDescription containsString:@"HTTP 500"]);
+    NSArray<ZDStoryboardShot *> *stored = [repository getStoryboardsForEpisode:episode.id];
+    XCTAssertEqualObjects(stored[0].videoStatus, @"COMPLETED");
+    XCTAssertTrue([NSFileManager.defaultManager fileExistsAtPath:stored[0].videoLocalPath]);
+    XCTAssertEqualObjects(stored[1].videoStatus, @"FAILED");
+
+    ZDStubURLProtocol.requests = @[];
+    ZDStubURLProtocol.statusCodes = @[@200, @200];
+    ZDStubURLProtocol.bodies = @[
+        [@"{\"status\":\"completed\",\"metadata\":{\"url\":\"https://cdn.example/two.mp4\"}}" dataUsingEncoding:NSUTF8StringEncoding],
+        [@"bytes-2" dataUsingEncoding:NSUTF8StringEncoding]
+    ];
+    XCTestExpectation *secondRun = [self expectationWithDescription:@"retry second video"];
+    [useCase executeProjectId:projectId episodeId:episode.id settings:[self settings] completion:^(NSError *useCaseError) {
+        error = useCaseError;
+        [secondRun fulfill];
+    }];
+    [self waitForExpectations:@[secondRun] timeout:2];
+    XCTAssertNil(error);
+    NSUInteger videoPosts = 0;
+    for (NSURLRequest *request in ZDStubURLProtocol.requests) {
+        if ([request.URL.absoluteString containsString:@"v1/videos"]) videoPosts += 1;
+    }
+    XCTAssertEqual(videoPosts, 1);
 }
 
 @end

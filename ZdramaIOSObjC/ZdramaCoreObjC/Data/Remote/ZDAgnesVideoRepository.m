@@ -64,6 +64,14 @@ static NSError *ZDVideoError(NSString *message) {
     };
     [_client jsonPOST:url body:body apiKey:settings.apiKey completion:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
         NSDictionary *json = data.length ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        if (error || response.statusCode < 200 || response.statusCode >= 300) {
+            NSString *text = data.length ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"";
+            NSString *message = text.length > 0
+                ? [NSString stringWithFormat:@"Agnes request failed: HTTP %ld: %@", (long)response.statusCode, text]
+                : [NSString stringWithFormat:@"Agnes request failed: HTTP %ld", (long)response.statusCode];
+            completion(nil, ZDVideoError(message));
+            return;
+        }
         NSString *immediate = [self videoURLFrom:json];
         if ([json[@"status"] isEqual:@"completed"] && !ZDVideoBlank(immediate)) {
             completion(immediate, nil);

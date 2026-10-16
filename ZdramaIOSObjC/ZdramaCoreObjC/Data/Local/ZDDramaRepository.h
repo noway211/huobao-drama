@@ -13,6 +13,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)updateEpisodeScriptContent:(nullable NSString *)script episodeId:(int64_t)episodeId status:(NSString *)status;
 - (BOOL)updateProjectTextResult:(int64_t)projectId status:(NSString *)status stage:(NSString *)stage generatedScript:(nullable NSString *)script errorMessage:(nullable NSString *)errorMessage;
 - (NSArray<ZDStoryboardShot *> *)getStoryboardsForEpisode:(int64_t)episodeId;
+- (BOOL)updateShotImageId:(int64_t)shotId status:(NSString *)status localPath:(nullable NSString *)path url:(nullable NSString *)url errorMessage:(nullable NSString *)errorMessage;
+- (BOOL)updateShotVideoId:(int64_t)shotId status:(NSString *)status localPath:(nullable NSString *)path url:(nullable NSString *)url taskId:(nullable NSString *)taskId errorMessage:(nullable NSString *)errorMessage;
 - (BOOL)replaceStoryboards:(NSArray<ZDStoryboardShot *> *)shots forEpisodeId:(int64_t)episodeId;
 - (BOOL)deleteProject:(int64_t)projectId;
 @end

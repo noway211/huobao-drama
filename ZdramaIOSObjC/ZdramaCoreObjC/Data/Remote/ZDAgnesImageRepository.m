@@ -28,8 +28,12 @@ static NSError *ZDImageError(NSString *message) {
     NSURL *url = [NSURL URLWithString:@"v1/images/generations" relativeToURL:[NSURL URLWithString:base]].absoluteURL;
     NSDictionary *body = @{@"model": settings.imageModel, @"prompt": prompt ?: @"", @"size": @"1024x768", @"n": @1, @"extra_body": @{@"response_format": @"url"}};
     [_client jsonPOST:url body:body apiKey:settings.apiKey completion:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
-        if (error || response.statusCode < 200 || response.statusCode >= 300) {
-            completion(nil, ZDImageError([NSString stringWithFormat:@"Agnes request failed: HTTP %ld", (long)response.statusCode]));
+        if (error || ![response isKindOfClass:NSHTTPURLResponse.class] || response.statusCode < 200 || response.statusCode >= 300) {
+            NSString *responseBody = [[NSString alloc] initWithData:data ?: [NSData data] encoding:NSUTF8StringEncoding] ?: @"";
+            NSString *message = responseBody.length
+                ? [NSString stringWithFormat:@"Agnes request failed: HTTP %ld: %@", (long)response.statusCode, responseBody]
+                : [NSString stringWithFormat:@"Agnes request failed: HTTP %ld", (long)response.statusCode];
+            completion(nil, ZDImageError(message));
             return;
         }
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];

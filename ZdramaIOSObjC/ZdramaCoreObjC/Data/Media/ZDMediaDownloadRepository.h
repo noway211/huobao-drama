@@ -8,6 +8,10 @@ NS_ASSUME_NONNULL_BEGIN
                             shotId:(int64_t)shotId
                                url:(NSString *)url
                         completion:(void (^)(NSString *_Nullable path, NSError *_Nullable error))completion;
+- (void)downloadShotVideoProjectId:(int64_t)projectId
+                            shotId:(int64_t)shotId
+                               url:(NSString *)url
+                        completion:(void (^)(NSString *_Nullable path, NSError *_Nullable error))completion;
 @end
 
 NS_ASSUME_NONNULL_END

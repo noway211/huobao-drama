@@ -174,17 +174,58 @@ static void ZDBindText(sqlite3_stmt *stmt, int index, NSString *value) {
     shot.shotNumber = sqlite3_column_int(stmt, 3);
     const char *scene = (const char *)sqlite3_column_text(stmt, 4);
     shot.scene = scene ? [NSString stringWithUTF8String:scene] : @"";
+    const char *imageStatus = (const char *)sqlite3_column_text(stmt, 5);
+    shot.imageStatus = imageStatus ? [NSString stringWithUTF8String:imageStatus] : @"PENDING";
+    const char *imagePath = (const char *)sqlite3_column_text(stmt, 6);
+    shot.imageLocalPath = imagePath ? [NSString stringWithUTF8String:imagePath] : nil;
+    const char *imageError = (const char *)sqlite3_column_text(stmt, 7);
+    shot.imageErrorMessage = imageError ? [NSString stringWithUTF8String:imageError] : nil;
+    const char *videoStatus = (const char *)sqlite3_column_text(stmt, 8);
+    shot.videoStatus = videoStatus ? [NSString stringWithUTF8String:videoStatus] : @"PENDING";
+    const char *videoPath = (const char *)sqlite3_column_text(stmt, 9);
+    shot.videoLocalPath = videoPath ? [NSString stringWithUTF8String:videoPath] : nil;
+    const char *imageUrl = (const char *)sqlite3_column_text(stmt, 10);
+    shot.imageUrl = imageUrl ? [NSString stringWithUTF8String:imageUrl] : nil;
     return shot;
 }
 
 - (NSArray<ZDStoryboardShot *> *)getStoryboardsForEpisode:(int64_t)episodeId {
     sqlite3_stmt *stmt = NULL;
-    sqlite3_prepare_v2(self.db, "SELECT id, project_id, episode_id, shot_number, scene FROM storyboards WHERE episode_id = ? ORDER BY shot_number ASC", -1, &stmt, NULL);
+    sqlite3_prepare_v2(self.db, "SELECT id, project_id, episode_id, shot_number, scene, image_status, image_local_path, image_error_message, video_status, video_local_path, image_url FROM storyboards WHERE episode_id = ? ORDER BY shot_number ASC", -1, &stmt, NULL);
     sqlite3_bind_int64(stmt, 1, episodeId);
     NSMutableArray *shots = [NSMutableArray array];
     while (sqlite3_step(stmt) == SQLITE_ROW) [shots addObject:[self shotFromStatement:stmt]];
     sqlite3_finalize(stmt);
     return shots;
+}
+
+- (BOOL)updateShotImageId:(int64_t)shotId status:(NSString *)status localPath:(NSString *)path url:(NSString *)url errorMessage:(NSString *)errorMessage {
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_prepare_v2(self.db, "UPDATE storyboards SET image_status = ?, image_local_path = ?, image_url = ?, image_error_message = ?, updated_at = ? WHERE id = ?", -1, &stmt, NULL);
+    ZDBindText(stmt, 1, status ?: @"PENDING");
+    ZDBindText(stmt, 2, path);
+    ZDBindText(stmt, 3, url);
+    ZDBindText(stmt, 4, errorMessage);
+    sqlite3_bind_int64(stmt, 5, ZDNow());
+    sqlite3_bind_int64(stmt, 6, shotId);
+    BOOL ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return ok;
+}
+
+- (BOOL)updateShotVideoId:(int64_t)shotId status:(NSString *)status localPath:(NSString *)path url:(NSString *)url taskId:(NSString *)taskId errorMessage:(NSString *)errorMessage {
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_prepare_v2(self.db, "UPDATE storyboards SET video_status = ?, video_local_path = ?, video_url = ?, video_task_id = ?, video_error_message = ?, updated_at = ? WHERE id = ?", -1, &stmt, NULL);
+    ZDBindText(stmt, 1, status ?: @"PENDING");
+    ZDBindText(stmt, 2, path);
+    ZDBindText(stmt, 3, url);
+    ZDBindText(stmt, 4, taskId);
+    ZDBindText(stmt, 5, errorMessage);
+    sqlite3_bind_int64(stmt, 6, ZDNow());
+    sqlite3_bind_int64(stmt, 7, shotId);
+    BOOL ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return ok;
 }
 
 - (BOOL)replaceStoryboards:(NSArray<ZDStoryboardShot *> *)shots forEpisodeId:(int64_t)episodeId {
@@ -195,8 +236,8 @@ static void ZDBindText(sqlite3_stmt *stmt, int index, NSString *value) {
     sqlite3_finalize(stmt);
     int64_t now = ZDNow();
     const char *insert =
-        "INSERT INTO storyboards (project_id, episode_id, shot_number, scene, action, dialogue, camera, image_prompt, video_prompt, duration_seconds, character_names, character_ids, image_status, video_status, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'PENDING', ?, ?)";
+        "INSERT INTO storyboards (project_id, episode_id, shot_number, scene, action, dialogue, camera, image_prompt, video_prompt, duration_seconds, character_names, character_ids, image_status, video_status, image_url, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'PENDING', ?, ?, ?)";
     for (ZDStoryboardShot *shot in shots) {
         sqlite3_stmt *row = NULL;
         sqlite3_prepare_v2(self.db, insert, -1, &row, NULL);
@@ -213,8 +254,9 @@ static void ZDBindText(sqlite3_stmt *stmt, int index, NSString *value) {
         NSData *names = shot.characterNames ? [NSJSONSerialization dataWithJSONObject:shot.characterNames options:0 error:nil] : nil;
         ZDBindText(row, 11, names ? [[NSString alloc] initWithData:names encoding:NSUTF8StringEncoding] : nil);
         ZDBindText(row, 12, shot.characterIds);
-        sqlite3_bind_int64(row, 13, now);
+        ZDBindText(row, 13, shot.imageUrl);
         sqlite3_bind_int64(row, 14, now);
+        sqlite3_bind_int64(row, 15, now);
         sqlite3_step(row);
         sqlite3_finalize(row);
     }
