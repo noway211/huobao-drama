@@ -121,7 +121,7 @@ static void ZDBindText(sqlite3_stmt *stmt, int index, NSString *value) {
 }
 
 - (ZDEpisode *)getEpisodeForProject:(int64_t)projectId {
-    const char *sql = "SELECT id, project_id, episode_number, episode_title, content, script_content, episode_status FROM episodes WHERE project_id = ? ORDER BY episode_number ASC LIMIT 1";
+    const char *sql = "SELECT id, project_id, episode_number, episode_title, content, script_content, episode_status, final_video_status, final_video_local_path FROM episodes WHERE project_id = ? ORDER BY episode_number ASC LIMIT 1";
     sqlite3_stmt *stmt = NULL;
     sqlite3_prepare_v2(self.db, sql, -1, &stmt, NULL);
     sqlite3_bind_int64(stmt, 1, projectId);
@@ -139,6 +139,10 @@ static void ZDBindText(sqlite3_stmt *stmt, int index, NSString *value) {
         episode.scriptContent = script ? [NSString stringWithUTF8String:script] : nil;
         const char *status = (const char *)sqlite3_column_text(stmt, 6);
         episode.status = ZDEpisodeStatusFromPersisted(status ? [NSString stringWithUTF8String:status] : nil);
+        const char *finalStatus = (const char *)sqlite3_column_text(stmt, 7);
+        episode.finalVideoStatus = ZDAssetStatusFromPersisted(finalStatus ? [NSString stringWithUTF8String:finalStatus] : nil);
+        const char *finalPath = (const char *)sqlite3_column_text(stmt, 8);
+        episode.finalVideoLocalPath = finalPath ? [NSString stringWithUTF8String:finalPath] : nil;
     }
     sqlite3_finalize(stmt);
     return episode;
