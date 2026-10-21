@@ -333,6 +333,37 @@ final class GenerationCoordinatorTests: XCTestCase {
         XCTAssertTrue(stored.allSatisfy { $0.imageStatus != .completed })
     }
 
+    func testCancelSingleRedrawKeepsTheFinishedPortrait() async throws {
+        let seeded = try seedProject()
+        let characterId = try insertCharacter(projectId: seeded.projectId, name: "林晚")
+        let existing = filesRoot.appendingPathComponent("keep.jpg")
+        try Data("old".utf8).write(to: existing)
+        try repository.updateCharacterImage(
+            characterId: characterId,
+            status: .completed,
+            url: "https://cdn.example/old.jpg",
+            localPath: existing.path,
+            errorMessage: nil
+        )
+        let http = WaitingAgnesHTTPClient()
+        let coordinator = makeCoordinator(http: http)
+
+        await coordinator.enqueue(
+            projectId: seeded.projectId,
+            episodeId: seeded.episodeId,
+            stage: "\(GenerationStageKey.characterImagePrefix)\(characterId)",
+            forceRegenerate: true
+        )
+        await http.waitForRequestCount(1)
+        await coordinator.cancel(projectId: seeded.projectId, episodeId: seeded.episodeId)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let stored = try XCTUnwrap(repository.getCharacters(projectId: seeded.projectId).first)
+        XCTAssertEqual(stored.imageStatus, .completed)
+        XCTAssertEqual(stored.imageLocalPath, existing.path)
+        XCTAssertNil(stored.imageErrorMessage)
+    }
+
     // MARK: - Helpers
 
     private struct Seeded {

@@ -52,6 +52,15 @@ public struct GenerateSingleCharacterImageUseCase {
                 errorMessage: nil
             )
             return localPath
+        } catch is CancellationError {
+            try repository.updateCharacterImage(
+                characterId: character.id,
+                status: character.imageStatus,
+                url: character.imageUrl,
+                localPath: character.imageLocalPath,
+                errorMessage: character.imageErrorMessage
+            )
+            throw CancellationError()
         } catch {
             try repository.updateCharacterImage(
                 characterId: character.id,
