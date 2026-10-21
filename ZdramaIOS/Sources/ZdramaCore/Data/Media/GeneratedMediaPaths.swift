@@ -17,6 +17,10 @@ public struct GeneratedMediaPaths: Sendable {
         projectDir(projectId).appendingPathComponent("shot_\(shotId)_image.\(ext)")
     }
 
+    public func characterImage(projectId: Int64, characterId: Int64, ext: String) -> URL {
+        projectDir(projectId).appendingPathComponent("char_\(characterId)_image.\(ext)")
+    }
+
     public func shotVideo(projectId: Int64, shotId: Int64, ext: String) -> URL {
         projectDir(projectId).appendingPathComponent("shot_\(shotId)_video.\(ext)")
     }

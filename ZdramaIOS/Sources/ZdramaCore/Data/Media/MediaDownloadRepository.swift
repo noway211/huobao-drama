@@ -17,6 +17,26 @@ public struct MediaDownloadRepository: Sendable {
         try await download(projectId: projectId, shotId: shotId, url: url, kind: .video)
     }
 
+    public func downloadCharacterImage(projectId: Int64, characterId: Int64, url: String) async throws -> String {
+        guard let downloadURL = URL(string: url) else {
+            throw AgnesClientError.invalidResponse
+        }
+        var request = URLRequest(url: downloadURL, timeoutInterval: 120)
+        request.httpMethod = "GET"
+        let (data, response) = try await client.send(request)
+        guard (200..<300).contains(response.statusCode) else {
+            throw AgnesClientError.mediaDownloadFailed(response.statusCode)
+        }
+        let ext = MediaPathHelpers.extensionFromURL(url, kind: .image)
+        let dest = paths.characterImage(projectId: projectId, characterId: characterId, ext: ext)
+        try FileManager.default.createDirectory(
+            at: dest.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try data.write(to: dest, options: .atomic)
+        return dest.path
+    }
+
     public func deleteGeneratedMedia(projectId: Int64) throws {
         let dir = paths.projectDir(projectId)
         if FileManager.default.fileExists(atPath: dir.path) {
