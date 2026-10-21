@@ -14,6 +14,8 @@ final class ProjectDetailViewModel: ObservableObject {
     @Published private(set) var loadError: String?
     @Published private(set) var alertMessage: String?
     @Published private(set) var pendingOverwriteStage: String?
+    @Published private(set) var characters: [Character] = []
+    @Published private(set) var pendingCharacterConfirm: String?
 
     private let repository: DramaRepository
     private let coordinator: GenerationCoordinator
@@ -72,6 +74,16 @@ final class ProjectDetailViewModel: ObservableObject {
         return episode?.finalVideoStatus == .completed && FileManager.default.fileExists(atPath: path)
     }
 
+    var hasEpisodeScript: Bool {
+        !isBlank(episode?.scriptContent)
+    }
+
+    var hasCompletedCharacterPortrait: Bool {
+        characters.contains { character in
+            character.imageStatus == .completed && isExistingLocalFile(character.imageLocalPath)
+        }
+    }
+
     /// 标题：用于导航栏展示。
     var title: String {
         project?.title ?? "详情"
@@ -98,6 +110,7 @@ final class ProjectDetailViewModel: ObservableObject {
             } else {
                 shots = []
             }
+            characters = try repository.getCharacters(projectId: projectId)
             loadError = nil
         } catch {
             loadError = "加载失败：\(error.localizedDescription)"
@@ -186,6 +199,43 @@ final class ProjectDetailViewModel: ObservableObject {
         pendingOverwriteStage = nil
     }
 
+    func extractCharacters() {
+        guard !isGenerating, episode != nil else { return }
+        guard hasEpisodeScript else {
+            alertMessage = "请先为本集创作或改写脚本"
+            return
+        }
+        if characters.isEmpty {
+            enqueue(stage: GenerationStageKey.characterExtract, forceRegenerate: false)
+        } else {
+            pendingCharacterConfirm = GenerationStageKey.characterExtract
+        }
+    }
+
+    func generateCharacterImages() {
+        guard !isGenerating, episode != nil else { return }
+        guard !characters.isEmpty else {
+            alertMessage = "请先提取角色"
+            return
+        }
+        if hasCompletedCharacterPortrait {
+            pendingCharacterConfirm = GenerationStageKey.characterImage
+        } else {
+            enqueue(stage: GenerationStageKey.characterImage, forceRegenerate: false)
+        }
+    }
+
+    func confirmCharacterAction() {
+        guard let stage = pendingCharacterConfirm else { return }
+        pendingCharacterConfirm = nil
+        let force = stage == GenerationStageKey.characterImage
+        enqueue(stage: stage, forceRegenerate: force)
+    }
+
+    func cancelCharacterAction() {
+        pendingCharacterConfirm = nil
+    }
+
     /// 取消当前生成任务。
     func cancel() {
         guard let episode else { return }
@@ -239,4 +289,9 @@ final class ProjectDetailViewModel: ObservableObject {
 
 private func isBlank(_ value: String?) -> Bool {
     value?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true
+}
+
+private func isExistingLocalFile(_ path: String?) -> Bool {
+    guard let path, !isBlank(path) else { return false }
+    return FileManager.default.fileExists(atPath: path)
 }

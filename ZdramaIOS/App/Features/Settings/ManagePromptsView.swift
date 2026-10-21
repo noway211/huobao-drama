@@ -1,7 +1,7 @@
 import SwiftUI
 import ZdramaCore
 
-/// 提示词管理页：创作 / 改写 / 分镜 三个标签页，各自可编辑、保存、恢复默认；
+/// 提示词管理页：创作 / 改写 / 分镜 / 角色提取 四个标签页，各自可编辑、保存、恢复默认；
 /// 离开有未保存修改的标签页时弹出确认。
 @MainActor
 struct ManagePromptsView: View {
@@ -9,6 +9,7 @@ struct ManagePromptsView: View {
         case create
         case rewrite
         case storyboard
+        case character
 
         var id: Int { rawValue }
 
@@ -17,6 +18,7 @@ struct ManagePromptsView: View {
             case .create: return "创作"
             case .rewrite: return "改写"
             case .storyboard: return "分镜"
+            case .character: return "角色提取"
             }
         }
 
@@ -25,6 +27,7 @@ struct ManagePromptsView: View {
             case .create: return "pencil.and.scribble"
             case .rewrite: return "arrow.triangle.2.circlepath"
             case .storyboard: return "rectangle.3.group"
+            case .character: return "person.2"
             }
         }
     }
@@ -51,7 +54,8 @@ struct ManagePromptsView: View {
         [
             PromptDefaults.scriptCreatePrompt,
             PromptDefaults.scriptRewritePrompt,
-            PromptDefaults.storyboardPrompt
+            PromptDefaults.storyboardPrompt,
+            PromptDefaults.characterExtractPrompt
         ]
     }
 
@@ -59,7 +63,8 @@ struct ManagePromptsView: View {
         [
             PromptResolver.resolve(custom: settings.customScriptCreatePrompt, default: PromptDefaults.scriptCreatePrompt),
             PromptResolver.resolve(custom: settings.customScriptRewritePrompt, default: PromptDefaults.scriptRewritePrompt),
-            PromptResolver.resolve(custom: settings.customStoryboardPrompt, default: PromptDefaults.storyboardPrompt)
+            PromptResolver.resolve(custom: settings.customStoryboardPrompt, default: PromptDefaults.storyboardPrompt),
+            PromptResolver.resolve(custom: settings.customCharacterExtractPrompt, default: PromptDefaults.characterExtractPrompt)
         ]
     }
 
@@ -163,6 +168,8 @@ struct ManagePromptsView: View {
             settings.customScriptRewritePrompt = value
         case .storyboard:
             settings.customStoryboardPrompt = value
+        case .character:
+            settings.customCharacterExtractPrompt = value
         }
         do {
             try container.settingsStore.save(settings)

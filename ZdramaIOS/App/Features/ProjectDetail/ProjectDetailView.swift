@@ -92,6 +92,19 @@ struct ProjectDetailView: View {
             Text("目标内容已存在，重新生成将覆盖现有结果，是否继续？")
         }
         .confirmationDialog(
+            characterConfirmTitle,
+            isPresented: Binding(
+                get: { viewModel.pendingCharacterConfirm != nil },
+                set: { if !$0 { viewModel.cancelCharacterAction() } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("继续", role: .destructive) { viewModel.confirmCharacterAction() }
+            Button("取消", role: .cancel) { viewModel.cancelCharacterAction() }
+        } message: {
+            Text(characterConfirmMessage)
+        }
+        .confirmationDialog(
             "删除项目",
             isPresented: $showDeleteConfirm,
             titleVisibility: .visible
@@ -125,6 +138,7 @@ struct ProjectDetailView: View {
                     onGenerate: { viewModel.generate($0) },
                     onCancel: { viewModel.cancel() }
                 )
+                characterActions()
                 GenerationProgressCard(project: project, progress: viewModel.progress)
                 if viewModel.episode != nil {
                     linksSection()
@@ -160,6 +174,38 @@ struct ProjectDetailView: View {
             .padding(.vertical, 3)
             .background(Color.gray.opacity(0.15), in: Capsule())
             .foregroundStyle(.secondary)
+    }
+
+    private func characterActions() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("角色")
+                .font(.headline)
+            HStack {
+                Button("提取角色") { viewModel.extractCharacters() }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.isGenerating)
+                Button("生成角色图") { viewModel.generateCharacterImages() }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.isGenerating)
+            }
+            Button {
+                path.append(.characters(viewModel.projectId))
+            } label: {
+                Label("查看角色", systemImage: "person.2")
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
+    private var characterConfirmTitle: String {
+        viewModel.pendingCharacterConfirm == GenerationStageKey.characterImage ? "重新生成角色图" : "重新提取角色"
+    }
+
+    private var characterConfirmMessage: String {
+        if viewModel.pendingCharacterConfirm == GenerationStageKey.characterImage {
+            return "当前项目已有角色图，重新生成会覆盖所有角色图。是否继续？"
+        }
+        return "当前项目已有角色信息，重新提取会覆盖现有角色。是否继续？"
     }
 
     // MARK: - 内容入口

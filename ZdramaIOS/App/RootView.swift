@@ -6,6 +6,7 @@ enum AppRoute: Hashable {
     case create
     case projects
     case detail(Int64)
+    case characters(Int64)
 }
 
 struct RootView: View {
@@ -25,6 +26,8 @@ struct RootView: View {
                         ProjectListView(container: container, path: $path)
                     case .detail(let id):
                         ProjectDetailView(container: container, projectId: id, path: $path)
+                    case .characters(let id):
+                        CharacterListView(container: container, projectId: id)
                     }
                 }
         }
