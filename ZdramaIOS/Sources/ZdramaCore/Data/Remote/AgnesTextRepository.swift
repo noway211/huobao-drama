@@ -68,6 +68,22 @@ public struct AgnesTextRepository: Sendable {
         try await AgnesRequest.sendExpecting2xx(client: client, request: request)
     }
 
+    public func complete(
+        settings: AgnesSettings,
+        messages: [[String: String]],
+        temperature: Double,
+        maxTokens: Int
+    ) async throws -> String {
+        try AgnesRequest.requireTextModel(settings)
+        let json = try await postChat(
+            settings: settings,
+            messages: messages,
+            temperature: temperature,
+            maxTokens: maxTokens
+        )
+        return ChatResponseTextExtractor.extract(json)
+    }
+
     private func postChat(
         settings: AgnesSettings,
         messages: [[String: String]],
