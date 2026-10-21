@@ -43,6 +43,9 @@ public struct GenerateCharacterImagesUseCase {
                 completed += 1
                 generated += 1
             case .failed(let error):
+                if error is CancellationError {
+                    throw error
+                }
                 if firstError == nil {
                     firstError = error
                 }

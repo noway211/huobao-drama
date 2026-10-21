@@ -311,6 +311,28 @@ final class GenerationCoordinatorTests: XCTestCase {
         XCTAssertFalse(runningAfterCancel)
     }
 
+    func testCancelDuringFirstPortraitDoesNotStartTheNext() async throws {
+        let seeded = try seedProject()
+        _ = try insertCharacter(projectId: seeded.projectId, name: "林晚")
+        _ = try insertCharacter(projectId: seeded.projectId, name: "沈惊川")
+        let http = WaitingAgnesHTTPClient()
+        let coordinator = makeCoordinator(http: http)
+
+        await coordinator.enqueue(
+            projectId: seeded.projectId,
+            episodeId: seeded.episodeId,
+            stage: GenerationStageKey.characterImage,
+            forceRegenerate: true
+        )
+        await http.waitForRequestCount(1)
+        await coordinator.cancel(projectId: seeded.projectId, episodeId: seeded.episodeId)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(http.requestCount, 1)
+        let stored = try repository.getCharacters(projectId: seeded.projectId)
+        XCTAssertTrue(stored.allSatisfy { $0.imageStatus != .completed })
+    }
+
     // MARK: - Helpers
 
     private struct Seeded {
