@@ -99,7 +99,7 @@ struct ProjectDetailView: View {
             ),
             titleVisibility: .visible
         ) {
-            Button("继续", role: .destructive) { viewModel.confirmCharacterAction() }
+            Button("覆盖", role: .destructive) { viewModel.confirmCharacterAction() }
             Button("取消", role: .cancel) { viewModel.cancelCharacterAction() }
         } message: {
             Text(characterConfirmMessage)
@@ -138,7 +138,6 @@ struct ProjectDetailView: View {
                     onGenerate: { viewModel.generate($0) },
                     onCancel: { viewModel.cancel() }
                 )
-                characterActions()
                 GenerationProgressCard(project: project, progress: viewModel.progress)
                 if viewModel.episode != nil {
                     linksSection()
@@ -223,6 +222,7 @@ struct ProjectDetailView: View {
             } else {
                 unavailableRow("查看剧本", systemImage: "doc.text")
             }
+            characterActions()
             if !viewModel.shots.isEmpty {
                 linkRow("分镜", systemImage: "rectangle.split.3x3") {
                     StoryboardViewerView(
