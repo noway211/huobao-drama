@@ -8,6 +8,9 @@ public enum GenerationStageKey {
     public static let video = "video"
     public static let finalVideo = "final_video"
     public static let full = "full"
+    public static let characterExtract = "character_extract"
+    public static let characterImage = "character_image"
+    public static let characterImagePrefix = "character_image_"
 }
 
 public actor GenerationCoordinator {
@@ -15,6 +18,7 @@ public actor GenerationCoordinator {
         let id: UUID
         let projectId: Int64
         let episodeId: Int64
+        let projectCharacterImage: Bool
         let task: Task<Void, Never>
     }
 
@@ -26,6 +30,9 @@ public actor GenerationCoordinator {
     private let imageUseCase: GenerateStoryboardImagesUseCase
     private let videoUseCase: GenerateStoryboardVideosUseCase
     private let composeUseCase: ComposeFinalVideoUseCase
+    private let extractCharactersUseCase: ExtractCharactersUseCase
+    private let characterImagesUseCase: GenerateCharacterImagesUseCase
+    private let singleCharacterImageUseCase: GenerateSingleCharacterImageUseCase
 
     private var jobs: [String: Job] = [:]
     private var cancellingEpisodes: Set<EpisodeKey> = []
@@ -43,7 +50,10 @@ public actor GenerationCoordinator {
         storyboardUseCase: GenerateStoryboardsUseCase,
         imageUseCase: GenerateStoryboardImagesUseCase,
         videoUseCase: GenerateStoryboardVideosUseCase,
-        composeUseCase: ComposeFinalVideoUseCase
+        composeUseCase: ComposeFinalVideoUseCase,
+        extractCharactersUseCase: ExtractCharactersUseCase,
+        characterImagesUseCase: GenerateCharacterImagesUseCase,
+        singleCharacterImageUseCase: GenerateSingleCharacterImageUseCase
     ) {
         self.settingsStore = settingsStore
         self.repository = repository
@@ -53,11 +63,15 @@ public actor GenerationCoordinator {
         self.imageUseCase = imageUseCase
         self.videoUseCase = videoUseCase
         self.composeUseCase = composeUseCase
+        self.extractCharactersUseCase = extractCharactersUseCase
+        self.characterImagesUseCase = characterImagesUseCase
+        self.singleCharacterImageUseCase = singleCharacterImageUseCase
     }
 
     public func isRunning(projectId: Int64, episodeId: Int64) -> Bool {
         jobs.values.contains { job in
-            !job.task.isCancelled && job.projectId == projectId && job.episodeId == episodeId
+            guard !job.task.isCancelled, job.projectId == projectId else { return false }
+            return job.episodeId == episodeId || job.projectCharacterImage
         }
     }
 
@@ -89,6 +103,7 @@ public actor GenerationCoordinator {
                 projectId: projectId,
                 episodeId: episodeId,
                 stage: stage,
+                forceRegenerate: forceRegenerate,
                 key: key,
                 id: id
             )
@@ -97,6 +112,7 @@ public actor GenerationCoordinator {
             id: id,
             projectId: projectId,
             episodeId: episodeId,
+            projectCharacterImage: stage == GenerationStageKey.characterImage,
             task: task
         )
     }
@@ -141,6 +157,7 @@ public actor GenerationCoordinator {
         projectId: Int64,
         episodeId: Int64,
         stage: String,
+        forceRegenerate: Bool,
         key: String,
         id: UUID
     ) async {
@@ -148,7 +165,13 @@ public actor GenerationCoordinator {
         let settings = settingsStore.load()
 
         do {
-            try await run(stage: stage, projectId: projectId, episodeId: episodeId, settings: settings)
+            try await run(
+                stage: stage,
+                projectId: projectId,
+                episodeId: episodeId,
+                settings: settings,
+                forceRegenerate: forceRegenerate
+            )
         } catch is CancellationError {
             return
         } catch {
@@ -160,7 +183,8 @@ public actor GenerationCoordinator {
         stage: String,
         projectId: Int64,
         episodeId: Int64,
-        settings: AgnesSettings
+        settings: AgnesSettings,
+        forceRegenerate: Bool
     ) async throws {
         switch stage {
         case GenerationStageKey.text:
@@ -175,6 +199,19 @@ public actor GenerationCoordinator {
             try await videoUseCase.execute(projectId: projectId, episodeId: episodeId, settings: settings)
         case GenerationStageKey.finalVideo:
             _ = try await composeUseCase.execute(projectId: projectId, episodeId: episodeId)
+        case GenerationStageKey.characterExtract:
+            _ = try await extractCharactersUseCase.execute(
+                projectId: projectId,
+                episodeId: episodeId,
+                settings: settings
+            )
+        case GenerationStageKey.characterImage:
+            _ = try await characterImagesUseCase.execute(
+                projectId: projectId,
+                episodeId: episodeId,
+                settings: settings,
+                forceRegenerate: forceRegenerate
+            )
         case GenerationStageKey.full:
             _ = try await scriptUseCase.execute(projectId: projectId, episodeId: episodeId, settings: settings)
             try Task.checkCancellation()
@@ -186,6 +223,15 @@ public actor GenerationCoordinator {
             try Task.checkCancellation()
             _ = try await composeUseCase.execute(projectId: projectId, episodeId: episodeId)
         default:
+            if stage.hasPrefix(GenerationStageKey.characterImagePrefix),
+               let characterId = Int64(stage.dropFirst(GenerationStageKey.characterImagePrefix.count)) {
+                _ = try await singleCharacterImageUseCase.execute(
+                    projectId: projectId,
+                    characterId: characterId,
+                    settings: settings
+                )
+                return
+            }
             try repository.updateProjectTextResult(
                 projectId: projectId,
                 status: .failed,
@@ -197,13 +243,15 @@ public actor GenerationCoordinator {
     }
 
     private func makeJobKey(projectId: Int64, episodeId: Int64, stage: String) -> String {
-        "generation-\(projectId)-\(episodeId)-\(stage)"
+        if stage == GenerationStageKey.characterImage {
+            return "generation-\(projectId)-\(stage)"
+        }
+        return "generation-\(projectId)-\(episodeId)-\(stage)"
     }
 
     private func keyBelongsToEpisode(_ key: String, episodeKey: EpisodeKey) -> Bool {
-        jobs[key].map {
-            $0.projectId == episodeKey.projectId && $0.episodeId == episodeKey.episodeId
-        } ?? false
+        guard let job = jobs[key], job.projectId == episodeKey.projectId else { return false }
+        return job.episodeId == episodeKey.episodeId || job.projectCharacterImage
     }
 
     private func removeJob(key: String, id: UUID) {

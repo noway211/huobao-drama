@@ -89,6 +89,20 @@ final class AppContainer: ObservableObject {
                 dramaRepository: repository,
                 composer: LocalMp4Composer(),
                 paths: mediaPaths
+            ),
+            extractCharactersUseCase: ExtractCharactersUseCase(
+                repository: repository,
+                textRepository: textRepository
+            ),
+            characterImagesUseCase: GenerateCharacterImagesUseCase(
+                repository: repository,
+                imageRepository: imageRepository,
+                downloadRepository: downloadRepository
+            ),
+            singleCharacterImageUseCase: GenerateSingleCharacterImageUseCase(
+                repository: repository,
+                imageRepository: imageRepository,
+                downloadRepository: downloadRepository
             )
         )
 

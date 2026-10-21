@@ -224,6 +224,93 @@ final class GenerationCoordinatorTests: XCTestCase {
         XCTAssertEqual(try repository.getProject(second.projectId)?.status, .draft)
     }
 
+    func testCharacterExtractStageCallsUseCase() async throws {
+        let seeded = try seedProject()
+        try repository.updateEpisodeScriptContent(
+            episodeId: seeded.episodeId,
+            scriptContent: "林晚走进雨夜。",
+            status: .completed
+        )
+        let http = WaitingAgnesHTTPClient()
+        http.enqueueJSONObject(
+            chatObject(content: #"[{"name":"林晚","role":"主角","description":"雨夜","appearance":"黑衣","personality":"冷静"}]"#)
+        )
+        let coordinator = makeCoordinator(http: http)
+
+        await coordinator.enqueue(
+            projectId: seeded.projectId,
+            episodeId: seeded.episodeId,
+            stage: GenerationStageKey.characterExtract,
+            forceRegenerate: false
+        )
+        try await waitUntil { try repository.getCharacters(projectId: seeded.projectId).count == 1 }
+
+        let characters = try repository.getCharacters(projectId: seeded.projectId)
+        XCTAssertEqual(characters.map(\.name), ["林晚"])
+        XCTAssertEqual(http.requestCount, 1)
+    }
+
+    func testCharacterImageForceRegenerateIsForwarded() async throws {
+        let seeded = try seedProject()
+        let characterId = try insertCharacter(projectId: seeded.projectId, name: "林晚")
+        let existing = filesRoot.appendingPathComponent("keep.jpg")
+        try Data("old".utf8).write(to: existing)
+        try repository.updateCharacterImage(
+            characterId: characterId,
+            status: .completed,
+            url: "https://cdn.example/old.jpg",
+            localPath: existing.path,
+            errorMessage: nil
+        )
+        let http = WaitingAgnesHTTPClient()
+        http.enqueueJSONObject(["data": [["url": "https://cdn.example/new.jpg"]]])
+        http.enqueueData(Data("new-bytes".utf8))
+        let coordinator = makeCoordinator(http: http)
+
+        await coordinator.enqueue(
+            projectId: seeded.projectId,
+            episodeId: seeded.episodeId,
+            stage: GenerationStageKey.characterImage,
+            forceRegenerate: false
+        )
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(http.requestCount, 0)
+        XCTAssertEqual(try repository.getCharacters(projectId: seeded.projectId).first?.imageLocalPath, existing.path)
+
+        await coordinator.enqueue(
+            projectId: seeded.projectId,
+            episodeId: seeded.episodeId,
+            stage: GenerationStageKey.characterImage,
+            forceRegenerate: true
+        )
+        try await waitUntil {
+            try repository.getCharacters(projectId: seeded.projectId).first?.imageUrl == "https://cdn.example/new.jpg"
+        }
+        XCTAssertGreaterThan(http.requestCount, 0)
+    }
+
+    func testCancelStopsProjectCharacterImageJob() async throws {
+        let seeded = try seedProject()
+        _ = try insertCharacter(projectId: seeded.projectId, name: "林晚")
+        let http = WaitingAgnesHTTPClient()
+        let coordinator = makeCoordinator(http: http)
+
+        await coordinator.enqueue(
+            projectId: seeded.projectId,
+            episodeId: seeded.episodeId,
+            stage: GenerationStageKey.characterImage,
+            forceRegenerate: true
+        )
+        await http.waitForRequestCount(1)
+        let runningBeforeCancel = await coordinator.isRunning(projectId: seeded.projectId, episodeId: seeded.episodeId)
+        XCTAssertTrue(runningBeforeCancel)
+
+        await coordinator.cancel(projectId: seeded.projectId, episodeId: seeded.episodeId)
+
+        let runningAfterCancel = await coordinator.isRunning(projectId: seeded.projectId, episodeId: seeded.episodeId)
+        XCTAssertFalse(runningAfterCancel)
+    }
+
     // MARK: - Helpers
 
     private struct Seeded {
@@ -278,8 +365,58 @@ final class GenerationCoordinatorTests: XCTestCase {
                 dramaRepository: repository,
                 composer: LocalMp4Composer(),
                 paths: paths
+            ),
+            extractCharactersUseCase: ExtractCharactersUseCase(
+                repository: repository,
+                textRepository: AgnesTextRepository(client: http)
+            ),
+            characterImagesUseCase: GenerateCharacterImagesUseCase(
+                repository: repository,
+                imageRepository: AgnesImageRepository(client: http),
+                downloadRepository: download
+            ),
+            singleCharacterImageUseCase: GenerateSingleCharacterImageUseCase(
+                repository: repository,
+                imageRepository: AgnesImageRepository(client: http),
+                downloadRepository: download
             )
         )
+    }
+
+    private func insertCharacter(projectId: Int64, name: String) throws -> Int64 {
+        try repository.upsertCharacters(
+            projectId: projectId,
+            characters: [
+                Character(
+                    id: 0,
+                    projectId: projectId,
+                    episodeId: nil,
+                    name: name,
+                    role: "主角",
+                    description: "desc",
+                    appearance: "appearance",
+                    personality: "personality",
+                    imageStatus: .pending,
+                    imageUrl: nil,
+                    imageLocalPath: nil,
+                    imageErrorMessage: nil,
+                    createdAt: 0,
+                    updatedAt: 0
+                )
+            ]
+        )
+        return try XCTUnwrap(repository.getCharacters(projectId: projectId).first?.id)
+    }
+
+    private func waitUntil(_ condition: () throws -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline {
+            if try condition() {
+                return
+            }
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTFail("timed out waiting for condition")
     }
 
     private func waitForProjectStatus(_ expected: ProjectStatus, projectId: Int64) async throws {
@@ -337,6 +474,10 @@ private final class WaitingAgnesHTTPClient: AgnesHTTPClient, @unchecked Sendable
 
     func enqueueJSONObject(_ object: Any, status: Int = 200) {
         let data = try! JSONSerialization.data(withJSONObject: object)
+        fulfillOrQueue(data: data, status: status)
+    }
+
+    func enqueueData(_ data: Data, status: Int = 200) {
         fulfillOrQueue(data: data, status: status)
     }
 
