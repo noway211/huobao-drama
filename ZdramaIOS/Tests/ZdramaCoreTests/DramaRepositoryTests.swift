@@ -287,6 +287,57 @@ final class DramaRepositoryTests: XCTestCase {
         )
     }
 
+    func testUpsertCharactersKeepsPortraitAndUntouchedRows() throws {
+        let projectId = try repository.createProject(makeProject(title: "Show"))
+
+        try repository.upsertCharacters(projectId: projectId, characters: [
+            makeCharacter(name: "沈惊川", appearance: "旧外貌", imageStatus: .completed, imageLocalPath: "/portraits/shen.jpg"),
+            makeCharacter(name: "旁白", role: "叙述", appearance: "不出现")
+        ])
+        let firstPass = try repository.getCharacters(projectId: projectId)
+        XCTAssertEqual(firstPass.map(\.name), ["沈惊川", "旁白"])
+        let shenId = try XCTUnwrap(firstPass.first { $0.name == "沈惊川" }?.id)
+        let narratorId = try XCTUnwrap(firstPass.first { $0.name == "旁白" }?.id)
+
+        try repository.upsertCharacters(projectId: projectId, characters: [
+            makeCharacter(
+                id: shenId,
+                name: "沈惊川",
+                role: "男主",
+                appearance: "新外貌",
+                imageStatus: .pending,
+                imageLocalPath: nil
+            ),
+            makeCharacter(name: "林晚", appearance: "白衣")
+        ])
+
+        let secondPass = try repository.getCharacters(projectId: projectId)
+        XCTAssertEqual(secondPass.map(\.id), [shenId, narratorId, secondPass[2].id])
+        let shen = try XCTUnwrap(secondPass.first { $0.id == shenId })
+        XCTAssertEqual(shen.imageStatus, .completed)
+        XCTAssertEqual(shen.imageLocalPath, "/portraits/shen.jpg")
+        XCTAssertEqual(shen.appearance, "新外貌")
+        XCTAssertEqual(shen.role, "男主")
+        let narrator = try XCTUnwrap(secondPass.first { $0.id == narratorId })
+        XCTAssertEqual(narrator.name, "旁白")
+        XCTAssertEqual(narrator.role, "叙述")
+        let lin = try XCTUnwrap(secondPass.first { $0.name == "林晚" })
+        XCTAssertEqual(lin.appearance, "白衣")
+        XCTAssertNotEqual(lin.id, shenId)
+
+        try repository.updateCharacterImage(
+            characterId: shenId,
+            status: .failed,
+            url: nil,
+            localPath: "/portraits/shen.jpg",
+            errorMessage: "出图失败"
+        )
+        let failed = try XCTUnwrap(try repository.getCharacters(projectId: projectId).first { $0.id == shenId })
+        XCTAssertEqual(failed.imageStatus, .failed)
+        XCTAssertEqual(failed.imageErrorMessage, "出图失败")
+        XCTAssertEqual(failed.imageLocalPath, "/portraits/shen.jpg")
+    }
+
     // MARK: - Helpers
 
     private func makeProject(
@@ -347,6 +398,32 @@ final class DramaRepositoryTests: XCTestCase {
             videoUrl: nil,
             videoLocalPath: nil,
             videoErrorMessage: nil,
+            createdAt: 0,
+            updatedAt: 0
+        )
+    }
+
+    private func makeCharacter(
+        id: Int64 = 0,
+        name: String,
+        role: String = "",
+        appearance: String,
+        imageStatus: AssetStatus = .pending,
+        imageLocalPath: String? = nil
+    ) -> Character {
+        Character(
+            id: id,
+            projectId: 0,
+            episodeId: nil,
+            name: name,
+            role: role,
+            description: "",
+            appearance: appearance,
+            personality: "",
+            imageStatus: imageStatus,
+            imageUrl: nil,
+            imageLocalPath: imageLocalPath,
+            imageErrorMessage: nil,
             createdAt: 0,
             updatedAt: 0
         )

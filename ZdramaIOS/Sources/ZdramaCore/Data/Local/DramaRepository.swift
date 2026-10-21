@@ -177,6 +177,30 @@ public final class DramaRepository {
         try storyboards.updateShotVideoPrompt(shotId: shotId, newPrompt: newPrompt)
     }
 
+    public func getCharacters(projectId: Int64) throws -> [Character] {
+        try characters.getCharacters(projectId: projectId)
+    }
+
+    public func upsertCharacters(projectId: Int64, characters rows: [Character]) throws {
+        try characters.upsertCharacters(projectId: projectId, characters: rows)
+    }
+
+    public func updateCharacterImage(
+        characterId: Int64,
+        status: AssetStatus,
+        url: String?,
+        localPath: String?,
+        errorMessage: String?
+    ) throws {
+        try characters.updateCharacterImage(
+            characterId: characterId,
+            status: status,
+            url: url,
+            localPath: localPath,
+            errorMessage: errorMessage
+        )
+    }
+
     public func deleteProject(_ projectId: Int64) throws -> Bool {
         try storyboards.deleteStoryboards(projectId: projectId)
         try characters.deleteCharactersForProject(projectId)
