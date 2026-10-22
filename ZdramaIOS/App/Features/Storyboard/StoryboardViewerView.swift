@@ -107,6 +107,9 @@ private struct StoryboardShotCard: View {
         if !shot.camera.isEmpty {
             parts.append("镜头：\(shot.camera)")
         }
+        if !shot.characterNames.isEmpty {
+            parts.append("角色：\(shot.characterNames.joined(separator: "、"))")
+        }
         return parts.joined(separator: "｜")
     }
 }
