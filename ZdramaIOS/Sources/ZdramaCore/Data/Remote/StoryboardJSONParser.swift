@@ -47,16 +47,33 @@ public struct ParsedStoryboardItem: Equatable, Sendable, Decodable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        shotNumber = try container.decodeIfPresent(String.self, forKey: .shotNumber)
+        shotNumber = try decodeFlexibleString(container, key: .shotNumber)
         scene = try container.decodeIfPresent(String.self, forKey: .scene) ?? ""
         action = try container.decodeIfPresent(String.self, forKey: .action) ?? ""
         dialogue = try container.decodeIfPresent(String.self, forKey: .dialogue) ?? ""
         camera = try container.decodeIfPresent(String.self, forKey: .camera) ?? ""
         imagePrompt = try container.decodeIfPresent(String.self, forKey: .imagePrompt) ?? ""
         videoPrompt = try container.decodeIfPresent(String.self, forKey: .videoPrompt) ?? ""
-        durationSeconds = try container.decodeIfPresent(String.self, forKey: .durationSeconds)
+        durationSeconds = try decodeFlexibleString(container, key: .durationSeconds)
         characterNames = try container.decodeIfPresent([String].self, forKey: .characterNames)
     }
+}
+
+/// 模型常把 shot_number、duration_seconds 写成数字而不是字符串。
+/// 两种都收下，统一存成字符串，交给下游的 Int() 解析。
+private func decodeFlexibleString(
+    _ container: KeyedDecodingContainer<ParsedStoryboardItem.CodingKeys>,
+    key: ParsedStoryboardItem.CodingKeys
+) throws -> String? {
+    guard container.contains(key), try !container.decodeNil(forKey: key) else { return nil }
+    if let text = try? container.decode(String.self, forKey: key) {
+        return text
+    }
+    if let whole = try? container.decode(Int.self, forKey: key) {
+        return String(whole)
+    }
+    let number = try container.decode(Double.self, forKey: key)
+    return String(number)
 }
 
 public enum StoryboardJSONParserError: LocalizedError {

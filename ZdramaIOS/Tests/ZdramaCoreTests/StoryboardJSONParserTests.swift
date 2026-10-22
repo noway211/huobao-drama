@@ -35,6 +35,31 @@ final class StoryboardJSONParserTests: XCTestCase {
         XCTAssertEqual(items[0].characterNames, ["Alice"])
     }
 
+    func testParsesNumericShotNumberAndDuration() throws {
+        let content = """
+        [
+          {
+            "shot_number": 3,
+            "scene": "内景",
+            "action": "走进房间",
+            "dialogue": "你好",
+            "camera": "中景",
+            "image_prompt": "a room",
+            "video_prompt": "walk in",
+            "duration_seconds": 7,
+            "character_names": ["Alice"]
+          }
+        ]
+        """
+
+        let items = try StoryboardJSONParser.parse(content)
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items[0].shotNumber, "3")
+        XCTAssertEqual(items[0].durationSeconds, "7")
+        XCTAssertEqual(items[0].scene, "内景")
+        XCTAssertEqual(items[0].characterNames, ["Alice"])
+    }
+
     func testMissingJSONArrayThrowsNotJSON() {
         XCTAssertThrowsError(try StoryboardJSONParser.parse("this is not an array")) { error in
             XCTAssertTrue(
