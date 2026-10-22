@@ -14,6 +14,7 @@ struct VideoPlayerView: View {
     let mode: Mode
     let episode: Episode
     let shots: [StoryboardShot]
+    let resolvePath: (String?) -> String?
 
     @State private var currentIndex = 0
     @State private var player: AVPlayer?
@@ -112,14 +113,14 @@ struct VideoPlayerView: View {
         switch mode {
         case .shots:
             guard let shot = currentShot else { return nil }
-            if let path = shot.videoLocalPath, !path.isEmpty,
+            if let path = resolvePath(shot.videoLocalPath), !path.isEmpty,
                FileManager.default.fileExists(atPath: path) {
                 return URL(fileURLWithPath: path)
             }
             guard let urlString = shot.videoUrl, !urlString.isEmpty else { return nil }
             return URL(string: urlString)
         case .final:
-            guard let path = episode.finalVideoLocalPath, !path.isEmpty,
+            guard let path = resolvePath(episode.finalVideoLocalPath), !path.isEmpty,
                   FileManager.default.fileExists(atPath: path) else { return nil }
             return URL(fileURLWithPath: path)
         }

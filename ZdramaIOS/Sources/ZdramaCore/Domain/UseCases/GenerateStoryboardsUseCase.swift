@@ -65,8 +65,10 @@ public struct GenerateStoryboardsUseCase {
         let fileManager = FileManager.default
         for shot in oldShots {
             for path in [shot.imageLocalPath, shot.videoLocalPath] {
-                guard let path, !path.isEmpty, fileManager.fileExists(atPath: path) else { continue }
-                try? fileManager.removeItem(atPath: path)
+                guard let resolved = repository.resolveMediaPath(path),
+                      !resolved.isEmpty,
+                      fileManager.fileExists(atPath: resolved) else { continue }
+                try? fileManager.removeItem(atPath: resolved)
             }
         }
     }

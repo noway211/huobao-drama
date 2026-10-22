@@ -4,6 +4,7 @@ import ZdramaCore
 /// 图库页：网格展示各镜头的生成图片，本地文件优先，其次远程 URL。只读。
 struct ImageGalleryView: View {
     let shots: [StoryboardShot]
+    let resolvePath: (String?) -> String?
 
     private let columns = [GridItem(.adaptive(minimum: 100, maximum: 160), spacing: 8)]
 
@@ -53,7 +54,7 @@ struct ImageGalleryView: View {
 
     /// 本地文件存在时返回本地 URL，否则回退远程地址；均无则返回 nil（显示占位）。
     private func imageURL(_ shot: StoryboardShot) -> URL? {
-        if let path = shot.imageLocalPath, !path.isEmpty,
+        if let path = resolvePath(shot.imageLocalPath), !path.isEmpty,
            FileManager.default.fileExists(atPath: path) {
             return URL(fileURLWithPath: path)
         }

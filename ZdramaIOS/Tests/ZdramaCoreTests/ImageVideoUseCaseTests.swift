@@ -82,11 +82,8 @@ final class ImageVideoUseCaseTests: XCTestCase {
         XCTAssertEqual(stored[0].imageLocalPath, existing.path)
         XCTAssertEqual(stored[1].imageStatus, .completed)
         XCTAssertEqual(stored[1].imageUrl, "https://cdn.example/a.png")
-        XCTAssertEqual(
-            stored[1].imageLocalPath,
-            paths.shotImage(projectId: seeded.projectId, shotId: stored[1].id, ext: "png").path
-        )
-        XCTAssertEqual(try String(contentsOfFile: stored[1].imageLocalPath ?? "", encoding: .utf8), "png-bytes")
+        XCTAssertEqual(stored[1].imageLocalPath, "generated/\(seeded.projectId)/shot_\(stored[1].id)_image.png")
+        XCTAssertEqual(try String(contentsOfFile: paths.resolve(stored[1].imageLocalPath ?? "").path, encoding: .utf8), "png-bytes")
         let project = try repository.getProject(seeded.projectId)
         XCTAssertEqual(project?.status, .completed)
         XCTAssertEqual(project?.currentStage, GenerationStage.image)
@@ -264,10 +261,7 @@ final class ImageVideoUseCaseTests: XCTestCase {
         XCTAssertEqual(stored[1].videoStatus, .completed)
         XCTAssertEqual(stored[1].videoTaskId, "id-1")
         XCTAssertEqual(stored[1].videoUrl, "https://cdn.example/now.mp4")
-        XCTAssertEqual(
-            stored[1].videoLocalPath,
-            paths.shotVideo(projectId: seeded.projectId, shotId: stored[1].id, ext: "mp4").path
-        )
+        XCTAssertEqual(stored[1].videoLocalPath, "generated/\(seeded.projectId)/shot_\(stored[1].id)_video.mp4")
         let project = try repository.getProject(seeded.projectId)
         XCTAssertEqual(project?.status, .completed)
         XCTAssertEqual(project?.currentStage, GenerationStage.video)
@@ -518,13 +512,13 @@ final class ImageVideoUseCaseTests: XCTestCase {
         XCTAssertEqual(project?.status, .completed)
         XCTAssertEqual(project?.currentStage, GenerationStage.finalVideo)
         XCTAssertEqual(project?.finalVideoStatus, .completed)
-        XCTAssertEqual(project?.finalVideoLocalPath, expectedPath)
+        XCTAssertEqual(project?.finalVideoLocalPath, paths.relativePath(of: URL(fileURLWithPath: expectedPath)))
         XCTAssertNil(project?.finalVideoErrorMessage)
         XCTAssertNil(project?.errorMessage)
         XCTAssertEqual(project?.generatedScript, "keep-me")
         let episode = try repository.getEpisodeById(seeded.episodeId)
         XCTAssertEqual(episode?.finalVideoStatus, .completed)
-        XCTAssertEqual(episode?.finalVideoLocalPath, expectedPath)
+        XCTAssertEqual(episode?.finalVideoLocalPath, paths.relativePath(of: URL(fileURLWithPath: expectedPath)))
         XCTAssertNil(episode?.finalVideoErrorMessage)
     }
 

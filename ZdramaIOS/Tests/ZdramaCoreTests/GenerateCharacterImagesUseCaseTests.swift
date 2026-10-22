@@ -94,11 +94,8 @@ final class GenerateCharacterImagesUseCaseTests: XCTestCase {
         XCTAssertEqual(body["size"] as? String, "1536x1024")
         let stored = try XCTUnwrap(try repository.getCharacters(projectId: projectId).first)
         XCTAssertEqual(stored.imageStatus, .completed)
-        XCTAssertEqual(
-            stored.imageLocalPath,
-            paths.characterImage(projectId: projectId, characterId: characterId, ext: "png").path
-        )
-        XCTAssertEqual(try String(contentsOfFile: stored.imageLocalPath ?? "", encoding: .utf8), "png-bytes")
+        XCTAssertEqual(stored.imageLocalPath, "generated/\(projectId)/char_\(characterId)_image.png")
+        XCTAssertEqual(try String(contentsOfFile: paths.resolve(stored.imageLocalPath ?? "").path, encoding: .utf8), "png-bytes")
     }
 
     func testBatchRequiresCharacters() async throws {

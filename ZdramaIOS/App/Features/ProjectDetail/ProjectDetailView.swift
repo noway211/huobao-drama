@@ -240,21 +240,34 @@ struct ProjectDetailView: View {
             }
             if viewModel.hasGallery {
                 linkRow("图库", systemImage: "photo.on.rectangle") {
-                    ImageGalleryView(shots: viewModel.shots)
+                    ImageGalleryView(
+                        shots: viewModel.shots,
+                        resolvePath: { viewModel.resolveMediaPath($0) }
+                    )
                 }
             } else {
                 unavailableRow("图库", systemImage: "photo.on.rectangle")
             }
             if viewModel.hasShotVideos {
                 linkRow("镜头视频", systemImage: "video") {
-                    VideoPlayerView(mode: .shots, episode: viewModel.episode!, shots: viewModel.shots)
+                    VideoPlayerView(
+                        mode: .shots,
+                        episode: viewModel.episode!,
+                        shots: viewModel.shots,
+                        resolvePath: { viewModel.resolveMediaPath($0) }
+                    )
                 }
             } else {
                 unavailableRow("镜头视频", systemImage: "video")
             }
             if viewModel.hasFinalVideo {
                 linkRow("成片", systemImage: "film") {
-                    VideoPlayerView(mode: .final, episode: viewModel.episode!, shots: viewModel.shots)
+                    VideoPlayerView(
+                        mode: .final,
+                        episode: viewModel.episode!,
+                        shots: viewModel.shots,
+                        resolvePath: { viewModel.resolveMediaPath($0) }
+                    )
                 }
             } else {
                 unavailableRow("成片", systemImage: "film")

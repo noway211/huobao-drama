@@ -30,6 +30,34 @@ public struct GeneratedMediaPaths: Sendable {
             .appendingPathComponent("episode_\(episodeId)", isDirectory: true)
             .appendingPathComponent("final_video.mp4")
     }
+
+    /// 存库用的路径：位于 root 之下时返回相对路径，否则原样返回。
+    public func relativePath(of file: URL) -> String {
+        let rootPath = root.standardizedFileURL.path
+        let filePath = file.standardizedFileURL.path
+        let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+        guard filePath.hasPrefix(prefix) else { return file.path }
+        return String(filePath.dropFirst(prefix.count))
+    }
+
+    /// 把存库的路径还原成当前沙盒里的绝对路径。
+    /// 绝对路径指向的文件还在就直接用；不在则按 `generated/` 之后的部分回落到当前 root。
+    public func resolve(_ stored: String) -> URL {
+        if stored.hasPrefix("/") {
+            if FileManager.default.fileExists(atPath: stored) {
+                return URL(fileURLWithPath: stored)
+            }
+            if let range = stored.range(of: "/generated/") {
+                let tail = String(stored[range.upperBound...])
+                let candidate = root.appendingPathComponent("generated").appendingPathComponent(tail)
+                if FileManager.default.fileExists(atPath: candidate.path) {
+                    return candidate
+                }
+            }
+            return URL(fileURLWithPath: stored)
+        }
+        return root.appendingPathComponent(stored)
+    }
 }
 
 public enum MediaKind {

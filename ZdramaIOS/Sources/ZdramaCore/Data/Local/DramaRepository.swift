@@ -16,6 +16,14 @@ public final class DramaRepository {
         self.characters = CharacterLocalDataSource(db: db)
     }
 
+    /// 把存库的媒体路径还原成当前沙盒里的绝对路径。空值原样返回。
+    public func resolveMediaPath(_ stored: String?) -> String? {
+        guard let stored, !stored.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return stored
+        }
+        return GeneratedMediaPaths(root: filesRoot).resolve(stored).path
+    }
+
     public func createProject(_ project: DramaProject) throws -> Int64 {
         try projects.insertProject(project)
     }

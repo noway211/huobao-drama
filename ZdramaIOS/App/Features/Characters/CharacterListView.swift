@@ -77,7 +77,7 @@ struct CharacterListView: View {
 
     @ViewBuilder
     private func portrait(_ character: Character) -> some View {
-        if let path = character.imageLocalPath,
+        if let path = container.repository.resolveMediaPath(character.imageLocalPath),
            FileManager.default.fileExists(atPath: path),
            let image = platformImage(path: path) {
             image

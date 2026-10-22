@@ -34,7 +34,7 @@ public struct GenerateCharacterImagesUseCase {
         var generated = 0
         var firstError: Error?
         for character in characters {
-            if !forceRegenerate && character.imageStatus == .completed && isExistingLocalFile(character.imageLocalPath) {
+            if !forceRegenerate && character.imageStatus == .completed && isExistingLocalFile(repository.resolveMediaPath(character.imageLocalPath)) {
                 completed += 1
                 continue
             }

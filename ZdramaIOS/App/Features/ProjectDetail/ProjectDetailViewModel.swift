@@ -51,7 +51,7 @@ final class ProjectDetailViewModel: ObservableObject {
     /// 是否有已生成的图片（本地文件或远程地址均可）。
     var hasGallery: Bool {
         shots.contains { shot in
-            if let path = shot.imageLocalPath, FileManager.default.fileExists(atPath: path) {
+            if let path = repository.resolveMediaPath(shot.imageLocalPath), FileManager.default.fileExists(atPath: path) {
                 return true
             }
             return !isBlank(shot.imageUrl)
@@ -61,7 +61,7 @@ final class ProjectDetailViewModel: ObservableObject {
     /// 是否有已生成的镜头视频（本地文件或远程地址均可）。
     var hasShotVideos: Bool {
         shots.contains { shot in
-            if let path = shot.videoLocalPath, FileManager.default.fileExists(atPath: path) {
+            if let path = repository.resolveMediaPath(shot.videoLocalPath), FileManager.default.fileExists(atPath: path) {
                 return true
             }
             return !isBlank(shot.videoUrl)
@@ -70,7 +70,7 @@ final class ProjectDetailViewModel: ObservableObject {
 
     /// 是否有可播放的成片（completed 且本地文件存在）。
     var hasFinalVideo: Bool {
-        guard let path = episode?.finalVideoLocalPath else { return false }
+        guard let path = repository.resolveMediaPath(episode?.finalVideoLocalPath) else { return false }
         return episode?.finalVideoStatus == .completed && FileManager.default.fileExists(atPath: path)
     }
 
@@ -80,7 +80,7 @@ final class ProjectDetailViewModel: ObservableObject {
 
     var hasCompletedCharacterPortrait: Bool {
         characters.contains { character in
-            character.imageStatus == .completed && isExistingLocalFile(character.imageLocalPath)
+            character.imageStatus == .completed && isExistingLocalFile(repository.resolveMediaPath(character.imageLocalPath))
         }
     }
 
@@ -99,6 +99,10 @@ final class ProjectDetailViewModel: ObservableObject {
 
     func dismissAlert() {
         alertMessage = nil
+    }
+
+    func resolveMediaPath(_ stored: String?) -> String? {
+        repository.resolveMediaPath(stored)
     }
 
     private func reload() {

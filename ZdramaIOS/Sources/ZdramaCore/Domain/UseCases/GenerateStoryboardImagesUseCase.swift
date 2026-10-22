@@ -33,7 +33,7 @@ public struct GenerateStoryboardImagesUseCase {
         )
 
         for shot in shots {
-            if shot.imageStatus == .completed && isExistingLocalFile(shot.imageLocalPath) {
+            if shot.imageStatus == .completed && isExistingLocalFile(repository.resolveMediaPath(shot.imageLocalPath)) {
                 continue
             }
 

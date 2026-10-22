@@ -33,7 +33,7 @@ public struct GenerateStoryboardVideosUseCase {
         )
 
         for shot in shots {
-            if shot.videoStatus == .completed && isExistingLocalFile(shot.videoLocalPath) {
+            if shot.videoStatus == .completed && isExistingLocalFile(repository.resolveMediaPath(shot.videoLocalPath)) {
                 continue
             }
 
@@ -50,7 +50,7 @@ public struct GenerateStoryboardVideosUseCase {
             var generatedUrl = shot.videoUrl
             do {
                 let imageReference: String?
-                if let path = shot.imageLocalPath, isExistingLocalFile(path) {
+                if let path = repository.resolveMediaPath(shot.imageLocalPath), isExistingLocalFile(path) {
                     imageReference = try localImagePathToDataUri(path)
                 } else {
                     imageReference = shot.imageUrl

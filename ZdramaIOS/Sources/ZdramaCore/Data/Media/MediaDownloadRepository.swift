@@ -34,7 +34,7 @@ public struct MediaDownloadRepository: Sendable {
             withIntermediateDirectories: true
         )
         try data.write(to: dest, options: .atomic)
-        return dest.path
+        return paths.relativePath(of: dest)
     }
 
     public func deleteGeneratedMedia(projectId: Int64) throws {
@@ -72,6 +72,6 @@ public struct MediaDownloadRepository: Sendable {
             withIntermediateDirectories: true
         )
         try data.write(to: dest, options: .atomic)
-        return dest.path
+        return paths.relativePath(of: dest)
     }
 }

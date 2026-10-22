@@ -521,8 +521,11 @@ final class AgnesRemoteRepositoryTests: XCTestCase {
             url: "https://cdn.example/a.png"
         )
 
-        XCTAssertEqual(saved, paths.shotImage(projectId: 9, shotId: 4, ext: "png").path)
-        XCTAssertEqual(try String(contentsOfFile: saved, encoding: .utf8), "png-bytes")
+        XCTAssertEqual(saved, "generated/9/shot_4_image.png")
+        XCTAssertEqual(
+            try String(contentsOfFile: paths.resolve(saved).path, encoding: .utf8),
+            "png-bytes"
+        )
         let request = try XCTUnwrap(fake.requests.first)
         XCTAssertEqual(request.httpMethod, "GET")
         XCTAssertEqual(request.url?.absoluteString, "https://cdn.example/a.png")
@@ -571,6 +574,25 @@ final class AgnesRemoteRepositoryTests: XCTestCase {
         try repo.deleteGeneratedMedia(projectId: 3)
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: paths.projectDir(3).path))
+    }
+
+    func testResolveFallsBackWhenStoredAbsolutePathIsFromAnOldContainer() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AgnesRemoteTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let paths = GeneratedMediaPaths(root: root)
+        let current = paths.characterImage(projectId: 1, characterId: 1, ext: "png")
+        try FileManager.default.createDirectory(
+            at: current.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("portrait".utf8).write(to: current)
+
+        let stale = "/old/container/Application Support/Zdrama/media/generated/1/char_1_image.png"
+        let resolved = paths.resolve(stale)
+
+        XCTAssertEqual(resolved.path, current.path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: resolved.path))
     }
 
     private func makeSettings() -> AgnesSettings {

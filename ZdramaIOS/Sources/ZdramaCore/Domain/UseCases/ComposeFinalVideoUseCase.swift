@@ -36,7 +36,7 @@ public struct ComposeFinalVideoUseCase {
         }
 
         let missingVideo = shots.first { shot in
-            shot.videoStatus != .completed || !isExistingLocalFile(shot.videoLocalPath)
+            shot.videoStatus != .completed || !isExistingLocalFile(dramaRepository.resolveMediaPath(shot.videoLocalPath))
         }
         if missingVideo != nil {
             let error = LocalizedMessageError("请先生成并下载全部分镜视频后再合成成片")
@@ -64,22 +64,23 @@ public struct ComposeFinalVideoUseCase {
                 try FileManager.default.removeItem(at: outputURL)
             }
             let outputPath = try await composer.compose(
-                inputPaths: shots.compactMap(\.videoLocalPath),
+                inputPaths: shots.compactMap { dramaRepository.resolveMediaPath($0.videoLocalPath) },
                 outputPath: outputURL.path
             )
+            let storedPath = paths.relativePath(of: URL(fileURLWithPath: outputPath))
             try dramaRepository.updateProjectFinalVideo(
                 projectId: projectId,
                 status: .completed,
                 currentStage: .finalVideo,
                 finalVideoStatus: .completed,
-                finalVideoLocalPath: outputPath,
+                finalVideoLocalPath: storedPath,
                 finalVideoErrorMessage: nil,
                 errorMessage: nil
             )
             try dramaRepository.updateEpisodeFinalVideo(
                 episodeId: episode.id,
                 finalVideoStatus: .completed,
-                finalVideoLocalPath: outputPath,
+                finalVideoLocalPath: storedPath,
                 finalVideoErrorMessage: nil
             )
             return outputPath

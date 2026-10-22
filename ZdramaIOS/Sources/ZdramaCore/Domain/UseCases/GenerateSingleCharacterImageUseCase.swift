@@ -24,7 +24,7 @@ public struct GenerateSingleCharacterImageUseCase {
         guard let character = try repository.getCharacters(projectId: projectId).first(where: { $0.id == characterId }) else {
             throw LocalizedMessageError("角色不存在")
         }
-        if !forceRegenerate && character.imageStatus == .completed && isExistingLocalFile(character.imageLocalPath) {
+        if !forceRegenerate && character.imageStatus == .completed && isExistingLocalFile(repository.resolveMediaPath(character.imageLocalPath)) {
             return character.imageLocalPath ?? ""
         }
         try repository.updateCharacterImage(
