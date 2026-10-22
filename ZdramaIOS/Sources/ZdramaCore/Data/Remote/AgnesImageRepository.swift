@@ -7,12 +7,12 @@ public struct AgnesImageRepository: Sendable {
         self.client = client
     }
 
-    public func generateImage(settings: AgnesSettings, prompt: String) async throws -> String {
+    public func generateImage(settings: AgnesSettings, prompt: String, size: String = "1024x768") async throws -> String {
         try AgnesRequest.requireImageModel(settings)
         let body: [String: Any] = [
             "model": settings.imageModel,
             "prompt": prompt,
-            "size": "1024x768",
+            "size": size,
             "n": 1,
             "extra_body": [
                 "response_format": "url"

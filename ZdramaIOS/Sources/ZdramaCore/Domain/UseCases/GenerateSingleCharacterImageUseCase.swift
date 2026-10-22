@@ -37,7 +37,8 @@ public struct GenerateSingleCharacterImageUseCase {
         do {
             let imageUrl = try await imageRepository.generateImage(
                 settings: settings,
-                prompt: characterPortraitPrompt(character)
+                prompt: characterPortraitPrompt(character),
+                size: characterTurnaroundSize
             )
             let localPath = try await downloadRepository.downloadCharacterImage(
                 projectId: projectId,
@@ -83,5 +84,7 @@ func characterPortraitPrompt(_ character: Character) -> String {
     let appearance = character.appearance.trimmingCharacters(in: .whitespacesAndNewlines)
     let description = character.description.trimmingCharacters(in: .whitespacesAndNewlines)
     let detail = appearance.isEmpty ? (description.isEmpty ? "character portrait" : description) : appearance
-    return "\(character.name), \(detail), high quality, front-facing portrait"
+    return "\(character.name), \(detail), character turnaround sheet, front view, side view, and back view side by side, full body, high quality"
 }
+
+let characterTurnaroundSize = "1536x1024"

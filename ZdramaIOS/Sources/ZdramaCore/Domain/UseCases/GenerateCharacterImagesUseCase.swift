@@ -73,7 +73,8 @@ public struct GenerateCharacterImagesUseCase {
             )
             let imageUrl = try await imageRepository.generateImage(
                 settings: settings,
-                prompt: characterPortraitPrompt(character)
+                prompt: characterPortraitPrompt(character),
+                size: characterTurnaroundSize
             )
             let localPath = try await downloadRepository.downloadCharacterImage(
                 projectId: projectId,

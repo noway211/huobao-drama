@@ -55,7 +55,7 @@ final class GenerateCharacterImagesUseCaseTests: XCTestCase {
 
         XCTAssertEqual(fake.requests.count, 1)
         let body = try requestJSON(try XCTUnwrap(fake.requests.first))
-        XCTAssertEqual(body["prompt"] as? String, "林晚, 窗边, high quality, front-facing portrait")
+        XCTAssertEqual(body["prompt"] as? String, "林晚, 窗边, character turnaround sheet, front view, side view, and back view side by side, full body, high quality")
         let stored = try repository.getCharacters(projectId: projectId)
         XCTAssertEqual(stored.first { $0.id == rows[0].id }?.imageStatus, .completed)
         XCTAssertEqual(stored.first { $0.id == rows[0].id }?.imageLocalPath, existing.path)
@@ -90,7 +90,8 @@ final class GenerateCharacterImagesUseCaseTests: XCTestCase {
         XCTAssertEqual(generated, 1)
         XCTAssertEqual(fake.requests.count, 2)
         let body = try requestJSON(fake.requests[0])
-        XCTAssertEqual(body["prompt"] as? String, "沈惊川, 黑衣, high quality, front-facing portrait")
+        XCTAssertEqual(body["prompt"] as? String, "沈惊川, 黑衣, character turnaround sheet, front view, side view, and back view side by side, full body, high quality")
+        XCTAssertEqual(body["size"] as? String, "1536x1024")
         let stored = try XCTUnwrap(try repository.getCharacters(projectId: projectId).first)
         XCTAssertEqual(stored.imageStatus, .completed)
         XCTAssertEqual(
@@ -148,7 +149,7 @@ final class GenerateCharacterImagesUseCaseTests: XCTestCase {
         XCTAssertEqual(stored.imageStatus, .failed)
         XCTAssertEqual(stored.imageErrorMessage, "No image URL in Agnes response")
         let body = try requestJSON(try XCTUnwrap(fake.requests.first))
-        XCTAssertEqual(body["prompt"] as? String, "无名, character portrait, high quality, front-facing portrait")
+        XCTAssertEqual(body["prompt"] as? String, "无名, character portrait, character turnaround sheet, front view, side view, and back view side by side, full body, high quality")
     }
 
     private func seedProject() throws -> Int64 {
