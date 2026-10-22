@@ -53,6 +53,11 @@ private struct StoryboardShotCard: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("第 \(shot.shotNumber) 镜")
                 .font(.headline)
+            if !shot.characterNames.isEmpty {
+                Text("角色：\(shot.characterNames.joined(separator: "、"))")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+            }
             Text(shotDetails)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -107,9 +112,6 @@ private struct StoryboardShotCard: View {
         if !shot.camera.isEmpty {
             parts.append("镜头：\(shot.camera)")
         }
-        if !shot.characterNames.isEmpty {
-            parts.append("角色：\(shot.characterNames.joined(separator: "、"))")
-        }
-        return parts.joined(separator: "｜")
+        return parts.joined(separator: "\n")
     }
 }
