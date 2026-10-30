@@ -51,7 +51,7 @@ final class AgnesSettingsStoreTests: XCTestCase {
         XCTAssertEqual(AgnesSettings.defaults().baseUrl, "https://apihub.agnes-ai.com/")
         XCTAssertEqual(AgnesSettings.defaults().textModel, "agnes-2.0-flash")
         XCTAssertEqual(AgnesSettings.defaults().imageModel, "agnes-image-2.0-flash")
-        XCTAssertEqual(AgnesSettings.defaults().videoModel, "agnes-video-v2.0")
+        XCTAssertEqual(AgnesSettings.defaults().videoModel, "agnes-video-2.5")
         XCTAssertEqual(AgnesSettings.defaults().requestTimeoutSeconds, 120)
         XCTAssertNil(AgnesSettings.defaults().customScriptCreatePrompt)
         XCTAssertNil(AgnesSettings.defaults().customScriptRewritePrompt)
@@ -165,6 +165,19 @@ final class AgnesSettingsStoreTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "text_model"), "text-model")
         XCTAssertEqual(defaults.string(forKey: "image_model"), "image-model")
         XCTAssertEqual(defaults.string(forKey: "video_model"), "video-model")
+    }
+
+    func testLoadReplacesRetiredVideoModelWithCurrentDefault() {
+        defaults.set("agnes-video-v2.0", forKey: "video_model")
+
+        XCTAssertEqual(store.load().videoModel, "agnes-video-2.5")
+    }
+
+    /// 旧名字 agnes-video-v2.0 换版本时多带了一个 v，服务端回 model_not_found。
+    func testLoadReplacesMistypedV25VideoModelWithCurrentDefault() {
+        defaults.set("agnes-video-v2.5", forKey: "video_model")
+
+        XCTAssertEqual(store.load().videoModel, "agnes-video-2.5")
     }
 
     func testLoadFallsBackBlankBaseUrlImageAndVideoModels() {

@@ -125,3 +125,15 @@ data class Character(
     val createdAt: Long,
     val updatedAt: Long
 )
+
+data class Scene(
+    val id: Long,
+    val projectId: Long,
+    val episodeId: Long?,
+    val location: String,
+    val time: String,
+    val atmosphere: String,
+    val prompt: String,
+    val createdAt: Long,
+    val updatedAt: Long
+)

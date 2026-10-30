@@ -50,10 +50,12 @@ public struct GenerateStoryboardVideosUseCase {
             var generatedUrl = shot.videoUrl
             do {
                 let imageReference: String?
-                if let path = repository.resolveMediaPath(shot.imageLocalPath), isExistingLocalFile(path) {
+                if let url = shot.imageUrl, !AgnesRequest.isBlank(url) {
+                    imageReference = url
+                } else if let path = repository.resolveMediaPath(shot.imageLocalPath), isExistingLocalFile(path) {
                     imageReference = try localImagePathToDataUri(path)
                 } else {
-                    imageReference = shot.imageUrl
+                    imageReference = nil
                 }
                 let result = try await videoRepository.generateVideo(
                     settings: settings,

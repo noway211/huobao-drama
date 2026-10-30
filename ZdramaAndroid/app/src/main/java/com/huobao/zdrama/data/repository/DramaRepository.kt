@@ -5,6 +5,7 @@ import android.util.Log
 import com.huobao.zdrama.data.local.CharacterLocalDataSource
 import com.huobao.zdrama.data.local.EpisodeLocalDataSource
 import com.huobao.zdrama.data.local.ProjectLocalDataSource
+import com.huobao.zdrama.data.local.SceneLocalDataSource
 import com.huobao.zdrama.data.local.StoryboardLocalDataSource
 import com.huobao.zdrama.domain.model.AssetStatus
 import com.huobao.zdrama.domain.model.Character
@@ -13,17 +14,21 @@ import com.huobao.zdrama.domain.model.Episode
 import com.huobao.zdrama.domain.model.EpisodeStatus
 import com.huobao.zdrama.domain.model.GenerationStage
 import com.huobao.zdrama.domain.model.ProjectStatus
+import com.huobao.zdrama.domain.model.Scene
 import com.huobao.zdrama.domain.model.StoryboardShot
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class DramaRepository(context: Context) {
-    private val projectLocalDataSource = ProjectLocalDataSource(context)
-    private val storyboardLocalDataSource = StoryboardLocalDataSource(context)
-    private val episodeLocalDataSource = EpisodeLocalDataSource(context)
-    private val characterLocalDataSource = CharacterLocalDataSource(context)
-    private val mediaDownloadRepository = MediaDownloadRepository(context)
+open class DramaRepository(
+    private val context: Context,
+    private val sceneLocalDataSource: SceneLocalDataSource = SceneLocalDataSource(context)
+) {
+    private val projectLocalDataSource by lazy { ProjectLocalDataSource(context) }
+    private val storyboardLocalDataSource by lazy { StoryboardLocalDataSource(context) }
+    private val episodeLocalDataSource by lazy { EpisodeLocalDataSource(context) }
+    private val characterLocalDataSource by lazy { CharacterLocalDataSource(context) }
+    private val mediaDownloadRepository by lazy { MediaDownloadRepository(context) }
 
     suspend fun createProject(project: DramaProject): Long = withContext(Dispatchers.IO) {
         projectLocalDataSource.insertProject(project)
@@ -33,7 +38,7 @@ class DramaRepository(context: Context) {
         projectLocalDataSource.getProjects()
     }
 
-    suspend fun getProject(projectId: Long): DramaProject? = withContext(Dispatchers.IO) {
+    open suspend fun getProject(projectId: Long): DramaProject? = withContext(Dispatchers.IO) {
         projectLocalDataSource.getProject(projectId)
     }
 
@@ -149,7 +154,7 @@ class DramaRepository(context: Context) {
         storyboardLocalDataSource.backfillEpisodeIds()
     }
 
-    suspend fun getEpisodeById(episodeId: Long): Episode? = withContext(Dispatchers.IO) {
+    open suspend fun getEpisodeById(episodeId: Long): Episode? = withContext(Dispatchers.IO) {
         episodeLocalDataSource.getEpisodeById(episodeId)
     }
 
@@ -168,6 +173,10 @@ class DramaRepository(context: Context) {
             createdAt = now,
             updatedAt = now
         ))
+    }
+
+    suspend fun insertEpisode(episode: Episode): Long = withContext(Dispatchers.IO) {
+        episodeLocalDataSource.insertEpisode(episode)
     }
 
     /** 删除单集：级联删除该集分镜（含其图片/视频文件）、成片与成片目录，再删集记录。 */
@@ -230,6 +239,7 @@ class DramaRepository(context: Context) {
     suspend fun deleteProject(projectId: Long): Boolean = withContext(Dispatchers.IO) {
         storyboardLocalDataSource.deleteStoryboards(projectId)
         characterLocalDataSource.deleteCharactersForProject(projectId)
+        sceneLocalDataSource.deleteScenesForProject(projectId)
         episodeLocalDataSource.deleteEpisodesForProject(projectId)
         val projectDeleted = projectLocalDataSource.deleteProject(projectId) > 0
         val mediaDeleted = mediaDownloadRepository.deleteGeneratedMedia(projectId)
@@ -272,6 +282,18 @@ class DramaRepository(context: Context) {
 
     suspend fun updateCharacterAppearance(characterId: Long, appearance: String): Boolean = withContext(Dispatchers.IO) {
         characterLocalDataSource.updateCharacterAppearance(characterId, appearance) > 0
+    }
+
+    /**
+     * 按地点 + 时间增量写入场景：命中则更新氛围和提示词并保留 id，未命中则插入。
+     * 本集未提到的已有场景不删除。
+     */
+    suspend fun upsertScenes(projectId: Long, scenes: List<Scene>) = withContext(Dispatchers.IO) {
+        sceneLocalDataSource.upsertScenes(projectId, scenes)
+    }
+
+    suspend fun getScenes(projectId: Long): List<Scene> = withContext(Dispatchers.IO) {
+        sceneLocalDataSource.getScenes(projectId)
     }
 
     // ────────────── 软删除（DB status → PENDING + 清字段 + 删本地文件） ──────────────

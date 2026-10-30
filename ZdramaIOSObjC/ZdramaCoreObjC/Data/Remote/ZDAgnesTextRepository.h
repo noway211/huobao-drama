@@ -14,6 +14,11 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)rewriteScriptSettings:(ZDAgnesSettings *)settings
                    rawContent:(NSString *)rawContent
                    completion:(void (^)(NSString *_Nullable script, NSError *_Nullable error))completion;
+- (void)completeSettings:(ZDAgnesSettings *)settings
+                messages:(NSArray<NSDictionary *> *)messages
+             temperature:(double)temperature
+               maxTokens:(NSInteger)maxTokens
+              completion:(void (^)(NSString *_Nullable text, NSError *_Nullable error))completion;
 @end
 
 NS_ASSUME_NONNULL_END

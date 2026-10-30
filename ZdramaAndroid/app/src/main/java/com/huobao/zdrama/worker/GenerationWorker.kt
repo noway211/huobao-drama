@@ -27,6 +27,7 @@ import com.huobao.zdrama.data.settings.AgnesSettingsStore
 import com.huobao.zdrama.data.media.LocalMp4Composer
 import com.huobao.zdrama.domain.usecase.ComposeFinalVideoUseCase
 import com.huobao.zdrama.domain.usecase.ExtractCharactersUseCase
+import com.huobao.zdrama.domain.usecase.ExtractScenesUseCase
 import com.huobao.zdrama.domain.usecase.GenerateCharacterImagesUseCase
 import com.huobao.zdrama.domain.usecase.GenerateProjectScriptUseCase
 import com.huobao.zdrama.domain.usecase.GenerateStoryboardImagesUseCase
@@ -65,6 +66,7 @@ class GenerationWorker(
             STAGE_VIDEO -> runVideos(projectId, episodeId, settings, dramaRepository, mediaDownloadRepository)
             STAGE_FINAL_VIDEO -> runFinalVideo(projectId, episodeId, dramaRepository)
             STAGE_CHARACTER_EXTRACT -> runCharacterExtract(projectId, episodeId, settings, dramaRepository)
+            STAGE_SCENE_EXTRACT -> runSceneExtract(projectId, episodeId, settings, dramaRepository)
             STAGE_CHARACTER_IMAGE -> runCharacterImages(
                 projectId, settings, dramaRepository, mediaDownloadRepository, forceRegenerate
             )
@@ -186,6 +188,18 @@ class GenerationWorker(
         ).execute(projectId, episodeId, settings).map { Unit }
     }
 
+    private suspend fun runSceneExtract(
+        projectId: Long,
+        episodeId: Long,
+        settings: AgnesSettings,
+        dramaRepository: DramaRepository
+    ): KotlinResult<Unit> {
+        return ExtractScenesUseCase(
+            dramaRepository,
+            AgnesTextRepository()
+        ).execute(projectId, episodeId, settings).map { Unit }
+    }
+
     private suspend fun runCharacterImages(
         projectId: Long,
         settings: AgnesSettings,
@@ -262,6 +276,7 @@ class GenerationWorker(
             STAGE_VIDEO -> R.string.generation_notification_video
             STAGE_FINAL_VIDEO -> R.string.generation_notification_final_video
             STAGE_CHARACTER_EXTRACT -> R.string.generation_notification_character_extract
+            STAGE_SCENE_EXTRACT -> R.string.generation_notification_scene_extract
             STAGE_CHARACTER_IMAGE -> R.string.generation_notification_character_image
             STAGE_FULL -> R.string.generation_notification_full
             else -> R.string.generation_notification_title
@@ -276,6 +291,7 @@ class GenerationWorker(
         const val STAGE_VIDEO = "video"
         const val STAGE_FINAL_VIDEO = "final_video"
         const val STAGE_CHARACTER_EXTRACT = "character_extract"
+        const val STAGE_SCENE_EXTRACT = "scene_extract"
         const val STAGE_CHARACTER_IMAGE = "character_image"
         const val STAGE_FULL = "full"
 
@@ -343,6 +359,7 @@ class GenerationWorker(
                 STAGE_VIDEO,
                 STAGE_FINAL_VIDEO,
                 STAGE_CHARACTER_EXTRACT,
+                STAGE_SCENE_EXTRACT,
                 STAGE_FULL
             ).map { stage -> uniqueWorkName(projectId, episodeId, stage) }
         }

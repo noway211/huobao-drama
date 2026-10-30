@@ -35,6 +35,9 @@
             android:name=".ui.project.CharacterListActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.project.SceneListActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.project.ApiLogActivity"
             android:exported="false" />
         <activity

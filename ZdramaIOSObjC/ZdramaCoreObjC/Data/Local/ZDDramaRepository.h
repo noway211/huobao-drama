@@ -20,6 +20,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)deleteProject:(int64_t)projectId;
 - (BOOL)updateFinalVideoStatus:(NSString *)status projectId:(int64_t)projectId episodeId:(int64_t)episodeId errorMessage:(nullable NSString *)errorMessage localPath:(nullable NSString *)localPath;
 - (NSInteger)failInterruptedWorkWithMessage:(NSString *)message;
+- (NSArray<ZDCharacter *> *)getCharactersForProject:(int64_t)projectId;
+- (BOOL)upsertCharacters:(NSArray<ZDCharacter *> *)characters projectId:(int64_t)projectId;
+- (BOOL)updateCharacterImageId:(int64_t)characterId status:(NSString *)status localPath:(nullable NSString *)path url:(nullable NSString *)url errorMessage:(nullable NSString *)errorMessage;
 @end
 
 NS_ASSUME_NONNULL_END

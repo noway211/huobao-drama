@@ -13,9 +13,8 @@ public struct VideoGenerationResult: Equatable, Sendable {
 public struct AgnesVideoRepository: @unchecked Sendable {
     private static let pollIntervalNanoseconds: UInt64 = 10_000_000_000
     private static let maxPollCount = 60
-    private static let frameRate = 24
-    private static let defaultWidth = 768
-    private static let defaultHeight = 1152
+    private static let minSeconds = 4
+    private static let maxSeconds = 12
 
     private let client: AgnesHTTPClient
     private let sleep: (UInt64) async -> Void
@@ -42,12 +41,11 @@ public struct AgnesVideoRepository: @unchecked Sendable {
         let body: [String: Any] = [
             "model": settings.videoModel,
             "prompt": buildPrompt(shot),
-            "num_frames": VideoFrameCalculator.numFrames(durationSeconds: shot.durationSeconds),
-            "frame_rate": Self.frameRate,
-            "width": Self.defaultWidth,
-            "height": Self.defaultHeight,
-            "image": imageURL,
-            "mode": "ti2vid"
+            "seconds": videoSeconds(shot.durationSeconds),
+            "mode": "keyframe",
+            "size": "720P",
+            "aspect_ratio": "16:9",
+            "first_frame": imageURL
         ]
         let request = try AgnesRequest.jsonPOST(
             url: AgnesEndpoints.videos(baseURL: settings.baseUrl),
@@ -59,20 +57,28 @@ public struct AgnesVideoRepository: @unchecked Sendable {
         let status = AgnesRequest.string(object["status"])
         let immediateURL = extractVideoURL(object)
         if status == "completed", let immediateURL, !AgnesRequest.isBlank(immediateURL) {
-            let taskId = AgnesRequest.string(object["task_id"]) ?? AgnesRequest.string(object["id"])
+            let taskId = AgnesRequest.string(object["video_id"])
+                ?? AgnesRequest.string(object["task_id"])
+                ?? AgnesRequest.string(object["id"])
             return VideoGenerationResult(taskId: taskId, videoUrl: immediateURL)
         }
-        guard let taskId = AgnesRequest.string(object["task_id"]) ?? AgnesRequest.string(object["id"]) else {
+        guard let videoId = AgnesRequest.string(object["video_id"])
+            ?? AgnesRequest.string(object["task_id"])
+            ?? AgnesRequest.string(object["id"]) else {
             throw AgnesClientError.noVideoTaskId
         }
-        return try await pollVideo(settings: settings, taskId: taskId)
+        return try await pollVideo(settings: settings, videoId: videoId)
     }
 
-    private func pollVideo(settings: AgnesSettings, taskId: String) async throws -> VideoGenerationResult {
+    private func pollVideo(settings: AgnesSettings, videoId: String) async throws -> VideoGenerationResult {
         for _ in 0..<Self.maxPollCount {
             await sleep(Self.pollIntervalNanoseconds)
             let request = AgnesRequest.jsonGET(
-                url: AgnesEndpoints.video(baseURL: settings.baseUrl, taskId: taskId),
+                url: AgnesEndpoints.video(
+                    baseURL: settings.baseUrl,
+                    videoId: videoId,
+                    modelName: settings.videoModel
+                ),
                 apiKey: settings.apiKey
             )
             let json = try await AgnesRequest.sendJSON(client: client, request: request)
@@ -82,7 +88,7 @@ public struct AgnesVideoRepository: @unchecked Sendable {
                 guard let videoURL = extractVideoURL(object), !AgnesRequest.isBlank(videoURL) else {
                     throw AgnesClientError.videoCompletedWithoutURL
                 }
-                return VideoGenerationResult(taskId: taskId, videoUrl: videoURL)
+                return VideoGenerationResult(taskId: videoId, videoUrl: videoURL)
             case "failed":
                 throw AgnesClientError.videoFailed(parseError(object["error"]))
             default:
@@ -90,6 +96,12 @@ public struct AgnesVideoRepository: @unchecked Sendable {
             }
         }
         throw AgnesClientError.videoTimedOut
+    }
+
+    /// 2.5 的 seconds 是字符串，合法范围 4–12。镜头时长夹到这个区间。
+    private func videoSeconds(_ durationSeconds: Int) -> String {
+        let clamped = min(max(durationSeconds, Self.minSeconds), Self.maxSeconds)
+        return String(clamped)
     }
 
     private func buildPrompt(_ shot: StoryboardShot) -> String {

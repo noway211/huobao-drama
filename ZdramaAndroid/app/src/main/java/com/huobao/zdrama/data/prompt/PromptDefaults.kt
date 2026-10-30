@@ -1,7 +1,7 @@
 package com.huobao.zdrama.data.prompt
 
 /**
- * 4 个 LLM 流程的系统提示词默认值，集中管理便于：
+ * 5 个 LLM 流程的系统提示词默认值，集中管理便于：
  *   1) 设置页"恢复默认"功能复用
  *   2) 后续 LLM prompt 调优时一处改完全部生效
  *   3) 与用户自定义提示词 (AgnesSettingsStore) 配合，空串走默认的 fallback 语义
@@ -10,6 +10,7 @@ package com.huobao.zdrama.data.prompt
  *   SCRIPT_CREATE_PROMPT     -> 生成剧本 (AgnesTextRepository.generateScript)
  *   SCRIPT_REWRITE_PROMPT    -> 改写剧本 (AgnesTextRepository.rewriteScript)
  *   CHARACTER_EXTRACT_PROMPT -> 提取角色 (ExtractCharactersUseCase.execute)
+ *   SCENE_EXTRACT_PROMPT     -> 提取场景 (ExtractScenesUseCase.execute)
  *   STORYBOARD_PROMPT        -> 拆解分镜 (AgnesStoryboardRepository.generateStoryboards)
  */
 object PromptDefaults {
@@ -62,7 +63,22 @@ object PromptDefaults {
 - 角色要包含完整的外貌特征描述
 - 只提取当前剧本真实出现的角色"""
 
-    // 4) 分镜：将中文剧本拆为分镜 JSON；文字字段中文，image_prompt/video_prompt 英文
+    // 4) 场景提取：从剧本文本中抽取地点、时间、氛围和纯背景英文提示词
+    const val SCENE_EXTRACT_PROMPT = """你是制片助理，擅长从剧本中提取场景信息。
+
+提取规范：
+- 地点：具体场所名称
+- 时间：时间段和光线条件
+- 氛围：环境氛围描述
+- 提示词：用于 AI 图片生成的英文提示词，只描述背景，不含人物
+
+提取要求：
+- 只返回 JSON 数组，每个条目包含 location、time、atmosphere、prompt
+- prompt 必须是英文，只描述纯背景，不能出现人物
+- 只提取当前剧本真实出现的场景
+- 同一地点在不同时间段算作不同场景"""
+
+    // 5) 分镜：将中文剧本拆为分镜 JSON；文字字段中文，image_prompt/video_prompt 英文
     const val STORYBOARD_PROMPT = """你是资深短剧分镜师，擅长将中文剧本拆解为分镜 JSON。
 剧本是中文，因此以下字段必须用中文：scene（场景）、action（动作）、dialogue（对白）、camera（景别/机位，如"近景/平视"）、character_names（角色名）。
 以下字段必须用英文（用于图片/视频生成模型）：image_prompt、video_prompt。

@@ -12,6 +12,10 @@ NS_ASSUME_NONNULL_BEGIN
                             shotId:(int64_t)shotId
                                url:(NSString *)url
                         completion:(void (^)(NSString *_Nullable path, NSError *_Nullable error))completion;
+- (void)downloadCharacterImageProjectId:(int64_t)projectId
+                            characterId:(int64_t)characterId
+                                    url:(NSString *)url
+                             completion:(void (^)(NSString *_Nullable path, NSError *_Nullable error))completion;
 @end
 
 NS_ASSUME_NONNULL_END

@@ -13,7 +13,7 @@ public struct AgnesSettings: Equatable, Sendable {
     public static let defaultBaseURL = "https://apihub.agnes-ai.com/"
     public static let defaultTextModel = "agnes-2.0-flash"
     public static let defaultImageModel = "agnes-image-2.0-flash"
-    public static let defaultVideoModel = "agnes-video-v2.0"
+    public static let defaultVideoModel = "agnes-video-2.5"
     public static let defaultTimeoutSeconds = 120
 
     public init(

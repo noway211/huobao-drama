@@ -5,6 +5,9 @@
 #import "ZDGenerateStoryboardImagesUseCase.h"
 #import "ZDGenerateStoryboardVideosUseCase.h"
 #import "ZDComposeFinalVideoUseCase.h"
+#import "ZDExtractCharactersUseCase.h"
+#import "ZDGenerateCharacterImagesUseCase.h"
+#import "ZDGenerateSingleCharacterImageUseCase.h"
 #import "ZDAgnesSettingsStore.h"
 
 @implementation ZDGenerationCoordinator {
@@ -16,6 +19,9 @@
     ZDGenerateStoryboardImagesUseCase *_images;
     ZDGenerateStoryboardVideosUseCase *_videos;
     ZDComposeFinalVideoUseCase *_compose;
+    ZDExtractCharactersUseCase *_extract;
+    ZDGenerateCharacterImagesUseCase *_characterImages;
+    ZDGenerateSingleCharacterImageUseCase *_singleCharacterImage;
     NSOperationQueue *_queue;
     NSMutableDictionary<NSString *, NSBlockOperation *> *_jobs;
 }
@@ -34,6 +40,9 @@
         _images = [[ZDGenerateStoryboardImagesUseCase alloc] initWithRepository:repository session:session filesRoot:filesRoot];
         _videos = [[ZDGenerateStoryboardVideosUseCase alloc] initWithRepository:repository session:session filesRoot:filesRoot];
         _compose = [[ZDComposeFinalVideoUseCase alloc] initWithRepository:repository filesRoot:filesRoot];
+        _extract = [[ZDExtractCharactersUseCase alloc] initWithRepository:repository session:session];
+        _characterImages = [[ZDGenerateCharacterImagesUseCase alloc] initWithRepository:repository session:session filesRoot:filesRoot];
+        _singleCharacterImage = [[ZDGenerateSingleCharacterImageUseCase alloc] initWithRepository:repository session:session filesRoot:filesRoot];
         _queue = [NSOperationQueue new];
         _queue.maxConcurrentOperationCount = 1;
         _jobs = [NSMutableDictionary dictionary];
@@ -63,7 +72,7 @@
         [operation addExecutionBlock:^{
             if (weakOperation.isCancelled) return;
             dispatch_semaphore_t gate = dispatch_semaphore_create(0);
-            [self runStage:stage projectId:projectId episodeId:episodeId completion:^{
+            [self runStage:stage projectId:projectId episodeId:episodeId forceRegenerate:forceRegenerate completion:^{
                 dispatch_semaphore_signal(gate);
             }];
             dispatch_semaphore_wait(gate, DISPATCH_TIME_FOREVER);
@@ -73,7 +82,7 @@
     }
 }
 
-- (void)runStage:(NSString *)stage projectId:(int64_t)projectId episodeId:(int64_t)episodeId completion:(void (^)(void))completion {
+- (void)runStage:(NSString *)stage projectId:(int64_t)projectId episodeId:(int64_t)episodeId forceRegenerate:(BOOL)forceRegenerate completion:(void (^)(void))completion {
     ZDAgnesSettings *settings = [_settings load];
     void (^finish)(NSError *) = ^(NSError *error) { completion(); };
     if ([stage isEqualToString:@"text"]) {
@@ -88,6 +97,19 @@
         [_videos executeProjectId:projectId episodeId:episodeId settings:settings completion:finish];
     } else if ([stage isEqualToString:@"final_video"]) {
         [_compose executeProjectId:projectId episodeId:episodeId completion:finish];
+    } else if ([stage isEqualToString:@"character_extract"]) {
+        [_extract executeProjectId:projectId episodeId:episodeId settings:settings completion:^(NSInteger count, NSError *error) {
+            finish(error);
+        }];
+    } else if ([stage isEqualToString:@"character_image"]) {
+        [_characterImages executeProjectId:projectId episodeId:episodeId settings:settings forceRegenerate:forceRegenerate completion:^(NSInteger generated, NSError *error) {
+            finish(error);
+        }];
+    } else if ([stage hasPrefix:@"character_image_"]) {
+        int64_t characterId = [[stage substringFromIndex:@"character_image_".length] longLongValue];
+        [_singleCharacterImage executeProjectId:projectId characterId:characterId settings:settings completion:^(NSString *path, NSError *error) {
+            finish(error);
+        }];
     } else if ([stage isEqualToString:@"full"]) {
         [self runFullProjectId:projectId episodeId:episodeId settings:settings completion:completion];
     } else {

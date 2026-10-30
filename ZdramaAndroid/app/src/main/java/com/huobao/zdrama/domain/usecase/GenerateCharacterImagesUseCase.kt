@@ -113,7 +113,7 @@ class GenerateCharacterImagesUseCase(
 
     private fun buildPrompt(ch: Character): String {
         val description = ch.appearance.ifBlank { ch.description.ifBlank { "character portrait" } }
-        return "${ch.name}, $description, high quality, front-facing portrait"
+        return "${ch.name}, $description, character turnaround sheet, front view, side view, and back view side by side, full body, high quality"
     }
 
     companion object {

@@ -134,4 +134,16 @@ static NSError *ZDTextError(NSString *message) {
     }];
 }
 
+- (void)completeSettings:(ZDAgnesSettings *)settings
+                messages:(NSArray<NSDictionary *> *)messages
+             temperature:(double)temperature
+               maxTokens:(NSInteger)maxTokens
+              completion:(void (^)(NSString *text, NSError *error))completion {
+    [self postChatSettings:settings messages:messages temperature:temperature maxTokens:maxTokens completion:^(id json, NSError *error) {
+        if (error) { completion(nil, error); return; }
+        NSString *text = ZDExtractChatContent(json);
+        completion(ZDTextBlank(text) ? nil : text, ZDTextBlank(text) ? ZDTextError(@"Agnes 未返回文本，请检查文本模型是否支持 chat/completions") : nil);
+    }];
+}
+
 @end

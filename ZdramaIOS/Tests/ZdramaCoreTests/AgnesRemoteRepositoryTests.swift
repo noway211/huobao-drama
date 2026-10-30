@@ -343,11 +343,11 @@ final class AgnesRemoteRepositoryTests: XCTestCase {
 
     func testGenerateVideoPollsTwiceThenCompleted() async throws {
         let fake = FakeAgnesHTTPClient()
-        fake.enqueueJSONObject(["status": "processing", "task_id": "t1"])
-        fake.enqueueJSONObject(["status": "processing"])
+        fake.enqueueJSONObject(["status": "queued", "task_id": "task_t1", "video_id": "video_t1"])
+        fake.enqueueJSONObject(["status": "in_progress"])
         fake.enqueueJSONObject([
             "status": "completed",
-            "metadata": ["url": "https://cdn.example/v.mp4"]
+            "url": "https://cdn.example/v.mp4"
         ])
         var sleepCalls: [UInt64] = []
         let repo = AgnesVideoRepository(client: fake, sleep: { ns in
@@ -367,7 +367,7 @@ final class AgnesRemoteRepositoryTests: XCTestCase {
             imageReference: nil
         )
 
-        XCTAssertEqual(result, VideoGenerationResult(taskId: "t1", videoUrl: "https://cdn.example/v.mp4"))
+        XCTAssertEqual(result, VideoGenerationResult(taskId: "video_t1", videoUrl: "https://cdn.example/v.mp4"))
         XCTAssertEqual(fake.requests.count, 3)
         XCTAssertEqual(fake.requests.map(\.httpMethod), ["POST", "GET", "GET"])
         XCTAssertEqual(
@@ -376,11 +376,11 @@ final class AgnesRemoteRepositoryTests: XCTestCase {
         )
         XCTAssertEqual(
             fake.requests[1].url?.absoluteString,
-            "https://apihub.agnes-ai.com/v1/videos/t1"
+            "https://apihub.agnes-ai.com/agnesapi?video_id=video_t1&model_name=agnes-video"
         )
         XCTAssertEqual(
             fake.requests[2].url?.absoluteString,
-            "https://apihub.agnes-ai.com/v1/videos/t1"
+            "https://apihub.agnes-ai.com/agnesapi?video_id=video_t1&model_name=agnes-video"
         )
         assertAgnesHeaders(fake.requests[0], apiKey: "sk-test")
         assertAgnesHeaders(fake.requests[1], apiKey: "sk-test")
@@ -389,12 +389,15 @@ final class AgnesRemoteRepositoryTests: XCTestCase {
         let body = try requestJSON(fake.requests[0])
         XCTAssertEqual(body["model"] as? String, "agnes-video")
         XCTAssertEqual(body["prompt"] as? String, "vp。act。cam。请使用中文对白与中文旁白。")
-        XCTAssertEqual((body["num_frames"] as? NSNumber)?.intValue, 17)
-        XCTAssertEqual((body["frame_rate"] as? NSNumber)?.intValue, 24)
-        XCTAssertEqual((body["width"] as? NSNumber)?.intValue, 768)
-        XCTAssertEqual((body["height"] as? NSNumber)?.intValue, 1152)
-        XCTAssertEqual(body["image"] as? String, "https://cdn.example/ref.png")
-        XCTAssertEqual(body["mode"] as? String, "ti2vid")
+        XCTAssertEqual(body["seconds"] as? String, "4")
+        XCTAssertEqual(body["size"] as? String, "720P")
+        XCTAssertEqual(body["aspect_ratio"] as? String, "16:9")
+        XCTAssertEqual(body["mode"] as? String, "keyframe")
+        XCTAssertEqual(body["first_frame"] as? String, "https://cdn.example/ref.png")
+        XCTAssertNil(body["image"])
+        XCTAssertNil(body["num_frames"])
+        XCTAssertNil(body["width"])
+        XCTAssertNil(body["height"])
     }
 
     func testGenerateVideoCompletesImmediatelyWhenStatusCompletedWithURL() async throws {
@@ -420,7 +423,7 @@ final class AgnesRemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(fake.requests.count, 1)
         XCTAssertTrue(sleepCalls.isEmpty)
         let body = try requestJSON(try XCTUnwrap(fake.requests.first))
-        XCTAssertEqual(body["image"] as? String, "https://override.example/img.png")
+        XCTAssertEqual(body["first_frame"] as? String, "https://override.example/img.png")
     }
 
     func testGenerateVideoTimesOutAfter60ProcessingPolls() async {

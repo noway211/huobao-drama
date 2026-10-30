@@ -251,7 +251,7 @@ final class ImageVideoUseCaseTests: XCTestCase {
             "https://apihub.agnes-ai.com/v1/videos"
         )
         let body = try requestJSON(fake.requests[0])
-        XCTAssertEqual(body["image"] as? String, "https://cdn.example/ref.png")
+        XCTAssertEqual(body["first_frame"] as? String, "https://cdn.example/ref.png")
         XCTAssertEqual(fake.requests[1].httpMethod, "GET")
         XCTAssertEqual(fake.requests[1].url?.absoluteString, "https://cdn.example/now.mp4")
 
@@ -269,7 +269,7 @@ final class ImageVideoUseCaseTests: XCTestCase {
         XCTAssertNil(project?.errorMessage)
     }
 
-    func testVideosUsesDataURIWhenLocalImageExists() async throws {
+    func testVideosPrefersRemoteImageURLOverLocalDataURI() async throws {
         let seeded = try seedProject()
         let imageFile = filesRoot.appendingPathComponent("ref.png")
         try Data("png-bytes".utf8).write(to: imageFile)
@@ -281,7 +281,47 @@ final class ImageVideoUseCaseTests: XCTestCase {
                     projectId: seeded.projectId,
                     episodeId: seeded.episodeId,
                     shotNumber: 1,
-                    imageUrl: "https://cdn.example/ignored.png",
+                    imageUrl: "https://cdn.example/kept.png",
+                    imageLocalPath: imageFile.path
+                )
+            ]
+        )
+        let fake = FakeAgnesHTTPClient()
+        fake.enqueueJSONObject([
+            "status": "completed",
+            "id": "id-1",
+            "video_url": "https://cdn.example/now.mp4"
+        ])
+        fake.enqueueData(Data("mp4-bytes".utf8))
+        let useCase = GenerateStoryboardVideosUseCase(
+            repository: repository,
+            videoRepository: AgnesVideoRepository(client: fake, sleep: { _ in }),
+            downloadRepository: MediaDownloadRepository(client: fake, paths: paths)
+        )
+
+        try await useCase.execute(
+            projectId: seeded.projectId,
+            episodeId: seeded.episodeId,
+            settings: makeSettings()
+        )
+
+        let body = try requestJSON(try XCTUnwrap(fake.requests.first))
+        XCTAssertEqual(body["first_frame"] as? String, "https://cdn.example/kept.png")
+    }
+
+    func testVideosUsesDataURIWhenRemoteImageURLMissing() async throws {
+        let seeded = try seedProject()
+        let imageFile = filesRoot.appendingPathComponent("ref.png")
+        try Data("png-bytes".utf8).write(to: imageFile)
+        try repository.replaceStoryboards(
+            projectId: seeded.projectId,
+            episodeId: seeded.episodeId,
+            shots: [
+                makeShot(
+                    projectId: seeded.projectId,
+                    episodeId: seeded.episodeId,
+                    shotNumber: 1,
+                    imageUrl: nil,
                     imageLocalPath: imageFile.path
                 )
             ]
@@ -307,7 +347,7 @@ final class ImageVideoUseCaseTests: XCTestCase {
 
         let body = try requestJSON(try XCTUnwrap(fake.requests.first))
         let expected = "data:image/png;base64,\(Data("png-bytes".utf8).base64EncodedString())"
-        XCTAssertEqual(body["image"] as? String, expected)
+        XCTAssertEqual(body["first_frame"] as? String, expected)
     }
 
     func testVideosFailFastMarksSecondFailedAndDoesNotContinue() async throws {

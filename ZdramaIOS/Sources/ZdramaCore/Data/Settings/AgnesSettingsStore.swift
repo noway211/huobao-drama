@@ -89,7 +89,7 @@ public final class AgnesSettingsStore: @unchecked Sendable {
             baseUrl: blankFallingBack(defaults.string(forKey: Keys.baseURL), to: fallback.baseUrl),
             textModel: defaults.string(forKey: Keys.textModel) ?? fallback.textModel,
             imageModel: blankFallingBack(defaults.string(forKey: Keys.imageModel), to: fallback.imageModel),
-            videoModel: blankFallingBack(defaults.string(forKey: Keys.videoModel), to: fallback.videoModel),
+            videoModel: currentVideoModel(defaults.string(forKey: Keys.videoModel), fallback: fallback.videoModel),
             requestTimeoutSeconds: loadTimeoutSeconds(fallback: fallback.requestTimeoutSeconds),
             customScriptCreatePrompt: defaults.string(forKey: Keys.customScriptCreatePrompt),
             customScriptRewritePrompt: defaults.string(forKey: Keys.customScriptRewritePrompt),
@@ -126,6 +126,18 @@ public final class AgnesSettingsStore: @unchecked Sendable {
             return fallback
         }
         return defaults.integer(forKey: Keys.timeoutSeconds)
+    }
+
+    /// v2.0 的请求体已经不能用。agnes-video-v2.5 是换版本时多带了一个 v 的错名字，
+    /// 服务端按 model_not_found 回 404。只替换这两个，用户手填的其他模型保持原样。
+    private func currentVideoModel(_ stored: String?, fallback: String) -> String {
+        let value = blankFallingBack(stored, to: fallback)
+        switch value {
+        case "agnes-video-v2.0", "agnes-video-v2.5":
+            return fallback
+        default:
+            return value
+        }
     }
 
     private func blankFallingBack(_ value: String?, to fallback: String) -> String {

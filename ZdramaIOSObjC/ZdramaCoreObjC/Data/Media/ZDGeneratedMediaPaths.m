@@ -22,6 +22,10 @@
     return [[self projectDir:projectId] URLByAppendingPathComponent:[NSString stringWithFormat:@"shot_%lld_image.%@", shotId, ext]];
 }
 
+- (NSURL *)characterImageProjectId:(int64_t)projectId characterId:(int64_t)characterId ext:(NSString *)ext {
+    return [[self projectDir:projectId] URLByAppendingPathComponent:[NSString stringWithFormat:@"char_%lld_image.%@", characterId, ext]];
+}
+
 - (NSURL *)shotVideoProjectId:(int64_t)projectId shotId:(int64_t)shotId ext:(NSString *)ext {
     return [[self projectDir:projectId] URLByAppendingPathComponent:[NSString stringWithFormat:@"shot_%lld_video.%@", shotId, ext]];
 }

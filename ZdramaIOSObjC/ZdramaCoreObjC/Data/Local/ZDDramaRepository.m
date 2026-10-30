@@ -367,4 +367,89 @@ static void ZDBindText(sqlite3_stmt *stmt, int index, NSString *value) {
     return changes;
 }
 
+static NSString *ZDColumnText(sqlite3_stmt *stmt, int index) {
+    const char *value = (const char *)sqlite3_column_text(stmt, index);
+    return value ? [NSString stringWithUTF8String:value] : nil;
+}
+
+- (ZDCharacter *)characterFromStatement:(sqlite3_stmt *)stmt {
+    ZDCharacter *character = [ZDCharacter new];
+    character.id = sqlite3_column_int64(stmt, 0);
+    character.projectId = sqlite3_column_int64(stmt, 1);
+    character.episodeIdIsNull = sqlite3_column_type(stmt, 2) == SQLITE_NULL;
+    character.episodeId = character.episodeIdIsNull ? 0 : sqlite3_column_int64(stmt, 2);
+    character.name = ZDColumnText(stmt, 3) ?: @"";
+    character.role = ZDColumnText(stmt, 4) ?: @"";
+    character.characterDescription = ZDColumnText(stmt, 5) ?: @"";
+    character.appearance = ZDColumnText(stmt, 6) ?: @"";
+    character.personality = ZDColumnText(stmt, 7) ?: @"";
+    character.imageStatus = ZDAssetStatusFromPersisted(ZDColumnText(stmt, 8));
+    character.imageUrl = ZDColumnText(stmt, 9);
+    character.imageLocalPath = ZDColumnText(stmt, 10);
+    character.imageErrorMessage = ZDColumnText(stmt, 11);
+    character.createdAt = sqlite3_column_int64(stmt, 12);
+    character.updatedAt = sqlite3_column_int64(stmt, 13);
+    return character;
+}
+
+- (NSArray<ZDCharacter *> *)getCharactersForProject:(int64_t)projectId {
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_prepare_v2(self.db, "SELECT id, project_id, episode_id, name, role, description, appearance, personality, image_status, image_url, image_local_path, image_error_message, created_at, updated_at FROM characters WHERE project_id = ? ORDER BY id ASC", -1, &stmt, NULL);
+    sqlite3_bind_int64(stmt, 1, projectId);
+    NSMutableArray *rows = [NSMutableArray array];
+    while (sqlite3_step(stmt) == SQLITE_ROW) [rows addObject:[self characterFromStatement:stmt]];
+    sqlite3_finalize(stmt);
+    return rows;
+}
+
+- (BOOL)upsertCharacters:(NSArray<ZDCharacter *> *)characters projectId:(int64_t)projectId {
+    int64_t now = ZDNow();
+    for (ZDCharacter *character in characters) {
+        sqlite3_stmt *stmt = NULL;
+        if (character.id > 0) {
+            sqlite3_prepare_v2(self.db, "UPDATE characters SET role = ?, description = ?, appearance = ?, personality = ?, updated_at = ? WHERE id = ? AND project_id = ?", -1, &stmt, NULL);
+            ZDBindText(stmt, 1, character.role ?: @"");
+            ZDBindText(stmt, 2, character.characterDescription ?: @"");
+            ZDBindText(stmt, 3, character.appearance ?: @"");
+            ZDBindText(stmt, 4, character.personality ?: @"");
+            sqlite3_bind_int64(stmt, 5, now);
+            sqlite3_bind_int64(stmt, 6, character.id);
+            sqlite3_bind_int64(stmt, 7, projectId);
+        } else {
+            sqlite3_prepare_v2(self.db, "INSERT INTO characters (project_id, episode_id, name, role, description, appearance, personality, image_status, image_url, image_local_path, image_error_message, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", -1, &stmt, NULL);
+            sqlite3_bind_int64(stmt, 1, projectId);
+            if (character.episodeIdIsNull || character.episodeId <= 0) sqlite3_bind_null(stmt, 2);
+            else sqlite3_bind_int64(stmt, 2, character.episodeId);
+            ZDBindText(stmt, 3, character.name ?: @"");
+            ZDBindText(stmt, 4, character.role ?: @"");
+            ZDBindText(stmt, 5, character.characterDescription ?: @"");
+            ZDBindText(stmt, 6, character.appearance ?: @"");
+            ZDBindText(stmt, 7, character.personality ?: @"");
+            ZDBindText(stmt, 8, character.imageStatus.length ? character.imageStatus : @"PENDING");
+            ZDBindText(stmt, 9, character.imageUrl);
+            ZDBindText(stmt, 10, character.imageLocalPath);
+            ZDBindText(stmt, 11, character.imageErrorMessage);
+            sqlite3_bind_int64(stmt, 12, now);
+            sqlite3_bind_int64(stmt, 13, now);
+        }
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+    return YES;
+}
+
+- (BOOL)updateCharacterImageId:(int64_t)characterId status:(NSString *)status localPath:(NSString *)path url:(NSString *)url errorMessage:(NSString *)errorMessage {
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_prepare_v2(self.db, "UPDATE characters SET image_status = ?, image_url = ?, image_local_path = ?, image_error_message = ?, updated_at = ? WHERE id = ?", -1, &stmt, NULL);
+    ZDBindText(stmt, 1, status ?: @"PENDING");
+    ZDBindText(stmt, 2, url);
+    ZDBindText(stmt, 3, path);
+    ZDBindText(stmt, 4, errorMessage);
+    sqlite3_bind_int64(stmt, 5, ZDNow());
+    sqlite3_bind_int64(stmt, 6, characterId);
+    BOOL ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return ok;
+}
+
 @end

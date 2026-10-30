@@ -16,6 +16,8 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
         db.execSQL(SQL_CREATE_EPISODES)
         db.execSQL(SQL_CREATE_CHARACTERS)
         db.execSQL(SQL_CREATE_INDEX_CHARACTERS_PROJECT_ID)
+        db.execSQL(SQL_CREATE_SCENES)
+        db.execSQL(SQL_CREATE_INDEX_SCENES_PROJECT_ID)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -93,11 +95,15 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
                 WHERE $COL_EPISODE_ID IS NULL
             """)
         }
+        if (oldVersion < 13) {
+            db.execSQL(SQL_CREATE_SCENES)
+            db.execSQL(SQL_CREATE_INDEX_SCENES_PROJECT_ID)
+        }
     }
 
     companion object {
         private const val DATABASE_NAME = "zdrama.db"
-        private const val DATABASE_VERSION = 12
+        private const val DATABASE_VERSION = 13
 
         const val TABLE_PROJECTS = "projects"
         const val COL_ID = "id"
@@ -163,6 +169,14 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
         const val COL_CHARACTER_IMAGE_URL = "image_url"
         const val COL_CHARACTER_IMAGE_LOCAL_PATH = "image_local_path"
         const val COL_CHARACTER_IMAGE_ERROR_MESSAGE = "image_error_message"
+
+        const val TABLE_SCENES = "scenes"
+        const val COL_SCENE_PROJECT_ID = "project_id"
+        const val COL_SCENE_EPISODE_ID = "episode_id"
+        const val COL_SCENE_LOCATION = "location"
+        const val COL_SCENE_TIME = "time"
+        const val COL_SCENE_ATMOSPHERE = "atmosphere"
+        const val COL_SCENE_PROMPT = "prompt"
 
         private const val SQL_CREATE_PROJECTS = """
             CREATE TABLE IF NOT EXISTS $TABLE_PROJECTS (
@@ -253,6 +267,24 @@ class DramaLocalDatabase(context: Context) : SQLiteOpenHelper(
 
         private const val SQL_CREATE_INDEX_CHARACTERS_PROJECT_ID = """
             CREATE INDEX IF NOT EXISTS idx_characters_project_id ON $TABLE_CHARACTERS($COL_CHARACTER_PROJECT_ID)
+        """
+
+        private const val SQL_CREATE_SCENES = """
+            CREATE TABLE IF NOT EXISTS $TABLE_SCENES (
+                $COL_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COL_SCENE_PROJECT_ID INTEGER NOT NULL,
+                $COL_SCENE_EPISODE_ID INTEGER,
+                $COL_SCENE_LOCATION TEXT NOT NULL,
+                $COL_SCENE_TIME TEXT NOT NULL DEFAULT '',
+                $COL_SCENE_ATMOSPHERE TEXT NOT NULL DEFAULT '',
+                $COL_SCENE_PROMPT TEXT NOT NULL DEFAULT '',
+                $COL_CREATED_AT INTEGER NOT NULL,
+                $COL_UPDATED_AT INTEGER NOT NULL
+            )
+        """
+
+        private const val SQL_CREATE_INDEX_SCENES_PROJECT_ID = """
+            CREATE INDEX IF NOT EXISTS idx_scenes_project_id ON $TABLE_SCENES($COL_SCENE_PROJECT_ID)
         """
     }
 }

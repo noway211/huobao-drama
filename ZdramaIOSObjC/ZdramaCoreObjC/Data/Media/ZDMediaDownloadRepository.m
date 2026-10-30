@@ -27,6 +27,10 @@ static NSError *ZDDownloadError(NSString *message) {
     [self downloadProjectId:projectId shotId:shotId url:url kind:@"video" completion:completion];
 }
 
+- (void)downloadCharacterImageProjectId:(int64_t)projectId characterId:(int64_t)characterId url:(NSString *)url completion:(void (^)(NSString *path, NSError *error))completion {
+    [self downloadProjectId:projectId shotId:characterId url:url kind:@"character" completion:completion];
+}
+
 - (void)downloadProjectId:(int64_t)projectId shotId:(int64_t)shotId url:(NSString *)url kind:(NSString *)kind completion:(void (^)(NSString *path, NSError *error))completion {
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]];
     request.HTTPMethod = @"GET";
@@ -36,10 +40,15 @@ static NSError *ZDDownloadError(NSString *message) {
             completion(nil, ZDDownloadError([NSString stringWithFormat:@"Media download failed: HTTP %ld", (long)http.statusCode]));
             return;
         }
-        NSString *ext = ZDExtensionFromURL(url, kind);
-        NSURL *dest = [kind isEqualToString:@"video"]
-            ? [self->_paths shotVideoProjectId:projectId shotId:shotId ext:ext]
-            : [self->_paths shotImageProjectId:projectId shotId:shotId ext:ext];
+        NSString *ext = ZDExtensionFromURL(url, [kind isEqualToString:@"video"] ? @"video" : @"image");
+        NSURL *dest;
+        if ([kind isEqualToString:@"video"]) {
+            dest = [self->_paths shotVideoProjectId:projectId shotId:shotId ext:ext];
+        } else if ([kind isEqualToString:@"character"]) {
+            dest = [self->_paths characterImageProjectId:projectId characterId:shotId ext:ext];
+        } else {
+            dest = [self->_paths shotImageProjectId:projectId shotId:shotId ext:ext];
+        }
         [NSFileManager.defaultManager createDirectoryAtURL:[dest URLByDeletingLastPathComponent] withIntermediateDirectories:YES attributes:nil error:nil];
         [data writeToURL:dest atomically:YES];
         completion(dest.path, nil);

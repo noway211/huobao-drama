@@ -10,7 +10,7 @@ import com.huobao.zdrama.data.remote.ChatResponseTextExtractor
 import com.huobao.zdrama.data.settings.AgnesSettings
 import com.huobao.zdrama.domain.model.DramaProject
 
-class AgnesTextRepository(
+open class AgnesTextRepository(
     private val clientFactory: AgnesClientFactory = AgnesClientFactory()
 ) {
     /**
@@ -101,7 +101,7 @@ $rawContent"""
      * ChatResponseTextExtractor 提取 content 文本。这样能保留对 reasoning_content、
      * output_text 等多种返回格式的兼容性。
      */
-    suspend fun postChat(
+    open suspend fun postChat(
         settings: AgnesSettings,
         messages: List<ChatMessage>,
         temperature: Double,

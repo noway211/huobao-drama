@@ -20,13 +20,17 @@ static NSError *ZDImageError(NSString *message) {
 }
 
 - (void)generateImageSettings:(ZDAgnesSettings *)settings prompt:(NSString *)prompt completion:(void (^)(NSString *url, NSError *error))completion {
+    [self generateImageSettings:settings prompt:prompt size:@"1024x768" completion:completion];
+}
+
+- (void)generateImageSettings:(ZDAgnesSettings *)settings prompt:(NSString *)prompt size:(NSString *)size completion:(void (^)(NSString *url, NSError *error))completion {
     if (ZDImageBlank(settings.apiKey) || ZDImageBlank(settings.imageModel)) {
         completion(nil, ZDImageError(ZDImageBlank(settings.apiKey) ? @"Agnes API Key is required" : @"Image model is required"));
         return;
     }
     NSString *base = [settings.baseUrl hasSuffix:@"/"] ? settings.baseUrl : [settings.baseUrl stringByAppendingString:@"/"];
     NSURL *url = [NSURL URLWithString:@"v1/images/generations" relativeToURL:[NSURL URLWithString:base]].absoluteURL;
-    NSDictionary *body = @{@"model": settings.imageModel, @"prompt": prompt ?: @"", @"size": @"1024x768", @"n": @1, @"extra_body": @{@"response_format": @"url"}};
+    NSDictionary *body = @{@"model": settings.imageModel, @"prompt": prompt ?: @"", @"size": size.length ? size : @"1024x768", @"n": @1, @"extra_body": @{@"response_format": @"url"}};
     [_client jsonPOST:url body:body apiKey:settings.apiKey completion:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
         if (error || ![response isKindOfClass:NSHTTPURLResponse.class] || response.statusCode < 200 || response.statusCode >= 300) {
             NSString *responseBody = [[NSString alloc] initWithData:data ?: [NSData data] encoding:NSUTF8StringEncoding] ?: @"";

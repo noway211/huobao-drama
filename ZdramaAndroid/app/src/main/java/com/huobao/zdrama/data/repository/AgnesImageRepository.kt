@@ -22,7 +22,8 @@ class AgnesImageRepository(
     suspend fun generateImage(
         settings: AgnesSettings,
         prompt: String,
-        referenceImages: List<String>? = null
+        referenceImages: List<String>? = null,
+        size: String = DEFAULT_IMAGE_SIZE
     ): Result<String> {
         if (settings.apiKey.isBlank()) {
             return Result.failure(IllegalArgumentException("Agnes API Key is required"))
@@ -55,7 +56,7 @@ class AgnesImageRepository(
                 ImageGenerationRequest(
                     model = settings.imageModel,
                     prompt = prompt,
-                    size = DEFAULT_IMAGE_SIZE,
+                    size = size,
                     n = 1,
                     extraBody = ImageExtraBody(
                         responseFormat = "url",
@@ -70,11 +71,12 @@ class AgnesImageRepository(
     }
 
     suspend fun generateImageForCharacter(settings: AgnesSettings, prompt: String): Result<String> {
-        return generateImage(settings, prompt)
+        return generateImage(settings, prompt, size = CHARACTER_TURNAROUND_SIZE)
     }
 
     companion object {
         private const val TAG = "AgnesImageRepository"
         private const val DEFAULT_IMAGE_SIZE = "1024x768"
+        const val CHARACTER_TURNAROUND_SIZE = "1536x1024"
     }
 }

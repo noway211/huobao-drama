@@ -8,6 +8,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)generateImageSettings:(ZDAgnesSettings *)settings
                        prompt:(NSString *)prompt
                    completion:(void (^)(NSString *_Nullable url, NSError *_Nullable error))completion;
+- (void)generateImageSettings:(ZDAgnesSettings *)settings
+                       prompt:(NSString *)prompt
+                         size:(NSString *)size
+                   completion:(void (^)(NSString *_Nullable url, NSError *_Nullable error))completion;
 @end
 
 NS_ASSUME_NONNULL_END

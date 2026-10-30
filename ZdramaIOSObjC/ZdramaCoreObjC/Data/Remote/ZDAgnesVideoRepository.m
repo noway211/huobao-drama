@@ -1,6 +1,5 @@
 #import "ZDAgnesVideoRepository.h"
 #import "ZDAgnesHTTPClient.h"
-#import "ZDVideoFrameCalculator.h"
 
 static BOOL ZDVideoBlank(NSString *value) {
     return [value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].length == 0;
@@ -48,19 +47,19 @@ static NSError *ZDVideoError(NSString *message) {
         completion(nil, ZDVideoError(ZDVideoBlank(settings.apiKey) ? @"Agnes API Key is required" : @"Video model is required"));
         return;
     }
-    NSString *image = ZDVideoBlank(shot.imageLocalPath) ? shot.imageUrl : shot.imageLocalPath;
+    NSString *image = ZDVideoBlank(shot.imageUrl) ? shot.imageLocalPath : shot.imageUrl;
     if (ZDVideoBlank(image)) { completion(nil, ZDVideoError(@"Generate image before video")); return; }
     NSString *base = [settings.baseUrl hasSuffix:@"/"] ? settings.baseUrl : [settings.baseUrl stringByAppendingString:@"/"];
     NSURL *url = [NSURL URLWithString:@"v1/videos" relativeToURL:[NSURL URLWithString:base]].absoluteURL;
+    NSInteger seconds = MIN(MAX(shot.durationSeconds, 4), 12);
     NSDictionary *body = @{
         @"model": settings.videoModel,
         @"prompt": [self promptForShot:shot],
-        @"num_frames": @(ZDNumFramesForDuration(shot.durationSeconds)),
-        @"frame_rate": @24,
-        @"width": @768,
-        @"height": @1152,
-        @"image": image,
-        @"mode": @"ti2vid"
+        @"seconds": [NSString stringWithFormat:@"%ld", (long)seconds],
+        @"mode": @"keyframe",
+        @"size": @"720P",
+        @"aspect_ratio": @"16:9",
+        @"first_frame": image
     };
     [_client jsonPOST:url body:body apiKey:settings.apiKey completion:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
         NSDictionary *json = data.length ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
@@ -77,17 +76,20 @@ static NSError *ZDVideoError(NSString *message) {
             completion(immediate, nil);
             return;
         }
-        NSString *taskId = json[@"task_id"] ?: json[@"id"];
-        if (ZDVideoBlank(taskId)) { completion(nil, ZDVideoError(@"No task_id/id in Agnes video response")); return; }
-        [self pollSettings:settings taskId:taskId remaining:60 completion:completion];
+        NSString *videoId = json[@"video_id"] ?: json[@"task_id"] ?: json[@"id"];
+        if (ZDVideoBlank(videoId)) { completion(nil, ZDVideoError(@"No task_id/id in Agnes video response")); return; }
+        [self pollSettings:settings videoId:videoId remaining:60 completion:completion];
     }];
 }
 
-- (void)pollSettings:(ZDAgnesSettings *)settings taskId:(NSString *)taskId remaining:(NSInteger)remaining completion:(void (^)(NSString *url, NSError *error))completion {
+- (void)pollSettings:(ZDAgnesSettings *)settings videoId:(NSString *)videoId remaining:(NSInteger)remaining completion:(void (^)(NSString *url, NSError *error))completion {
     if (remaining == 0) { completion(nil, ZDVideoError(@"Video generation timed out")); return; }
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(_pollDelay * NSEC_PER_SEC)), dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSString *base = [settings.baseUrl hasSuffix:@"/"] ? settings.baseUrl : [settings.baseUrl stringByAppendingString:@"/"];
-        NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"v1/videos/%@", taskId] relativeToURL:[NSURL URLWithString:base]].absoluteURL;
+        NSString *path = [NSString stringWithFormat:@"agnesapi?video_id=%@&model_name=%@",
+                          [videoId stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet],
+                          [settings.videoModel stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet]];
+        NSURL *url = [NSURL URLWithString:path relativeToURL:[NSURL URLWithString:base]].absoluteURL;
         NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
         request.HTTPMethod = @"GET";
         [request setValue:[NSString stringWithFormat:@"Bearer %@", settings.apiKey] forHTTPHeaderField:@"Authorization"];
@@ -99,7 +101,7 @@ static NSError *ZDVideoError(NSString *message) {
             } else if ([json[@"status"] isEqual:@"failed"]) {
                 completion(nil, ZDVideoError([json[@"error"] isKindOfClass:NSString.class] ? json[@"error"] : @"Video generation failed"));
             } else {
-                [self pollSettings:settings taskId:taskId remaining:remaining - 1 completion:completion];
+                [self pollSettings:settings videoId:videoId remaining:remaining - 1 completion:completion];
             }
         }] resume];
     });

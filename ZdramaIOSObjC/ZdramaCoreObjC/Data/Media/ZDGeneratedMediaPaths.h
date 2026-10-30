@@ -8,6 +8,7 @@ FOUNDATION_EXPORT NSString *ZDExtensionFromURL(NSString *url, NSString *kind);
 - (instancetype)initWithRoot:(NSString *)root;
 - (NSURL *)projectDir:(int64_t)projectId;
 - (NSURL *)shotImageProjectId:(int64_t)projectId shotId:(int64_t)shotId ext:(NSString *)ext;
+- (NSURL *)characterImageProjectId:(int64_t)projectId characterId:(int64_t)characterId ext:(NSString *)ext;
 - (NSURL *)shotVideoProjectId:(int64_t)projectId shotId:(int64_t)shotId ext:(NSString *)ext;
 - (NSURL *)finalVideoProjectId:(int64_t)projectId episodeId:(int64_t)episodeId;
 @end

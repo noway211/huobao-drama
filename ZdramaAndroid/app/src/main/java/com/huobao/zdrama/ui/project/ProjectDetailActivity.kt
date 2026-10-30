@@ -25,6 +25,7 @@ import com.huobao.zdrama.domain.model.ProjectStatus
 import com.huobao.zdrama.domain.model.StoryboardShot
 import com.huobao.zdrama.domain.usecase.GetCharactersUseCase
 import com.huobao.zdrama.domain.usecase.GetProjectDetailUseCase
+import com.huobao.zdrama.domain.usecase.GetScenesUseCase
 import com.huobao.zdrama.domain.usecase.GetStoryboardsUseCase
 import com.huobao.zdrama.worker.GenerationWorker
 import java.io.File
@@ -40,6 +41,7 @@ class ProjectDetailActivity : AppCompatActivity() {
     private lateinit var getProjectDetailUseCase: GetProjectDetailUseCase
     private lateinit var getStoryboardsUseCase: GetStoryboardsUseCase
     private lateinit var getCharactersUseCase: GetCharactersUseCase
+    private lateinit var getScenesUseCase: GetScenesUseCase
     private var projectId: Long = 0L
     private var projectTitle: String? = null
     private var currentEpisodeId: Long = 0L
@@ -54,6 +56,7 @@ class ProjectDetailActivity : AppCompatActivity() {
     private var promptExpanded = false
     private var boundPrompt: String? = null
     private var cachedCharacterCount: Int = 0
+    private var cachedSceneCount: Int = 0
     private var cachedHasCompletedCharacterImages: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,6 +69,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         getProjectDetailUseCase = GetProjectDetailUseCase(dramaRepository)
         getStoryboardsUseCase = GetStoryboardsUseCase(dramaRepository)
         getCharactersUseCase = GetCharactersUseCase(dramaRepository)
+        getScenesUseCase = GetScenesUseCase(dramaRepository)
 
         projectId = intent.getLongExtra(EXTRA_PROJECT_ID, 0L)
         if (projectId <= 0L) {
@@ -101,6 +105,10 @@ class ProjectDetailActivity : AppCompatActivity() {
             confirmGeneration(GenerationWorker.STAGE_CHARACTER_EXTRACT, R.string.project_characters_queued)
         }
         binding.viewCharactersButton.setOnClickListener { openCharacterList() }
+        binding.generateScenesButton.setOnClickListener {
+            confirmGeneration(GenerationWorker.STAGE_SCENE_EXTRACT, R.string.project_scenes_queued)
+        }
+        binding.viewScenesButton.setOnClickListener { openSceneList() }
         binding.generateCharacterImagesButton.setOnClickListener {
             confirmGeneration(GenerationWorker.STAGE_CHARACTER_IMAGE, R.string.project_character_image_queued)
         }
@@ -141,8 +149,10 @@ class ProjectDetailActivity : AppCompatActivity() {
                 val episode = loadedEpisodes.firstOrNull { it.id == currentEpisodeId }
                 val characters = getCharactersUseCase.execute(projectId)
                 cachedCharacterCount = characters.size
+                val scenes = getScenesUseCase.execute(projectId)
+                cachedSceneCount = scenes.size
                 hasCompletedCharacterImages(characters)
-                bindProject(project, episode, storyboards, characters)
+                bindProject(project, episode, storyboards, characters, scenes)
             }
         }
     }
@@ -217,6 +227,8 @@ class ProjectDetailActivity : AppCompatActivity() {
         binding.composeFinalVideoButton.isEnabled = enabled
         binding.generateCharactersButton.isEnabled = enabled
         binding.viewCharactersButton.isEnabled = enabled
+        binding.generateScenesButton.isEnabled = enabled
+        binding.viewScenesButton.isEnabled = enabled
         binding.generateCharacterImagesButton.isEnabled = enabled
     }
 
@@ -278,6 +290,9 @@ class ProjectDetailActivity : AppCompatActivity() {
             }
             GenerationWorker.STAGE_CHARACTER_EXTRACT -> {
                 if (cachedCharacterCount > 0) R.string.project_regenerate_characters_message else null
+            }
+            GenerationWorker.STAGE_SCENE_EXTRACT -> {
+                if (cachedSceneCount > 0) R.string.project_regenerate_scenes_message else null
             }
             GenerationWorker.STAGE_CHARACTER_IMAGE -> {
                 if (hasCompletedCharacterImages()) R.string.project_regenerate_character_images_message else null
@@ -401,6 +416,13 @@ class ProjectDetailActivity : AppCompatActivity() {
                     GenerationPreflight.Ready
                 }
             }
+            GenerationWorker.STAGE_SCENE_EXTRACT -> {
+                if (episode?.scriptContent.isNullOrBlank()) {
+                    GenerationPreflight.Blocked(R.string.project_generation_missing_script)
+                } else {
+                    GenerationPreflight.Ready
+                }
+            }
             GenerationWorker.STAGE_CHARACTER_IMAGE -> {
                 val characters = getCharactersUseCase.execute(projectId)
                 if (characters.isEmpty()) {
@@ -496,6 +518,17 @@ class ProjectDetailActivity : AppCompatActivity() {
         startActivity(
             Intent(this, CharacterListActivity::class.java)
                 .putExtra(CharacterListActivity.EXTRA_PROJECT_ID, projectId)
+        )
+    }
+
+    private fun openSceneList() {
+        if (cachedSceneCount <= 0) {
+            Toast.makeText(this, R.string.project_no_scenes, Toast.LENGTH_SHORT).show()
+            return
+        }
+        startActivity(
+            Intent(this, SceneListActivity::class.java)
+                .putExtra(SceneListActivity.EXTRA_PROJECT_ID, projectId)
         )
     }
 
@@ -599,7 +632,8 @@ class ProjectDetailActivity : AppCompatActivity() {
         project: DramaProject,
         episode: Episode?,
         storyboards: List<StoryboardShot>,
-        characters: List<com.huobao.zdrama.domain.model.Character> = emptyList()
+        characters: List<com.huobao.zdrama.domain.model.Character> = emptyList(),
+        scenes: List<com.huobao.zdrama.domain.model.Scene> = emptyList()
     ) {
         hasGeneratedVideos = storyboards.any { it.hasPlayableVideo() }
         finalVideoLocalPath = episode?.finalVideoLocalPath
@@ -612,7 +646,8 @@ class ProjectDetailActivity : AppCompatActivity() {
             isExistingFile(it.imageLocalPath) || !it.imageUrl.isNullOrBlank()
         }
         binding.viewCharactersButton.isEnabled = characters.isNotEmpty()
-        bindGenerationButtonTexts(project, episode, storyboards, characters)
+        binding.viewScenesButton.isEnabled = scenes.isNotEmpty()
+        bindGenerationButtonTexts(project, episode, storyboards, characters, scenes)
         binding.titleText.text = project.title
         projectTitle = project.title
         binding.statusText.text = getString(R.string.project_status_label) + "：${project.status.toDisplayText()}\n" +
@@ -691,7 +726,8 @@ class ProjectDetailActivity : AppCompatActivity() {
         project: DramaProject,
         episode: Episode?,
         storyboards: List<StoryboardShot>,
-        characters: List<com.huobao.zdrama.domain.model.Character> = emptyList()
+        characters: List<com.huobao.zdrama.domain.model.Character> = emptyList(),
+        scenes: List<com.huobao.zdrama.domain.model.Scene> = emptyList()
     ) {
         binding.generateFullButton.setText(
             if (hasAnyGeneratedContent(project, episode, storyboards)) R.string.project_regenerate_full else R.string.project_generate_full
@@ -725,6 +761,9 @@ class ProjectDetailActivity : AppCompatActivity() {
         )
         binding.generateCharactersButton.setText(
             if (characters.isNotEmpty()) R.string.project_regenerate_characters else R.string.project_extract_characters
+        )
+        binding.generateScenesButton.setText(
+            if (scenes.isNotEmpty()) R.string.project_regenerate_scenes else R.string.project_extract_scenes
         )
         binding.generateCharacterImagesButton.setText(
             if (hasCompletedCharacterImages(characters)) {
@@ -942,6 +981,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         GenerationWorker.STAGE_VIDEO -> R.string.project_progress_stage_video
         GenerationWorker.STAGE_FINAL_VIDEO -> R.string.project_progress_stage_final_video
         GenerationWorker.STAGE_CHARACTER_EXTRACT -> R.string.project_progress_stage_character_extract
+        GenerationWorker.STAGE_SCENE_EXTRACT -> R.string.project_progress_stage_scene_extract
         GenerationWorker.STAGE_CHARACTER_IMAGE -> R.string.project_progress_stage_character_image
         GenerationWorker.STAGE_FULL -> R.string.project_progress_stage_full
         else -> R.string.project_progress_stage_text
