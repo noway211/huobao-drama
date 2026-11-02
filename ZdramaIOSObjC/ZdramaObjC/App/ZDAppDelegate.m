@@ -10,7 +10,9 @@
 }
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+    NSLog(@"[ZDAppDelegate] didFinishLaunchingWithOptions launchOptions=%@", launchOptions);
     (void)ZDAppContainer.shared;
+    [self application:application willFinishLaunchingWithOptions:launchOptions];
     self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
     self.window.rootViewController = [[UINavigationController alloc] initWithRootViewController:[ZDHomeViewController new]];
     [self.window makeKeyAndVisible];

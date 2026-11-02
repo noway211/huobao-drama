@@ -48,17 +48,24 @@ static NSString *ZDBlankToDefault(NSString *value, NSString *fallback) {
     return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"";
 }
 
-- (void)saveAPIKey:(NSString *)apiKey {
+- (BOOL)saveAPIKey:(NSString *)apiKey error:(NSError **)error {
     NSDictionary *query = @{
         (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
         (__bridge id)kSecAttrService: ZDKeychainService,
         (__bridge id)kSecAttrAccount: ZDKeychainAccount
     };
     SecItemDelete((__bridge CFDictionaryRef)query);
-    if (apiKey.length == 0) return;
+    if (apiKey.length == 0) return YES;
     NSMutableDictionary *add = [query mutableCopy];
     add[(__bridge id)kSecValueData] = [apiKey dataUsingEncoding:NSUTF8StringEncoding];
-    SecItemAdd((__bridge CFDictionaryRef)add, NULL);
+    OSStatus status = SecItemAdd((__bridge CFDictionaryRef)add, NULL);
+    if (status == errSecSuccess) return YES;
+    if (error) {
+        *error = [NSError errorWithDomain:NSOSStatusErrorDomain code:status userInfo:@{
+            NSLocalizedDescriptionKey: [NSString stringWithFormat:@"API Key 保存失败（%d）", (int)status]
+        }];
+    }
+    return NO;
 }
 
 - (ZDAgnesSettings *)load {
@@ -77,9 +84,11 @@ static NSString *ZDBlankToDefault(NSString *value, NSString *fallback) {
     return settings;
 }
 
-- (void)save:(ZDAgnesSettings *)settings {
+- (BOOL)save:(ZDAgnesSettings *)settings error:(NSError **)error {
     ZDAgnesSettings *defaults = ZDAgnesSettingsDefaults();
-    [self saveAPIKey:[settings.apiKey stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @""];
+    if (![self saveAPIKey:[settings.apiKey stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"" error:error]) {
+        return NO;
+    }
     [_defaults setObject:ZDNormalizeBaseURL(settings.baseUrl) forKey:@"baseUrl"];
     [_defaults setObject:settings.textModel ?: @"" forKey:@"textModel"];
     [_defaults setObject:ZDBlankToDefault(settings.imageModel, defaults.imageModel) forKey:@"imageModel"];
@@ -89,6 +98,7 @@ static NSString *ZDBlankToDefault(NSString *value, NSString *fallback) {
     [_defaults setObject:settings.customScriptRewritePrompt forKey:@"customScriptRewritePrompt"];
     [_defaults setObject:settings.customCharacterExtractPrompt forKey:@"customCharacterExtractPrompt"];
     [_defaults setObject:settings.customStoryboardPrompt forKey:@"customStoryboardPrompt"];
+    return YES;
 }
 
 @end

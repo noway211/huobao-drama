@@ -35,7 +35,7 @@
 - (UIButton *)buttonTitled:(NSString *)title {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     [button setTitle:title forState:UIControlStateNormal];
-    button.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle2];
+    button.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle3];
     [button addTarget:self action:@selector(openPlaceholder:) forControlEvents:UIControlEventTouchUpInside];
     return button;
 }

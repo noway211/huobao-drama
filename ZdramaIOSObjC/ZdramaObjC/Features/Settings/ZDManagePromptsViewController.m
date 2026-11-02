@@ -88,7 +88,7 @@
     if (_current == 0) settings.customScriptCreatePrompt = value;
     else if (_current == 1) settings.customScriptRewritePrompt = value;
     else settings.customStoryboardPrompt = value;
-    [ZDAppContainer.shared.settingsStore save:settings];
+    [ZDAppContainer.shared.settingsStore save:settings error:nil];
     ZDAgnesSettings *reloaded = ZDAppContainer.shared.settingsStore.load;
     _saved = [@[
         ZDResolvePrompt(reloaded.customScriptCreatePrompt, ZDPromptDefaults.scriptCreatePrompt),

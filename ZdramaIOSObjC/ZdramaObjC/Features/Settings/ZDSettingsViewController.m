@@ -67,13 +67,23 @@
 }
 
 - (void)save {
-    [ZDAppContainer.shared.settingsStore save:[self editedSettings]];
+    NSError *error = nil;
+    if (![ZDAppContainer.shared.settingsStore save:[self editedSettings] error:&error]) {
+        _feedback.textColor = UIColor.systemRedColor;
+        _feedback.text = error.localizedDescription ?: @"API Key 保存失败";
+        return;
+    }
     _feedback.textColor = UIColor.systemGreenColor;
     _feedback.text = @"已保存";
 }
 
 - (void)ping {
-    [ZDAppContainer.shared.settingsStore save:[self editedSettings]];
+    NSError *error = nil;
+    if (![ZDAppContainer.shared.settingsStore save:[self editedSettings] error:&error]) {
+        _feedback.textColor = UIColor.systemRedColor;
+        _feedback.text = error.localizedDescription ?: @"API Key 保存失败";
+        return;
+    }
     _feedback.text = @"测试中…";
     ZDAgnesTextRepository *text = [[ZDAgnesTextRepository alloc] initWithSession:NSURLSession.sharedSession];
     [text pingSettings:ZDAppContainer.shared.settingsStore.load completion:^(NSError *error) {

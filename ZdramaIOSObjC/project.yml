@@ -36,7 +36,9 @@ targets:
         INFOPLIST_FILE: ZdramaObjC/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: 视频OC
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
-        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_ENTITLEMENTS: ZdramaObjC/ZdramaObjC.entitlements
         HEADER_SEARCH_PATHS:
           - "$(SRCROOT)/ZdramaCoreObjC"
           - "$(SRCROOT)/ZdramaCoreObjC/**"

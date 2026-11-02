@@ -30,8 +30,7 @@ struct CreateProjectView: View {
         Form {
             Section("剧本信息") {
                 TextField("标题", text: $title)
-                TextField("故事提示词", text: $prompt, axis: .vertical)
-                    .lineLimit(6...10)
+                PromptEditor(text: $prompt)
                 Picker("风格", selection: $style) {
                     ForEach(Self.styles, id: \.self) { Text($0) }
                 }
@@ -100,5 +99,64 @@ struct CreateProjectView: View {
             isSaving = false
             errorMessage = "创建失败：\(error.localizedDescription)"
         }
+    }
+}
+
+/// 故事提示词：按当前宽度折行后撑开高度，最多 8 行；更长的内容在框内滚动，不再用 lineLimit 留出空白行。
+private struct PromptEditor: View {
+    @Binding var text: String
+    @State private var width: CGFloat = 0
+
+    private static let font = UIFont.preferredFont(forTextStyle: .body)
+    private static let minLines = 3
+    private static let maxLines = 8
+    private static var lineHeight: CGFloat { font.lineHeight }
+    private static var verticalInset: CGFloat { 16 }
+
+    var body: some View {
+        let cap = Self.lineHeight * CGFloat(Self.maxLines) + Self.verticalInset
+        let floor = Self.lineHeight * CGFloat(Self.minLines) + Self.verticalInset
+        let measured = Self.measuredHeight(text: text, width: width)
+        let height = min(max(measured, floor), cap)
+        TextEditor(text: $text)
+            .font(.body)
+            .scrollContentBackground(.hidden)
+            .scrollDisabled(measured <= cap)
+            .autocorrectionDisabled()
+            .frame(height: height)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(key: PromptEditorWidthKey.self, value: proxy.size.width)
+                }
+            }
+            .onPreferenceChange(PromptEditorWidthKey.self) { width = $0 }
+            .overlay(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text("故事提示词")
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 8)
+                        .padding(.leading, 5)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+
+    private static func measuredHeight(text: String, width: CGFloat) -> CGFloat {
+        guard width > 1 else { return lineHeight * CGFloat(minLines) + verticalInset }
+        let content = text.isEmpty ? " " : text
+        let bounds = (content as NSString).boundingRect(
+            with: CGSize(width: width - 10, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: font],
+            context: nil
+        )
+        return ceil(bounds.height) + verticalInset
+    }
+}
+
+private struct PromptEditorWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }

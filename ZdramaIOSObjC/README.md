@@ -6,7 +6,7 @@
 cd ZdramaIOSObjC
 xcodegen generate
 python3 scripts/write_schemes.py
-xcodebuild -scheme ZdramaObjC -destination 'generic/platform=iOS' build
+xcodebuild -scheme ZdramaObjC -destination 'generic/platform=iOS' build CODE_SIGNING_ALLOWED=NO
 xcodebuild -scheme ZdramaCoreObjC -destination 'platform=iOS Simulator,name=iPhone 17' test
 ```
 
