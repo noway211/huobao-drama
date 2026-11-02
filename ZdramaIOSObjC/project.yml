@@ -34,7 +34,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.huobao.zdrama.objc
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_FILE: ZdramaObjC/Info.plist
-        INFOPLIST_KEY_CFBundleDisplayName: 视频短剧
+        INFOPLIST_KEY_CFBundleDisplayName: 视频OC
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         CODE_SIGNING_ALLOWED: NO
         HEADER_SEARCH_PATHS:
@@ -49,7 +49,7 @@ targets:
     info:
       path: ZdramaObjC/Info.plist
       properties:
-        CFBundleDisplayName: 视频短剧
+        CFBundleDisplayName: 视频OC
         CFBundleIdentifier: com.huobao.zdrama.objc
         UILaunchScreen: {}
         LSRequiresIPhoneOS: true

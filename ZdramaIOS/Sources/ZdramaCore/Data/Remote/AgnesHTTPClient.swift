@@ -136,6 +136,8 @@ enum AgnesRequest {
     ) async throws -> Any {
         let (data, response) = try await client.send(request)
         guard (200..<300).contains(response.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "<\(data.count) bytes>"
+            NSLog("Agnes HTTP %d %@ body: %@", response.statusCode, request.url?.absoluteString ?? "", body)
             throw AgnesClientError.httpFailed(response.statusCode)
         }
         guard !data.isEmpty else {

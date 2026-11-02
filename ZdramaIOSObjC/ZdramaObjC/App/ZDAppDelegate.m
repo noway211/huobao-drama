@@ -4,6 +4,11 @@
 
 @implementation ZDAppDelegate
 
+- (BOOL)application:(UIApplication *)application willFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+    NSLog(@"[ZDAppDelegate] willFinishLaunching launchOptions=%@", launchOptions);
+    return YES;
+}
+
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     (void)ZDAppContainer.shared;
     self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
